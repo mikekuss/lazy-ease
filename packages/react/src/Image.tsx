@@ -10,6 +10,7 @@ import {
   type Ref,
   type SyntheticEvent,
 } from 'react'
+import { preload } from 'react-dom'
 import { useLazyEaseConfig, type LoadingStrategy } from './context.js'
 import { DEV, warnOnce } from './dev.js'
 import { detectFormat } from './format.js'
@@ -27,7 +28,7 @@ import { isOwned } from './owned.js'
 import { parsePlaceholder, thumbhashImageStyle, type Placeholder, type PlaceholderStyle } from './placeholder.js'
 import { snapRatio } from './ratios.js'
 import { buildSrcSet } from './srcset.js'
-import { fullLadder, measuredCandidates, snapWidth } from './widths.js'
+import { classicCandidates, fullLadder, measuredCandidates, snapWidth } from './widths.js'
 
 export interface ImageProps
   extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'srcSet' | 'sizes' | 'width' | 'height' | 'loading' | 'placeholder'> {
@@ -126,6 +127,47 @@ function grow(current: Measure, box: DOMRectReadOnly, dpr: number, options: Meas
   return next
 }
 
+/** The format for URLs in the server HTML (spec 6.4): WebP, since nothing can be detected yet. */
+function serverFormat(loader: ResolvedLoader): ImageFormat | 'auto' {
+  return loader.formats === 'auto' ? 'auto' : pickFormat('webp', loader.formats)
+}
+
+interface ClassicSources {
+  src: string
+  srcSet: string
+  sizes: string
+}
+
+interface ClassicSourcesOptions {
+  src: string
+  loader: ResolvedLoader
+  width?: number
+  sizes?: string
+  srcWidth?: number
+  crop?: number
+  quality: number
+  version?: string
+}
+
+/**
+ * The URLs a classic-mode image carries in the server HTML (spec 6.3). The
+ * priority preload is built from the same strings, so React dedupes it with
+ * the `<img>` (spec 7.1).
+ */
+function classicSources({ src, loader, width, sizes, srcWidth, crop, quality, version }: ClassicSourcesOptions): ClassicSources {
+  const widths =
+    sizes !== undefined || width === undefined
+      ? fullLadder({ ladder: loader.widths, srcWidth })
+      : classicCandidates({ width, ladder: loader.widths, srcWidth })
+  const request = { src, aspectRatio: crop, quality, format: serverFormat(loader), version }
+  return {
+    src: loader.url({ ...request, width: widths[Math.floor(widths.length / 2)]! }),
+    srcSet: buildSrcSet({ ...request, widths, loader }),
+    // Without either (a development error), the no-JS fallback's sizes.
+    sizes: sizes ?? (width === undefined ? '100vw' : `${width}px`),
+  }
+}
+
 function prefersReducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 }
@@ -210,11 +252,6 @@ function ImageBox({
   const owned = !unoptimized && isOwned(src, config.domains)
   const loader = owned && loaderProp ? normalizeLoader(loaderProp) : config.loader
   const q = snapQuality(quality ?? config.quality, loader.qualities)
-  // TODO(step 4): classic mode (spec 6.3). `sizes`, `priority` and
-  // `loading="native"` should put src/srcset in the server HTML, emit the
-  // priority preload and use `loading="lazy"` for native. Until then they go
-  // through the measured path below, but never fade: a classic-mode image
-  // must never get `opacity: 0` (spec 9).
   const classic = sizes !== undefined || priority || strategy === 'native'
   const eager = priority || strategy === 'eager'
   const margin = rootMargin ?? config.rootMargin
@@ -280,8 +317,9 @@ function ImageBox({
     if (resolved.placeholder.kind === 'thumbhash') setMounted(true)
   }, [resolved.placeholder.kind])
 
+  // Classic-mode URLs are in the HTML, so the browser decides when to load.
   useEffect(() => {
-    if (triggered) return
+    if (triggered || classic) return
     if (eager) {
       setTriggered(true)
       return
@@ -289,13 +327,13 @@ function ImageBox({
     const box = boxRef.current
     if (!box) return
     return whenVisible(box, { rootMargin: margin, dwellTime: config.dwellTime }, () => setTriggered(true))
-  }, [triggered, eager, margin, config.dwellTime])
+  }, [triggered, classic, eager, margin, config.dwellTime])
 
   // Measured mode (spec 6.2): measure, pick the format, then keep `sizes` and
   // the fill ratio current.
   useEffect(() => {
     const box = boxRef.current
-    if (!triggered || !owned || !box) return
+    if (!triggered || classic || !owned || !box) return
     const options: MeasureOptions = { ladder: loader.widths, ratios: loader.ratios, srcWidth, trackRatio }
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -330,11 +368,16 @@ function ImageBox({
       clearTimeout(timer)
       observer?.disconnect()
     }
-  }, [triggered, owned, loader, srcWidth, trackRatio])
+  }, [triggered, classic, owned, loader, srcWidth, trackRatio])
+
+  const classicUrls = useMemo(
+    () => (classic && owned ? classicSources({ src, loader, width, sizes, srcWidth, crop, quality: q, version }) : undefined),
+    [classic, owned, src, loader, width, sizes, srcWidth, crop, q, version],
+  )
 
   const ratio = trackRatio ? measure?.ratio : crop
-  const srcSet = useMemo(() => {
-    if (!owned || !measure || !format) return undefined
+  const measuredSrcSet = useMemo(() => {
+    if (classic || !owned || !measure || !format) return undefined
     return buildSrcSet({
       src,
       widths: measuredCandidates({ measuredWidth: measure.width, ladder: loader.widths, srcWidth }),
@@ -344,9 +387,25 @@ function ImageBox({
       version,
       loader,
     })
-  }, [owned, measure, format, src, loader, srcWidth, ratio, q, version])
-  const externalSrc = !owned && triggered ? src : undefined
+  }, [classic, owned, measure, format, src, loader, srcWidth, ratio, q, version])
+  const srcSet = classicUrls?.srcSet ?? measuredSrcSet
+  const imgSizes = classicUrls?.sizes ?? (measuredSrcSet && measure ? `${measure.width}px` : undefined)
+  const externalSrc = !owned && (classic || triggered) ? src : undefined
+  const imgSrc = classicUrls?.src ?? externalSrc
   const source = srcSet ?? externalSrc
+
+  if (priority && imgSrc !== undefined) {
+    // React dedupes this with the preload it emits for the <img> itself only
+    // when href, imageSrcSet and imageSizes are identical strings (spec 7.1).
+    preload(imgSrc, {
+      as: 'image',
+      imageSrcSet: srcSet,
+      imageSizes: srcSet === undefined ? undefined : imgSizes,
+      fetchPriority: 'high',
+      crossOrigin: imgProps.crossOrigin,
+      referrerPolicy: imgProps.referrerPolicy,
+    })
+  }
   // Classic-mode images are visible from the first paint (spec 9).
   const fades = !classic
 
@@ -462,11 +521,12 @@ function ImageBox({
         {...imgProps}
         ref={imgRef}
         alt={alt}
-        src={externalSrc}
+        src={imgSrc}
         srcSet={srcSet}
-        sizes={srcSet && measure ? `${measure.width}px` : undefined}
+        sizes={srcSet ? imgSizes : undefined}
         width={imgWidth}
         height={imgHeight}
+        loading={classic && !eager ? 'lazy' : undefined}
         decoding={decoding}
         fetchPriority={priority ? 'high' : undefined}
         className={className}
@@ -528,7 +588,7 @@ function NoScriptImage({ src, owned, loader, quality, crop, sizes, srcWidth, ver
     widths: fullLadder({ ladder: loader.widths, srcWidth }),
     aspectRatio: crop,
     quality,
-    format: loader.formats === 'auto' ? 'auto' : pickFormat('webp', loader.formats),
+    format: serverFormat(loader),
     version,
     loader,
   })
