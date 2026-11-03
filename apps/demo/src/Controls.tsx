@@ -1,6 +1,6 @@
 import type { LoadingStrategy } from 'lazy-ease'
-import type { PlaceholderMode, Settings } from './settings'
-import { useStats } from './stats'
+import type { PlaceholderKind, Settings } from './settings'
+import { useTotals } from './stats'
 import { PRESETS } from './throttle'
 
 interface ControlsProps {
@@ -19,49 +19,35 @@ const PRESET_LABELS: Record<keyof typeof PRESETS | 'custom', string> = {
 }
 
 const LOADING_LABELS: Record<LoadingStrategy, string> = {
-  lazy: 'IntersectionObserver',
-  native: 'Browser (loading="lazy")',
-  eager: 'Eager',
+  lazy: 'lazy (IntersectionObserver)',
+  native: 'native (loading="lazy")',
+  eager: 'eager',
 }
 
+const PLACEHOLDER_LABELS: Record<PlaceholderKind, string> = {
+  thumbhash: 'ThumbHash',
+  color: 'Dominant color',
+  none: 'None',
+}
+
+const mb = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${(bytes / 1024).toFixed(0)} KB`)
+
 export function Controls({ settings, onChange, onReload }: ControlsProps) {
-  const stats = useStats()
+  const totals = useTotals()
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value })
+  const { bytes, naiveBytes } = totals.compared
+  const saved = naiveBytes > 0 ? Math.round((1 - bytes / naiveBytes) * 100) : undefined
 
   return (
     <div className="controls">
-      <label className="field">
-        <span>Network</span>
-        <select
-          value={settings.throttle}
-          onChange={(e) => set('throttle', e.target.value as Settings['throttle'])}
-        >
-          {Object.entries(PRESET_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-
+      <Select label="Network" value={settings.throttle} labels={PRESET_LABELS} onChange={(v) => set('throttle', v)} />
       {settings.throttle === 'custom' && (
         <>
           <Range label="Latency" unit="ms" min={0} max={2000} step={50} value={settings.latency} onChange={(v) => set('latency', v)} />
           <Range label="Bandwidth" unit="kbit/s" min={50} max={20000} step={50} value={settings.kbps} onChange={(v) => set('kbps', v)} />
         </>
       )}
-
-      <label className="field">
-        <span>Lazy loading</span>
-        <select value={settings.loading} onChange={(e) => set('loading', e.target.value as LoadingStrategy)}>
-          {Object.entries(LOADING_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-
+      <Select label="Loading" value={settings.loading} labels={LOADING_LABELS} onChange={(v) => set('loading', v)} />
       <Range
         label="Preload distance"
         unit="px"
@@ -72,32 +58,61 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
         disabled={settings.loading !== 'lazy'}
         onChange={(v) => set('rootMargin', v)}
       />
+      <Range
+        label="Dwell time"
+        unit="ms"
+        min={0}
+        max={1000}
+        step={50}
+        value={settings.dwellTime}
+        disabled={settings.loading !== 'lazy'}
+        onChange={(v) => set('dwellTime', v)}
+      />
       <Range label="Fade" unit="ms" min={0} max={2000} step={50} value={settings.fadeDuration} onChange={(v) => set('fadeDuration', v)} />
-
-      <label className="field">
-        <span>Inline placeholder</span>
-        <select value={settings.placeholder} onChange={(e) => set('placeholder', e.target.value as PlaceholderMode)}>
-          <option value="blur">Blurred thumbnail SVG</option>
-          <option value="color">1px color SVG</option>
-          <option value="none">None</option>
-        </select>
-      </label>
-
-      <label className="field">
-        <span>Formats</span>
-        <select value={settings.formats} onChange={(e) => set('formats', e.target.value as Settings['formats'])}>
-          <option value="webp">WebP → JPEG</option>
-          <option value="avif">AVIF → WebP → JPEG</option>
-        </select>
-      </label>
+      <Select label="Placeholder" value={settings.placeholder} labels={PLACEHOLDER_LABELS} onChange={(v) => set('placeholder', v)} />
+      <Select
+        label="Loader formats"
+        value={settings.formats}
+        labels={{ avif: 'AVIF → WebP → JPEG', webp: 'WebP → JPEG' }}
+        onChange={(v) => set('formats', v)}
+      />
 
       <div className="stats" aria-live="polite">
-        {stats.loaded}/{stats.started} loaded · {(stats.bytes / 1024).toFixed(0)} KB
+        <span>
+          {totals.loaded}/{totals.started} loaded · {mb(totals.bytes)}
+        </span>
+        {saved !== undefined && (
+          <span title='Images with a known size, compared with a sizes="100vw" srcset'>
+            {mb(bytes)} vs. {mb(naiveBytes)} with 100vw ({saved >= 0 ? `−${saved}` : `+${-saved}`} %)
+          </span>
+        )}
       </div>
-      <button type="button" onClick={onReload}>
+      <button type="button" onClick={onReload} title="New URLs for every image, so the browser cache is cold">
         Reload images
       </button>
     </div>
+  )
+}
+
+interface SelectProps<T extends string> {
+  label: string
+  value: T
+  labels: Record<T, string>
+  onChange: (value: T) => void
+}
+
+function Select<T extends string>({ label, value, labels, onChange }: SelectProps<T>) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {(Object.entries(labels) as [T, string][]).map(([option, text]) => (
+          <option key={option} value={option}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 

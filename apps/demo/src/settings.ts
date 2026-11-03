@@ -1,7 +1,7 @@
 import type { ImageFormat, LoadingStrategy } from 'lazy-ease'
 import { PRESETS, type PresetName } from './throttle'
 
-export type PlaceholderMode = 'blur' | 'color' | 'none'
+export type PlaceholderKind = 'thumbhash' | 'color' | 'none'
 
 export interface Settings {
   throttle: PresetName | 'custom'
@@ -9,9 +9,10 @@ export interface Settings {
   kbps: number
   loading: LoadingStrategy
   rootMargin: number
+  dwellTime: number
   fadeDuration: number
-  placeholder: PlaceholderMode
-  formats: 'webp' | 'avif'
+  placeholder: PlaceholderKind
+  formats: 'avif' | 'webp'
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -20,17 +21,19 @@ export const DEFAULT_SETTINGS: Settings = {
   kbps: 1000,
   loading: 'lazy',
   rootMargin: 400,
-  fadeDuration: 500,
-  placeholder: 'blur',
-  formats: 'webp',
+  dwellTime: 0,
+  fadeDuration: 400,
+  placeholder: 'thumbhash',
+  formats: 'avif',
 }
 
-export const FORMATS: Record<Settings['formats'], ImageFormat[]> = {
-  webp: ['webp'],
-  avif: ['avif', 'webp'],
+/** The formats the loader declares; the component picks the first one the browser decodes. */
+export const FORMATS: Record<Settings['formats'], readonly ImageFormat[]> = {
+  avif: ['avif', 'webp', 'jpeg'],
+  webp: ['webp', 'jpeg'],
 }
 
-const STORAGE_KEY = 'lazy-ease-demo-settings-v2'
+const STORAGE_KEY = 'lazy-ease-demo-settings-v3'
 
 export function loadSettings(): Settings {
   try {
@@ -38,7 +41,8 @@ export function loadSettings(): Settings {
     const settings = { ...DEFAULT_SETTINGS, ...stored }
     const valid =
       (settings.throttle === 'custom' || settings.throttle in PRESETS) &&
-      ['blur', 'color', 'none'].includes(settings.placeholder) &&
+      ['lazy', 'native', 'eager'].includes(settings.loading) &&
+      ['thumbhash', 'color', 'none'].includes(settings.placeholder) &&
       settings.formats in FORMATS
     return valid ? settings : DEFAULT_SETTINGS
   } catch {

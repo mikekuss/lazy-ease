@@ -8,6 +8,7 @@
   --accent: #58a6ff;
   --ok: #3fb950;
   --warn: #d29922;
+  --error: #f85149;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -110,6 +111,10 @@ button {
 }
 
 .stats {
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  gap: 2px;
   margin-left: auto;
   font-size: 0.85rem;
   color: var(--muted);
@@ -179,22 +184,57 @@ section > p {
   border: 1px solid var(--border);
 }
 
+/* The positioned parent `fill` requires. */
+.frame {
+  position: relative;
+  overflow: hidden;
+}
+
+.fill-row > .demo-image:first-child {
+  flex: 1 1 360px;
+}
+
+.hero {
+  margin: 0;
+}
+
+.hero .demo-image {
+  border-radius: 0;
+  border-width: 0 0 1px;
+}
+
 .demo-image figcaption {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px 10px;
   font-size: 0.75rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
+.caption-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+}
+
 .label {
   color: var(--text);
 }
 
-.phase {
+.delivered {
+  color: var(--text);
+}
+
+.naive {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+.state {
   padding: 1px 6px;
   border-radius: 4px;
   border: 1px solid currentColor;
@@ -203,16 +243,20 @@ section > p {
   letter-spacing: 0.04em;
 }
 
-.phase-idle {
+.state-idle {
   color: var(--muted);
 }
 
-.phase-loading {
+.state-loading {
   color: var(--warn);
 }
 
-.phase-loaded {
+.state-loaded {
   color: var(--ok);
+}
+
+.state-error {
+  color: var(--error);
 }
 
 @media (max-width: 640px) {
@@ -224,5 +268,6 @@ section > p {
 
   .stats {
     margin-left: 0;
+    align-items: start;
   }
 }

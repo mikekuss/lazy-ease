@@ -15,6 +15,12 @@ export const PRESETS = {
 
 export type PresetName = keyof typeof PRESETS
 
+/**
+ * Query parameters only the demo uses. The demo server removes them before the
+ * image app sees the request, which would reject them as unknown.
+ */
+export const DEMO_PARAMS: ReadonlySet<string> = new Set(['kbps', 'latency', 'run', 'throttle'])
+
 /** Reads a profile from query params: `throttle=<preset>` or `latency=…&kbps=…`. */
 export function profileFromQuery(query: Record<string, string | undefined>): NetworkProfile | null {
   const preset = query.throttle
