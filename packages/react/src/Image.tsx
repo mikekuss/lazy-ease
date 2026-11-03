@@ -9,8 +9,9 @@ import {
   type SyntheticEvent,
 } from 'react'
 import { useLazyEaseConfig, type LoadingStrategy } from './context.js'
-import type { ImageFormat, ImageLoader } from './loader.js'
+import { snapQuality, type ImageFormat, type ImageLoader } from './loader.js'
 import { whenVisible } from './observer.js'
+import { snapRatio } from './ratios.js'
 import { candidateWidths, snapWidth } from './widths.js'
 
 export interface ImageProps
@@ -104,8 +105,11 @@ export function Image({
   const resolvedSizes = sizes ?? (width ? `${width}px` : '100vw')
   const { sources, fallbackSrcSet, fallbackSrc } = useMemo(() => {
     const widths = candidateWidths(width, config.widths)
+    // Adapter to the revised loader contract until step 3 rewrites this component.
+    const crop = ratio ? snapRatio(ratio, activeLoader.ratios) : undefined
+    const allowedQuality = snapQuality(q ?? 75, activeLoader.qualities)
     const urlFor = (w: number, format: ImageFormat) =>
-      activeLoader.url({ src, width: w, height: ratio ? Math.round(w / ratio) : undefined, quality: q, format })
+      activeLoader.url({ src, width: w, aspectRatio: crop, quality: allowedQuality, format })
     const srcSetFor = (format: ImageFormat) => widths.map((w) => `${urlFor(w, format)} ${w}w`).join(', ')
     return {
       sources: activeFormats.map((format) => ({ type: `image/${format}`, srcSet: srcSetFor(format) })),
