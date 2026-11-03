@@ -13,7 +13,7 @@ import {
 import { preload } from 'react-dom'
 import { useLazyEaseConfig, type LoadingStrategy } from './context.js'
 import { DEV, warnOnce } from './dev.js'
-import { detectFormat } from './format.js'
+import { detectFormat, resolvedFormat } from './format.js'
 import { invalidCombination, resolveLayout } from './layout.js'
 import {
   normalizeLoader,
@@ -23,7 +23,7 @@ import {
   type ImageLoaderFunction,
   type ResolvedLoader,
 } from './loader.js'
-import { whenVisible } from './observer.js'
+import { observeResize, whenVisible } from './observer.js'
 import { isOwned } from './owned.js'
 import { parsePlaceholder, thumbhashImageStyle, type Placeholder, type PlaceholderStyle } from './placeholder.js'
 import { snapRatio } from './ratios.js'
@@ -97,7 +97,7 @@ function pickFormat(best: ImageFormat, formats: readonly ImageFormat[]): ImageFo
   return supported.find((format) => formats.includes(format)) ?? formats[0] ?? best
 }
 
-function firstMeasure(box: DOMRectReadOnly, { ratios, trackRatio }: MeasureOptions): Measure {
+function firstMeasure(box: Pick<DOMRectReadOnly, 'width' | 'height'>, { ratios, trackRatio }: MeasureOptions): Measure {
   return {
     width: Math.ceil(box.width),
     ratio: trackRatio && box.height > 0 ? snapRatio(box.width / box.height, ratios) : undefined,
@@ -115,7 +115,7 @@ function selectedWidth(width: number, dpr: number, { ladder, srcWidth }: Measure
  * and only when the browser would pick another candidate; the ratio follows
  * the box when it moves to another ladder value.
  */
-function grow(current: Measure, box: DOMRectReadOnly, dpr: number, options: MeasureOptions): Measure {
+function grow(current: Measure, box: Pick<DOMRectReadOnly, 'width' | 'height'>, dpr: number, options: MeasureOptions): Measure {
   let next = current
   if (box.width > current.width && selectedWidth(box.width, dpr, options) > selectedWidth(current.width, dpr, options)) {
     next = { ...next, width: Math.ceil(box.width) }
@@ -313,9 +313,11 @@ function ImageBox({
     // Checks the props the image mounted with; later changes are not re-checked.
   }, [])
 
+  // Measured-mode images decode their ThumbHash once triggered (spec 8);
+  // classic ones, which may load any time, right after hydration.
   useEffect(() => {
-    if (resolved.placeholder.kind === 'thumbhash') setMounted(true)
-  }, [resolved.placeholder.kind])
+    if (resolved.placeholder.kind === 'thumbhash' && classic) setMounted(true)
+  }, [resolved.placeholder.kind, classic])
 
   // Classic-mode URLs are in the HTML, so the browser decides when to load.
   useEffect(() => {
@@ -342,33 +344,38 @@ function ImageBox({
     const initial = box.getBoundingClientRect()
     if (initial.width > 0) setMeasure((current) => current ?? firstMeasure(initial, options))
 
+    // Once detection has finished, the format lands in the same render as
+    // the measure; only while it is pending does the image wait (spec 6.4).
     const formats = loader.formats
-    void (formats === 'auto' ? Promise.resolve('auto' as const) : detectFormat().then((best) => pickFormat(best, formats))).then(
-      (picked) => {
-        if (!cancelled) setFormat(picked)
-      },
-    )
-
-    let observer: ResizeObserver | undefined
-    if (typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver(() => {
-        const rect = box.getBoundingClientRect()
-        if (rect.width <= 0) return
-        const dpr = window.devicePixelRatio || 1
-        setMeasure((current) => current ?? firstMeasure(rect, options))
-        // Trailing debounce: a window drag fires every frame, so only the
-        // size it settles on counts.
-        clearTimeout(timer)
-        timer = setTimeout(() => setMeasure((current) => current && grow(current, rect, dpr, options)), SIZES_DEBOUNCE)
+    const known = formats === 'auto' ? undefined : resolvedFormat()
+    if (formats === 'auto') setFormat('auto')
+    else if (known) setFormat(pickFormat(known, formats))
+    else {
+      void detectFormat().then((best) => {
+        if (!cancelled) setFormat(pickFormat(best, formats))
       })
-      observer.observe(box)
     }
+
+    // A fixed or ratio box already at its `width` cannot grow, and `sizes`
+    // never shrinks, so there is nothing to observe.
+    const atMaxWidth = (layout.mode === 'fixed' || layout.mode === 'ratio') && width !== undefined && initial.width >= width
+    const stop = atMaxWidth
+      ? undefined
+      : observeResize(box, (rect) => {
+          if (rect.width <= 0) return
+          const dpr = window.devicePixelRatio || 1
+          setMeasure((current) => current ?? firstMeasure(rect, options))
+          // Trailing debounce: a window drag fires every frame, so only the
+          // size it settles on counts.
+          clearTimeout(timer)
+          timer = setTimeout(() => setMeasure((current) => current && grow(current, rect, dpr, options)), SIZES_DEBOUNCE)
+        })
     return () => {
       cancelled = true
       clearTimeout(timer)
-      observer?.disconnect()
+      stop?.()
     }
-  }, [triggered, classic, owned, loader, srcWidth, trackRatio])
+  }, [triggered, classic, owned, loader, srcWidth, trackRatio, layout.mode, width])
 
   const classicUrls = useMemo(
     () => (classic && owned ? classicSources({ src, loader, width, sizes, srcWidth, crop, quality: q, version }) : undefined),
@@ -492,7 +499,7 @@ function ImageBox({
     if (parsed.kind !== 'thumbhash') placeholderStyle = parsed.ssrStyle
     else if (config.thumbhashSsr === 'image' || priority) {
       placeholderStyle = thumbhashImageStyle(value.trim().slice(THUMBHASH_PREFIX.length))
-    } else placeholderStyle = mounted ? parsed.clientStyle() : parsed.ssrStyle
+    } else placeholderStyle = triggered || mounted ? parsed.clientStyle() : parsed.ssrStyle
   }
 
   let fadeStyle: CSSProperties | undefined
@@ -545,7 +552,6 @@ function ImageBox({
           loader={loader}
           quality={q}
           crop={crop}
-          sizes={sizes}
           srcWidth={srcWidth}
           version={version}
           width={imgWidth}
@@ -565,7 +571,6 @@ interface NoScriptImageProps {
   loader: ResolvedLoader
   quality: number
   crop?: number
-  sizes?: string
   srcWidth?: number
   version?: string
   width?: number
@@ -576,28 +581,25 @@ interface NoScriptImageProps {
 
 /**
  * The image for visitors without JavaScript (spec 7.3): the classic-mode
- * srcset (full ladder, declared crop, WebP), since nothing can be measured.
+ * candidates (1× and 2× of `width`, or the full ladder without it), declared
+ * crop, WebP, since nothing can be measured.
  */
-function NoScriptImage({ src, owned, loader, quality, crop, sizes, srcWidth, version, ...img }: NoScriptImageProps) {
-  if (!owned) {
+function NoScriptImage({ src, owned, loader, quality, crop, srcWidth, version, ...img }: NoScriptImageProps) {
+  const { width } = img
+  const sources = useMemo(
+    () => (owned ? classicSources({ src, loader, width, srcWidth, crop, quality, version }) : undefined),
+    [owned, src, loader, width, srcWidth, crop, quality, version],
+  )
+  if (!sources) {
     return (
       <noscript>
         <img {...img} src={src} loading="lazy" decoding="async" />
       </noscript>
     )
   }
-  const srcSet = buildSrcSet({
-    src,
-    widths: fullLadder({ ladder: loader.widths, srcWidth }),
-    aspectRatio: crop,
-    quality,
-    format: serverFormat(loader),
-    version,
-    loader,
-  })
   return (
     <noscript>
-      <img {...img} srcSet={srcSet} sizes={sizes ?? '100vw'} loading="lazy" decoding="async" />
+      <img {...img} srcSet={sources.srcSet} sizes={sources.sizes} loading="lazy" decoding="async" />
     </noscript>
   )
 }

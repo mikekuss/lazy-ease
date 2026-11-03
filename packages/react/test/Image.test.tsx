@@ -9,6 +9,7 @@ import { createLoader } from '../src/loader.js'
 import { parsePlaceholder } from '../src/placeholder.js'
 import {
   MockIntersectionObserver,
+  MockResizeObserver,
   advance,
   decoding,
   defaultRect,
@@ -209,6 +210,14 @@ describe('measured mode', () => {
     expect(img().getAttribute('srcset')).toContain('fmt=webp')
   })
 
+  it('sets the format in the same render as the measure once detection is done', async () => {
+    const { box, img } = mount()
+    await advance()
+    // No timers or promises run between the intersection and the check.
+    intersect(box())
+    expect(img().getAttribute('srcset')).toContain('fmt=avif')
+  })
+
   it('skips detection for loaders with formats: auto', async () => {
     formatDetection.hang = true
     const loader = { ...createLoader(), formats: 'auto' as const }
@@ -288,6 +297,36 @@ describe('measured mode', () => {
     expect(img().getAttribute('srcset')).not.toBe(initial)
     expect(img().getAttribute('srcset')).toContain('ar=1.61&')
     expect(img().getAttribute('sizes')).toBe('400px')
+  })
+
+  it('shares one ResizeObserver between images', async () => {
+    const a = mount()
+    const b = mount({ src: '/b.jpg' })
+    await start(a.box())
+    await start(b.box())
+    const observers = [...MockResizeObserver.instances].filter((o) => o.elements.has(a.box()) || o.elements.has(b.box()))
+    expect(observers).toHaveLength(1)
+    expect(observers[0]!.elements.has(a.box()) && observers[0]!.elements.has(b.box())).toBe(true)
+  })
+
+  it('does not observe a fixed or ratio box that is already at its width', async () => {
+    const watched = (box: HTMLElement) => [...MockResizeObserver.instances].some((o) => o.elements.has(box))
+    const fixed = mount({ src: '/fixed.jpg' })
+    setRect(fixed.box(), { width: 320 })
+    await start(fixed.box())
+    expect(fixed.img().getAttribute('sizes')).toBe('320px')
+    expect(watched(fixed.box())).toBe(false)
+
+    const ratio = mount({ src: '/ratio.jpg', height: undefined, aspectRatio: 1.5 })
+    setRect(ratio.box(), { width: 320 })
+    await start(ratio.box())
+    expect(watched(ratio.box())).toBe(false)
+
+    // Narrower than its width, so it can still grow.
+    const narrow = mount({ src: '/narrow.jpg' })
+    setRect(narrow.box(), { width: 200 })
+    await start(narrow.box())
+    expect(watched(narrow.box())).toBe(true)
   })
 
   it('does not track the box ratio outside fill mode', async () => {
@@ -516,12 +555,22 @@ describe('placeholder', () => {
     expect(box().style.backgroundColor).toBe('rgb(0, 0, 0)')
   })
 
-  it('renders only the average color of a ThumbHash on the server, the image after mount', () => {
+  it('renders only the average color of a ThumbHash on the server, the image once triggered', async () => {
     const server = renderToString(<Image src="/a.jpg" alt="" fill placeholder={`thumbhash:${RED}`} />)
     expect(server).toMatch(/background-color:#f[ef]000[01]/)
     expect(server).not.toContain('background-image')
 
+    // Off-screen measured images keep the average color until they near the viewport.
     const { box } = mount({ placeholder: `thumbhash:${RED}` })
+    await advance(1000)
+    expect(box().style.backgroundImage).toBe('')
+    expect(box().style.backgroundColor).not.toBe('')
+    intersect(box())
+    expect(box().style.backgroundImage).toContain('data:image/png;base64,')
+  })
+
+  it('decodes the ThumbHash of a classic image right after mount', () => {
+    const { box } = mount({ placeholder: `thumbhash:${RED}`, sizes: '320px' })
     expect(box().style.backgroundImage).toContain('data:image/png;base64,')
   })
 
@@ -584,16 +633,26 @@ describe('external images', () => {
 })
 
 describe('no-JS fallback', () => {
-  it('renders the classic srcset in <noscript>', () => {
-    const markup = renderToString(<Image src="/a.jpg" alt="Lake" width={320} height={240} srcWidth={1000} />)
-    const noscript = markup.match(/<noscript>(.*)<\/noscript>/)![1]!
-    expect(noscript).toContain('<img')
-    expect(noscript).toContain('loading="lazy"')
-    expect(noscript).toContain('alt="Lake"')
-    expect(noscript).toContain('sizes="100vw"')
-    expect(noscript).toContain('/_img/a.jpg?ar=1.333&amp;fmt=webp&amp;q=75&amp;w=64 64w')
-    expect(noscript).toContain('w=828 828w')
-    expect(noscript).not.toContain('w=1080')
+  const noscript = (element: ReactElement) => renderToString(element).match(/<noscript>(.*)<\/noscript>/)![1]!
+
+  it('renders the classic candidates in <noscript>', () => {
+    const markup = noscript(<Image src="/a.jpg" alt="Lake" width={320} height={240} srcWidth={1000} />)
+    expect(markup).toContain('<img')
+    expect(markup).toContain('loading="lazy"')
+    expect(markup).toContain('alt="Lake"')
+    expect(markup).toContain('sizes="320px"')
+    // snap(320) and snap(640) only.
+    expect(markup).toContain(
+      'srcSet="/_img/a.jpg?ar=1.333&amp;fmt=webp&amp;q=75&amp;w=384 384w, /_img/a.jpg?ar=1.333&amp;fmt=webp&amp;q=75&amp;w=640 640w"',
+    )
+  })
+
+  it('renders the full ladder in <noscript> when there is no width', () => {
+    const markup = noscript(<Image src="/a.jpg" alt="" fill srcWidth={1000} />)
+    expect(markup).toContain('sizes="100vw"')
+    expect(markup).toContain('/_img/a.jpg?fmt=webp&amp;q=75&amp;w=64 64w')
+    expect(markup).toContain('w=828 828w')
+    expect(markup).not.toContain('w=1080')
   })
 
   it('uses src for external images', () => {

@@ -1,4 +1,4 @@
-import { DEFAULT_RATIOS, DEFAULT_WIDTHS, formatNumber, type ImageFormat, type ImageLoader, type ImageRequest } from 'lazy-ease'
+import { DEFAULT_RATIOS, DEFAULT_WIDTHS, encodePath, formatNumber, type ImageFormat, type ImageLoader, type ImageRequest } from 'lazy-ease'
 
 /**
  * A custom loader for a static host (spec 6.1). GitHub Pages ignores query
@@ -24,15 +24,6 @@ export function variantFile({ width, aspectRatio, quality, format }: Omit<ImageR
   return `w${formatNumber(width)}${ar}-q${formatNumber(quality)}.${format}`
 }
 
-/** The URL path of `src`, each segment encoded. Query and hash are dropped. */
-export function sourcePath(src: string): string {
-  const { pathname } = new URL(src, 'http://lazy-ease.invalid')
-  return pathname
-    .split('/')
-    .map((segment) => encodeURIComponent(decodeURIComponent(segment)))
-    .join('/')
-}
-
 export interface StaticLoaderOptions {
   baseUrl: string
   formats?: readonly StaticFormat[]
@@ -51,12 +42,11 @@ export function createStaticLoader({ baseUrl, formats = STATIC_FORMATS, params =
       if (!(STATIC_FORMATS as readonly string[]).includes(request.format)) {
         throw new Error(`The static loader has no ${request.format} variants`)
       }
-      const extra = { ...params, ...request.params }
-      const query = Object.keys(extra)
+      const query = Object.keys(params)
         .sort()
-        .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(String(extra[key]))}`)
+        .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(String(params[key]))}`)
         .join('&')
-      return `${base}${sourcePath(request.src)}/${variantFile(request)}${query ? `?${query}` : ''}`
+      return `${base}${encodePath(request.src)}/${variantFile(request)}${query ? `?${query}` : ''}`
     },
   }
 }

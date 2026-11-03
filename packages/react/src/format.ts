@@ -9,6 +9,7 @@ const WEBP = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAB0C
 export const DETECTION_TIMEOUT = 200
 
 let detection: Promise<ImageFormat> | undefined
+let resolved: ImageFormat | undefined
 
 function decodes(uri: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -33,12 +34,22 @@ async function detect(): Promise<ImageFormat> {
  */
 export function startFormatDetection(): Promise<ImageFormat> {
   if (!detection) {
-    detection =
+    const pending: Promise<ImageFormat> =
       typeof document === 'undefined' || typeof globalThis.Image === 'undefined'
         ? Promise.resolve('webp')
         : detect()
+    detection = pending
+    void pending.then((format) => {
+      // A reset while detection ran makes this result stale.
+      if (detection === pending) resolved = format
+    })
   }
   return detection
+}
+
+/** The detection result once it is known, so images can skip the wait. */
+export function resolvedFormat(): ImageFormat | undefined {
+  return resolved
 }
 
 /**
@@ -57,4 +68,5 @@ export function detectFormat(): Promise<ImageFormat> {
 /** Forgets the detection result. For tests. */
 export function resetFormatDetection(): void {
   detection = undefined
+  resolved = undefined
 }

@@ -17,8 +17,6 @@ export interface ImageRequest {
   format: ImageFormat | 'auto'
   /** The `version` prop, opaque. */
   version?: string
-  /** Backend-specific passthrough from the provider. */
-  params?: Record<string, string>
 }
 
 /**
@@ -97,7 +95,7 @@ const DUMMY_BASE = 'http://lazy-ease.invalid'
  * absolute URL loses its origin (spec 10: `domains` serve the same files as
  * the root); query, hash and dot segments are dropped.
  */
-function encodePath(src: string): string {
+export function encodePath(src: string): string {
   const { pathname } = new URL(src, DUMMY_BASE)
   return pathname
     .split('/')
@@ -130,8 +128,8 @@ export function createLoader({
     ratios,
     qualities,
     formats: DEFAULT_FORMATS,
-    url: ({ src, width, aspectRatio, quality, format, version, params: requestParams }) => {
-      const extra = Object.entries({ ...params, ...requestParams }).map(([key, value]) => [key.toLowerCase(), value])
+    url: ({ src, width, aspectRatio, quality, format, version }) => {
+      const extra = Object.entries(params).map(([key, value]) => [key.toLowerCase(), value])
       const values: Record<string, string | number | undefined> = {
         ...Object.fromEntries(extra),
         // The contract's own parameters win over a passthrough of the same name.

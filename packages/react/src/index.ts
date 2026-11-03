@@ -6,11 +6,9 @@ export {
   type LazyEaseProviderProps,
   type LoadingStrategy,
 } from './context.js'
-export { detectFormat, startFormatDetection } from './format.js'
 export {
   createLoader,
-  normalizeLoader,
-  snapQuality,
+  encodePath,
   type ImageFormat,
   type ImageLoader,
   type ImageLoaderFunction,
@@ -19,17 +17,5 @@ export {
   type ResolvedLoader,
 } from './loader.js'
 export { formatNumber } from './numbers.js'
-export { isOwned } from './owned.js'
-export { parsePlaceholder, thumbhashImageStyle, type Placeholder, type PlaceholderStyle } from './placeholder.js'
 export { DEFAULT_RATIOS, snapRatio } from './ratios.js'
-export { buildSrcSet, type SrcSetOptions } from './srcset.js'
-export {
-  DEFAULT_WIDTHS,
-  classicCandidates,
-  fullLadder,
-  measuredCandidates,
-  snapWidth,
-  type ClassicCandidatesOptions,
-  type FullLadderOptions,
-  type MeasuredCandidatesOptions,
-} from './widths.js'
+export { DEFAULT_WIDTHS, fullLadder, type FullLadderOptions } from './widths.js'

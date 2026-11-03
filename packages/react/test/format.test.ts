@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DETECTION_TIMEOUT, detectFormat, resetFormatDetection, startFormatDetection } from '../src/format.js'
+import { DETECTION_TIMEOUT, detectFormat, resetFormatDetection, resolvedFormat, startFormatDetection } from '../src/format.js'
 
 type Outcome = 'load' | 'error' | 'hang'
 
@@ -99,10 +99,22 @@ describe('format detection', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('exposes the result synchronously once known', async () => {
+    fakeBrowser({ avif: 'error', webp: 'load' })
+    const pending = startFormatDetection()
+    expect(resolvedFormat()).toBeUndefined()
+    await pending
+    await Promise.resolve()
+    expect(resolvedFormat()).toBe('webp')
+  })
+
   it('starts over after a reset', async () => {
     fakeBrowser({ avif: 'load', webp: 'load' })
     await expect(detectFormat()).resolves.toBe('avif')
+    await Promise.resolve()
+    expect(resolvedFormat()).toBe('avif')
     resetFormatDetection()
+    expect(resolvedFormat()).toBeUndefined()
     fakeBrowser({ avif: 'error', webp: 'load' })
     await expect(detectFormat()).resolves.toBe('webp')
   })

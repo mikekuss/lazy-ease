@@ -9,7 +9,6 @@ export interface SrcSetOptions {
   quality: number
   format: ImageFormat | 'auto'
   version?: string
-  params?: Record<string, string>
   loader: Pick<ImageLoader, 'url'>
 }
 

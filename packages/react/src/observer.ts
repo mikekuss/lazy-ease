@@ -74,3 +74,30 @@ export function whenVisible(element: Element, { rootMargin, dwellTime }: WhenVis
     stop()
   }
 }
+
+type ResizeCallback = (rect: DOMRectReadOnly) => void
+
+// One ResizeObserver for every image, created on first use.
+let resizePool: { observer: ResizeObserver; callbacks: Map<Element, ResizeCallback> } | undefined
+
+/**
+ * Reports the content box of `element` every time it changes size. Returns a
+ * function that stops observing. Does nothing without `ResizeObserver`.
+ */
+export function observeResize(element: Element, callback: ResizeCallback): () => void {
+  if (typeof ResizeObserver === 'undefined') return () => {}
+  if (!resizePool) {
+    const callbacks = new Map<Element, ResizeCallback>()
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) callbacks.get(entry.target)?.(entry.contentRect)
+    })
+    resizePool = { observer, callbacks }
+  }
+  const pool = resizePool
+  pool.callbacks.set(element, callback)
+  pool.observer.observe(element)
+  return () => {
+    pool.callbacks.delete(element)
+    pool.observer.unobserve(element)
+  }
+}

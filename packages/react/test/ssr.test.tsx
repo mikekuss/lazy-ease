@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LazyEaseProvider } from '../src/context.js'
 import { Image, type ImageProps } from '../src/Image.js'
 import { createLoader } from '../src/loader.js'
-import { MockIntersectionObserver, MockResizeObserver, advance, defaultRect, detectionImage } from './dom.js'
+import { MockIntersectionObserver, MockResizeObserver, advance, defaultRect, detectionImage, intersect } from './dom.js'
 
 function solidThumbHash(r: number, g: number, b: number): string {
   const rgba = new Uint8Array(8 * 8 * 4)
@@ -284,8 +284,10 @@ describe('hydration', () => {
     })
   }
 
-  it('hydrates the average color and switches to the ThumbHash image after mount', async () => {
+  it('hydrates the average color and switches to the ThumbHash image once triggered', async () => {
     const { box, errors, recoverable } = await hydrate(<Image src="/a.jpg" alt="" width={320} height={240} placeholder={RED} />)
+    expect(box.style.backgroundImage).toBe('')
+    intersect(box)
     expect(box.style.backgroundImage).toContain('data:image/png;base64,')
     expect(errors).not.toHaveBeenCalled()
     expect(recoverable).not.toHaveBeenCalled()

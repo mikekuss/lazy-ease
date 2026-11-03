@@ -72,9 +72,6 @@ describe('createLoader', () => {
   it('sorts extra params in with lowercase names and canonical numbers', () => {
     const withParams = createLoader({ params: { Run: 2, delay: 1.50, z: 'x y' } })
     expect(withParams.url(base)).toBe('/_img/photos/lake.jpg?delay=1.5&fmt=webp&q=75&run=2&w=640&z=x%20y')
-    expect(withParams.url({ ...base, params: { run: '7', a: 'b' } })).toBe(
-      '/_img/photos/lake.jpg?a=b&delay=1.5&fmt=webp&q=75&run=7&w=640&z=x%20y',
-    )
   })
 
   it('does not let params override the contract parameters', () => {
@@ -154,10 +151,10 @@ describe('buildSrcSet', () => {
     ).toBe('/_img/a.jpg?ar=1.5&fmt=webp&q=75&w=384 384w, /_img/a.jpg?ar=1.5&fmt=webp&q=75&w=640 640w')
   })
 
-  it('passes version and params through', () => {
-    expect(
-      buildSrcSet({ src: '/a.jpg', widths: [64], quality: 75, format: 'avif', version: 'v2', params: { x: '1' }, loader }),
-    ).toBe('/_img/a.jpg?fmt=avif&q=75&v=v2&w=64&x=1 64w')
+  it('passes version through', () => {
+    expect(buildSrcSet({ src: '/a.jpg', widths: [64], quality: 75, format: 'avif', version: 'v2', loader })).toBe(
+      '/_img/a.jpg?fmt=avif&q=75&v=v2&w=64 64w',
+    )
   })
 
   it('is deterministic: sorted, deduplicated, same string for the same input', () => {
