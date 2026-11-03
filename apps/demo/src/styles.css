@@ -132,13 +132,6 @@ section {
   margin-top: 40px;
 }
 
-.intro {
-  margin: 24px 0 0;
-  max-width: 760px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
 h2 {
   margin: 0 0 4px;
   font-size: 1.15rem;
@@ -270,4 +263,21 @@ section > p {
     margin-left: 0;
     align-items: start;
   }
+}
+
+.static-banner {
+  margin: 0;
+  padding: 8px 24px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--muted);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.throttle-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+  color: #e3b341;
 }

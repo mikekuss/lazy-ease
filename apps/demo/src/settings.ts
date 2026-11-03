@@ -1,5 +1,6 @@
 import type { ImageFormat, LoadingStrategy } from 'lazy-ease'
-import { PRESETS, type PresetName } from './throttle'
+import { STATIC } from './mode'
+import { PRESETS, type NetworkProfile, type PresetName } from './throttle'
 
 export type PlaceholderKind = 'thumbhash' | 'color' | 'none'
 
@@ -27,11 +28,13 @@ export const DEFAULT_SETTINGS: Settings = {
   formats: 'avif',
 }
 
-/** The formats the loader declares; the component picks the first one the browser decodes. */
-export const FORMATS: Record<Settings['formats'], readonly ImageFormat[]> = {
-  avif: ['avif', 'webp', 'jpeg'],
-  webp: ['webp', 'jpeg'],
-}
+/**
+ * The formats the loader declares; the component picks the first one the
+ * browser decodes. The static build has no JPEG variants.
+ */
+export const FORMATS: Record<Settings['formats'], readonly ImageFormat[]> = STATIC
+  ? { avif: ['avif', 'webp'], webp: ['webp'] }
+  : { avif: ['avif', 'webp', 'jpeg'], webp: ['webp', 'jpeg'] }
 
 const STORAGE_KEY = 'lazy-ease-demo-settings-v3'
 
@@ -63,4 +66,10 @@ export function throttleParams(settings: Settings): Record<string, string | numb
   if (settings.throttle === 'off') return {}
   if (settings.throttle === 'custom') return { latency: settings.latency, kbps: settings.kbps }
   return { throttle: settings.throttle }
+}
+
+/** The throttle as numbers, for the static demo's service worker, which has no preset table. */
+export function throttleProfile(settings: Settings): NetworkProfile | null {
+  if (settings.throttle === 'custom') return { latency: settings.latency, kbps: settings.kbps }
+  return PRESETS[settings.throttle]
 }

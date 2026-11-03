@@ -1,5 +1,7 @@
 import { createLoader, fullLadder, Image, useLazyEaseConfig, type ImageFormat, type ImageProps } from 'lazy-ease'
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { BASE, STATIC } from './mode'
+import { createStaticLoader } from './staticLoader'
 import { removeRecord, updateRecord } from './stats'
 
 interface Delivered {
@@ -29,7 +31,7 @@ interface DemoImageProps extends ImageProps {
 }
 
 // No demo params, so these requests are neither throttled nor cache-busted.
-const plainLoader = createLoader()
+const plainLoader = STATIC ? createStaticLoader({ baseUrl: `${BASE}_img` }) : createLoader()
 const headSizes = new Map<string, Promise<number | undefined>>()
 
 /** Body size of a variant from a HEAD request, once per URL. */
@@ -48,17 +50,49 @@ function resourceEntry(url: string): PerformanceResourceTiming | undefined {
   return performance.getEntriesByName(url, 'resource').at(-1) as PerformanceResourceTiming | undefined
 }
 
+interface Variant {
+  width?: number
+  aspectRatio?: number
+  quality?: number
+  format?: string
+}
+
+/**
+ * Reads a variant back from its URL: the default loader's query string, or
+ * the static loader's `…/w640-ar1.5-q75.webp` file name.
+ */
+function variantOf(src: string): Variant {
+  const url = new URL(src, location.href)
+  const file = /\/w(\d+)(?:-ar([\d.]+))?-q([\d.]+)\.(\w+)$/.exec(url.pathname)
+  if (file) {
+    const [, w, ar, q, format] = file
+    return { width: Number(w), aspectRatio: ar ? Number(ar) : undefined, quality: Number(q), format }
+  }
+  const number = (name: string) => {
+    const value = url.searchParams.get(name)
+    return value ? Number(value) : undefined
+  }
+  return {
+    width: number('w'),
+    aspectRatio: number('ar'),
+    quality: number('q'),
+    format: url.searchParams.get('fmt') ?? undefined,
+  }
+}
+
 function describe(img: HTMLImageElement): Delivered {
   const url = new URL(img.currentSrc)
   const entry = resourceEntry(img.currentSrc)
-  const w = url.searchParams.get('w')
+  const variant = variantOf(img.currentSrc)
   return {
-    width: w ? Number(w) : img.naturalWidth || undefined,
-    format: url.searchParams.get('fmt') ?? /\.(\w+)$/.exec(url.pathname)?.[1],
+    width: variant.width ?? (img.naturalWidth || undefined),
+    format: variant.format ?? /\.(\w+)$/.exec(url.pathname)?.[1],
     bytes: entry?.encodedBodySize || undefined,
     ms: entry ? entry.responseEnd - entry.startTime : undefined,
-    // No entry at all (memory cache) or one with nothing transferred (HTTP cache).
-    cached: !entry || (entry.transferSize === 0 && entry.encodedBodySize > 0),
+    // No entry at all (memory cache) or one with nothing transferred (HTTP
+    // cache). A response the static demo's service worker throttled reports
+    // nothing transferred either; only those URLs carry `kbps`.
+    cached: !entry || (entry.transferSize === 0 && entry.encodedBodySize > 0 && !(STATIC && url.searchParams.has('kbps'))),
   }
 }
 
@@ -90,20 +124,19 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
       setView((view) => ({ ...view, state, delivered }))
       updateRecord(id, { state, bytes: delivered?.bytes })
 
-      const current = new URL(img.currentSrc || 'about:blank', location.href)
-      const fmt = current.searchParams.get('fmt')
-      if (!delivered || !fmt || naiveFor === img.currentSrc) return
+      const current = variantOf(img.currentSrc || 'about:blank')
+      const fmt = current.format
+      if (!delivered || !current.width || !fmt || naiveFor === img.currentSrc) return
       naiveFor = img.currentSrc
       // What the browser would pick from the full ladder for 100vw at this DPR.
       const ladder = fullLadder({ ladder: loader.widths, srcWidth })
       const target = window.innerWidth * window.devicePixelRatio
       const width = ladder.find((w) => w >= target) ?? ladder.at(-1)!
-      const ar = current.searchParams.get('ar')
       const url = plainLoader.url({
         src,
         width,
-        aspectRatio: ar ? Number(ar) : undefined,
-        quality: Number(current.searchParams.get('q') ?? loader.qualities[0]),
+        aspectRatio: current.aspectRatio,
+        quality: current.quality ?? loader.qualities[0]!,
         format: fmt as ImageFormat,
       })
       setView((view) => ({ ...view, naive: { width } }))

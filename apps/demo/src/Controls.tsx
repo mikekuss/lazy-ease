@@ -1,4 +1,5 @@
 import type { LoadingStrategy } from 'lazy-ease'
+import { STATIC, useThrottleWorkerActive } from './mode'
 import type { PlaceholderKind, Settings } from './settings'
 import { useTotals } from './stats'
 import { PRESETS } from './throttle'
@@ -30,10 +31,15 @@ const PLACEHOLDER_LABELS: Record<PlaceholderKind, string> = {
   none: 'None',
 }
 
+const FORMAT_LABELS: Record<Settings['formats'], string> = STATIC
+  ? { avif: 'AVIF → WebP', webp: 'WebP' }
+  : { avif: 'AVIF → WebP → JPEG', webp: 'WebP → JPEG' }
+
 const mb = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${(bytes / 1024).toFixed(0)} KB`)
 
 export function Controls({ settings, onChange, onReload }: ControlsProps) {
   const totals = useTotals()
+  const throttleActive = useThrottleWorkerActive()
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value })
   const { bytes, naiveBytes } = totals.compared
   const saved = naiveBytes > 0 ? Math.round((1 - bytes / naiveBytes) * 100) : undefined
@@ -46,6 +52,11 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
           <Range label="Latency" unit="ms" min={0} max={2000} step={50} value={settings.latency} onChange={(v) => set('latency', v)} />
           <Range label="Bandwidth" unit="kbit/s" min={50} max={20000} step={50} value={settings.kbps} onChange={(v) => set('kbps', v)} />
         </>
+      )}
+      {settings.throttle !== 'off' && !throttleActive && (
+        <p className="throttle-note" role="status">
+          Throttle not active yet, images load at full speed.
+        </p>
       )}
       <Select label="Loading" value={settings.loading} labels={LOADING_LABELS} onChange={(v) => set('loading', v)} />
       <Range
@@ -73,7 +84,7 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
       <Select
         label="Loader formats"
         value={settings.formats}
-        labels={{ avif: 'AVIF → WebP → JPEG', webp: 'WebP → JPEG' }}
+        labels={FORMAT_LABELS}
         onChange={(v) => set('formats', v)}
       />
 
