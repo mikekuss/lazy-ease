@@ -521,9 +521,12 @@ function ImageBox({
         {...imgProps}
         ref={imgRef}
         alt={alt}
+        // React sets changed attributes in prop order, and WebKit selects a
+        // candidate as soon as srcset is set: sizes must already be there, or
+        // it fetches the 100vw candidate first.
+        sizes={srcSet ? imgSizes : undefined}
         src={imgSrc}
         srcSet={srcSet}
-        sizes={srcSet ? imgSizes : undefined}
         width={imgWidth}
         height={imgHeight}
         loading={classic && !eager ? 'lazy' : undefined}

@@ -173,6 +173,19 @@ describe('measured mode', () => {
     expect(img().closest('picture')).toBeNull()
   })
 
+  it('sets sizes before srcset', async () => {
+    // WebKit selects a candidate as soon as srcset is set; without sizes it
+    // assumes 100vw and fetches the wrong one first (found by the E2E tests).
+    const { box, img } = mount()
+    const order: string[] = []
+    new MutationObserver((records) => order.push(...records.map((r) => r.attributeName!))).observe(img(), {
+      attributeFilter: ['sizes', 'srcset'],
+    })
+    await start(box())
+    await Promise.resolve()
+    expect(order).toEqual(['sizes', 'srcset'])
+  })
+
   it('caps the srcset at srcWidth', async () => {
     const { box, img } = mount({ srcWidth: 500 })
     setRect(box(), { width: 412 })
