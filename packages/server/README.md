@@ -24,6 +24,22 @@ import { computeMetadata } from '@lazy-ease/server'
 const { width, height, thumbhash, color } = await computeMetadata('./images/photos/lake.jpg')
 ```
 
+## Options
+
+| Option | Default | |
+| --- | --- | --- |
+| `root` | required | Directory the source images are read from. |
+| `widths`, `ratios`, `qualities` | the loader defaults | Must match the loader's. |
+| `maxFileSize` | 32 MB | Larger sources are a `413`, checked before decoding. |
+| `maxInputPixels` | 50 MP | Larger sources are a `413`. |
+| `timeout` | 10 s | Per render, in ms, rounded up to whole seconds. Checked while decoding and resizing, not inside the AVIF encoder. A timeout is a `504`. |
+| `concurrency` | half the CPUs, at least 1 | Renders running at once; libvips adds its own threads per render. |
+| `cacheSize` | 200 | Encoded images kept in the in-memory LRU. `0` turns it off. |
+| `cacheBytes` | 64 MB | Total size of the LRU; the oldest entries go first. `0` turns it off. |
+| `avifEffort` | 4 | AVIF encoder effort, `0` (fastest) to `9` (smallest files). |
+
+**Memory.** Each running render holds the source file (up to `maxFileSize`) and its decoded pixels (up to `maxInputPixels` × 4 bytes, 200 MB at the defaults). Peak render memory is about `concurrency × (maxFileSize + 4 × maxInputPixels)`, plus `cacheBytes` for the cache. Lower `concurrency` or `maxInputPixels` on small machines.
+
 - [Documentation](https://github.com/mikekuss/lazy-ease#server): URL contract, limits, errors, options, CDN notes
 - [Changelog](https://github.com/mikekuss/lazy-ease/blob/main/CHANGELOG.md)
 

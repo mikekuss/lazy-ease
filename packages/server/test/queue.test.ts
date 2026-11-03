@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRenderQueue, withTimeout } from '../src/render.js'
+import { createRenderQueue, mapSharpError } from '../src/render.js'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -79,12 +79,14 @@ describe('createRenderQueue', () => {
   })
 })
 
-describe('withTimeout', () => {
-  it('passes a fast result through', async () => {
-    expect(await withTimeout(Promise.resolve(1), 100)).toBe(1)
+describe('mapSharpError', () => {
+  it('maps sharp timeouts to 504 and pixel limits to 413', () => {
+    expect(mapSharpError(new Error('timeout: 42% complete'))).toMatchObject({ status: 504 })
+    expect(mapSharpError(new Error('Input image exceeds pixel limit'))).toMatchObject({ status: 413 })
   })
 
-  it('rejects with a 504 when too slow', async () => {
-    await expect(withTimeout(new Promise(() => {}), 5)).rejects.toMatchObject({ status: 504 })
+  it('passes other errors through', () => {
+    const error = new Error('VipsJpeg: Premature end of input file')
+    expect(mapSharpError(error)).toBe(error)
   })
 })

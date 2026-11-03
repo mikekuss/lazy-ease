@@ -2,7 +2,7 @@ import { symlink, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Hono } from 'hono'
 import sharp from 'sharp'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createImageApp } from '../src/index.js'
 import { createFixtures, decode, solid, split, type Fixtures } from './fixtures.js'
 
@@ -328,9 +328,39 @@ describe('limits', () => {
     expect((await get('/broken.jpg?fmt=webp&w=64')).status).toBe(500)
   })
 
-  it('504 when a render takes longer than the timeout', async () => {
-    const slow = mounted({ timeout: 1, cacheSize: 0 })
-    expect((await slow.request('/big.jpg?ar=0.5&fmt=avif&w=1920')).status).toBe(504)
+  it('passes the timeout to sharp in whole seconds', async () => {
+    const timeout = vi.spyOn(sharp.prototype, 'timeout')
+    try {
+      expect((await mounted({ timeout: 1500, cacheSize: 0 }).request('/big.jpg?fmt=webp&w=64')).status).toBe(200)
+      expect(timeout).toHaveBeenCalledWith({ seconds: 2 })
+      expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=webp&w=64')).status).toBe(200)
+      expect(timeout).toHaveBeenLastCalledWith({ seconds: 10 })
+    } finally {
+      timeout.mockRestore()
+    }
+  })
+
+  it('504 when sharp reports a timeout', async () => {
+    // What sharp rejects with once the pipeline runs past `timeout` seconds.
+    // No real render is reliably slow enough: the AVIF encoder is not interrupted.
+    const toBuffer = vi.spyOn(sharp.prototype, 'toBuffer').mockRejectedValue(new Error('timeout: 42% complete'))
+    try {
+      expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=avif&w=1920')).status).toBe(504)
+    } finally {
+      toBuffer.mockRestore()
+    }
+  })
+
+  it('passes avifEffort to the AVIF encoder, default 4', async () => {
+    const avif = vi.spyOn(sharp.prototype, 'avif')
+    try {
+      await mounted({ cacheSize: 0 }).request('/small.jpg?fmt=avif&w=64')
+      expect(avif).toHaveBeenLastCalledWith({ quality: 75, effort: 4 })
+      await mounted({ cacheSize: 0, avifEffort: 0 }).request('/small.jpg?fmt=avif&w=64')
+      expect(avif).toHaveBeenLastCalledWith({ quality: 75, effort: 0 })
+    } finally {
+      avif.mockRestore()
+    }
   })
 
   it('serves concurrent requests for one variant', async () => {
@@ -355,5 +385,32 @@ describe('limits', () => {
     const a = await (await cached.request('/big.jpg?fmt=webp&w=750')).arrayBuffer()
     const b = await (await cached.request('/big.jpg?fmt=webp&w=750')).arrayBuffer()
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true)
+  })
+
+  it('bounds the LRU by bytes, evicting the oldest entries', async () => {
+    const A = '/big.jpg?fmt=webp&w=640'
+    const B = '/big.jpg?fmt=webp&w=1080'
+    const size = async (url: string) => (await (await get(url)).arrayBuffer()).byteLength
+    const [a, b] = [await size(A), await size(B)]
+    const toBuffer = vi.spyOn(sharp.prototype, 'toBuffer')
+    try {
+      // Room for one of the two only.
+      const cached = mounted({ cacheBytes: a + b - 1 })
+      await cached.request(A)
+      await cached.request(B)
+      expect(toBuffer).toHaveBeenCalledTimes(2)
+      await cached.request(B)
+      expect(toBuffer).toHaveBeenCalledTimes(2)
+      await cached.request(A)
+      expect(toBuffer).toHaveBeenCalledTimes(3)
+
+      // An entry larger than the whole budget is never kept.
+      const tiny = mounted({ cacheBytes: Math.min(a, b) - 1 })
+      await tiny.request(A)
+      await tiny.request(A)
+      expect(toBuffer).toHaveBeenCalledTimes(5)
+    } finally {
+      toBuffer.mockRestore()
+    }
   })
 })

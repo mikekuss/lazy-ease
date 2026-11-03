@@ -4,6 +4,8 @@ import sharp, { type Metadata, type SharpOptions } from 'sharp'
 import type { ImageParams } from './contract.js'
 
 export const DEFAULT_MAX_INPUT_PIXELS = 50_000_000
+export const DEFAULT_TIMEOUT = 10_000
+export const DEFAULT_AVIF_EFFORT = 4
 
 export interface Encoded {
   body: Uint8Array
@@ -31,24 +33,33 @@ export function mapSharpError(error: unknown): unknown {
 }
 
 export interface RenderOptions {
-  maxInputPixels: number
-  /** In ms. Passed to sharp as well, rounded up to whole seconds, so abandoned work stops. */
-  timeout: number
+  /** Sources with more pixels than this fail (a 413 through `mapSharpError`). Default 50 MP. */
+  maxInputPixels?: number
+  /**
+   * In ms, rounded up to whole seconds for sharp's `timeout()` (a 504 through
+   * `mapSharpError`). sharp checks it while libvips evaluates the pipeline,
+   * not inside the AVIF encoder. Default 10 s.
+   */
+  timeout?: number
+  /** AVIF encoder effort, 0 (fastest) to 9 (smallest). Default 4. */
+  avifEffort?: number
 }
 
 /**
  * Renders one variant (spec 12.1): auto-orient, crop to `w × round(w / ar)`
  * around the center when `ar` is given, never upscale, sRGB, no metadata.
  */
-export async function render(file: string, params: ImageParams, { maxInputPixels, timeout }: RenderOptions): Promise<Encoded> {
+export async function render(
+  file: string,
+  params: ImageParams,
+  { maxInputPixels = DEFAULT_MAX_INPUT_PIXELS, timeout = DEFAULT_TIMEOUT, avifEffort = DEFAULT_AVIF_EFFORT }: RenderOptions = {},
+): Promise<Encoded> {
   // Decode from memory: libvips caches and holds open files by name, which would
   // serve stale pixels after a source changes and, on Windows, lock it.
   const input = await readFile(file)
+  // limitInputPixels rejects an oversized source before its pixels are decoded.
   const image = sharp(input, inputOptions(maxInputPixels)).timeout({ seconds: Math.ceil(timeout / 1000) })
   const source = orientedSize(await image.metadata())
-  if ((source.width ?? 0) * (source.height ?? 0) > maxInputPixels) {
-    throw new HTTPException(413, { message: 'Source has too many pixels' })
-  }
 
   const { width, aspectRatio, quality, format } = params
   const height = aspectRatio ? Math.round(width / aspectRatio) : undefined
@@ -71,7 +82,7 @@ export async function render(file: string, params: ImageParams, { maxInputPixels
 
   switch (format) {
     case 'avif':
-      image.avif({ quality, effort: 4 })
+      image.avif({ quality, effort: avifEffort })
       break
     case 'webp':
       image.webp({ quality })
@@ -81,19 +92,6 @@ export async function render(file: string, params: ImageParams, { maxInputPixels
       break
   }
   return { body: await image.toBuffer(), type: `image/${format}` }
-}
-
-/** Rejects with a 504 when `promise` takes longer than `ms`. */
-export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new HTTPException(504, { message: 'Render timed out' })), ms)
-  })
-  try {
-    return await Promise.race([promise, timeout])
-  } finally {
-    clearTimeout(timer)
-  }
 }
 
 export interface RenderQueue {

@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import sharp from 'sharp'
 import { rgbaToThumbHash } from 'thumbhash'
 import { DEFAULT_MAX_INPUT_PIXELS, inputOptions, mapSharpError, orientedSize } from './render.js'
-import { resolveSource } from './source.js'
+import { realRoot, resolveSource } from './source.js'
 
 export interface ImageMetadata {
   /** Intrinsic size after EXIF rotation, for `srcWidth` and `srcHeight`. */
@@ -58,8 +58,9 @@ export interface MetaServerOptions {
  */
 export function createMetaApp({ root }: MetaServerOptions): Hono {
   const app = new Hono()
+  const rootDir = realRoot(root)
   app.get('/:path{.+}', async (c) => {
-    const { file } = await resolveSource(root, c.req.param('path'))
+    const { file } = await resolveSource(await rootDir(), c.req.param('path'))
     const metadata = await computeMetadata(file).catch((error: unknown) => {
       throw mapSharpError(error)
     })

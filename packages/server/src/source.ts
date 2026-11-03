@@ -16,11 +16,25 @@ const invalid = (message: string) => new HTTPException(400, { message })
 const notFound = () => new HTTPException(404, { message: 'Image not found' })
 
 /**
- * Maps the (already percent-decoded) source path of a request to a file inside
- * `root` (spec 12.1). Malformed paths are a 400; missing files and anything
- * that resolves outside the root, symlinks included, are a 404.
+ * Resolves `root` with `realpath` once, on first use, instead of on every
+ * request. A failure is not kept, so a root created later still works.
  */
-export async function resolveSource(root: string, src: string | undefined): Promise<Source> {
+export function realRoot(root: string): () => Promise<string> {
+  let resolved: Promise<string> | undefined
+  return () =>
+    (resolved ??= realpath(root).catch((error: unknown) => {
+      resolved = undefined
+      throw error
+    }))
+}
+
+/**
+ * Maps the (already percent-decoded) source path of a request to a file inside
+ * `rootDir`, the root's real path (spec 12.1). Malformed paths are a 400;
+ * missing files and anything that resolves outside the root, symlinks
+ * included, are a 404.
+ */
+export async function resolveSource(rootDir: string, src: string | undefined): Promise<Source> {
   if (!src) throw invalid('Missing source path')
   if (src.includes('\0')) throw invalid('Invalid source path')
   // Backslashes are separators on Windows and would dodge the checks below.
@@ -40,7 +54,6 @@ export async function resolveSource(root: string, src: string | undefined): Prom
     throw invalid('Unsupported file type')
   }
 
-  const rootDir = await realpath(root)
   let file: string
   let stats
   try {

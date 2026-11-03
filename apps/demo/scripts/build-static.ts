@@ -2,10 +2,8 @@ import { copyFile, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { computeMetadata } from '@lazy-ease/server'
-// `render` is internal to @lazy-ease/server, so it comes straight from the
-// workspace source. It is the same pipeline the image route runs.
-import { DEFAULT_MAX_INPUT_PIXELS, render } from '../../../packages/server/src/render.js'
+// `render` is the same pipeline the image route runs.
+import { computeMetadata, render } from '@lazy-ease/server'
 import { EXTERNAL_IMAGE, staticVariantSets } from '../src/plan.js'
 import { STATIC_FORMATS, STATIC_QUALITIES, variantFile, type StaticFormat } from '../src/staticLoader.js'
 import { ensureDemoImages } from './generate-images.js'
@@ -71,7 +69,7 @@ let next = 0
 const workers = Array.from({ length: Math.max(2, Math.min(8, os.availableParallelism())) }, async () => {
   while (next < tasks.length) {
     const { source, target, ...params } = tasks[next++]!
-    const { body } = await render(source, params, { maxInputPixels: DEFAULT_MAX_INPUT_PIXELS, timeout: 120_000 })
+    const { body } = await render(source, params, { timeout: 120_000 })
     await mkdir(path.dirname(target), { recursive: true })
     await writeFile(target, body)
     bytes += body.length
