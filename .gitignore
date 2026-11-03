@@ -10,3 +10,7 @@ coverage/
 Thumbs.db
 .vscode/
 .idea/
+
+# AI session files: planning, prompts, local Claude config
+.ai/
+.claude/

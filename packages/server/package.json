@@ -1,0 +1,29 @@
+{
+  "name": "@lazy-ease/server",
+  "version": "0.0.0",
+  "description": "Image resize and optimization server for lazy-ease",
+  "license": "MIT",
+  "author": "Mike Kuss",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikekuss/lazy-ease.git",
+    "directory": "packages/server"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.13.16",
+    "sharp": "^0.35.5"
+  }
+}
