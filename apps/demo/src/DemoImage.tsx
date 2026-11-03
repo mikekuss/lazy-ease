@@ -179,32 +179,29 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
       ) : (
         image
       )}
+      {/* Three fixed one-line rows, rendered from the start, so filling them
+          in after load never changes the card's height. */}
       <figcaption>
         <div className="caption-row">
           {label && <span className="label">{label}</span>}
           <span className={`state state-${state}`}>{state}</span>
-          {boxWidth !== undefined && <span>box {boxWidth}px</span>}
+          <span>{boxWidth !== undefined && `box ${boxWidth}px`}</span>
         </div>
-        {delivered && (
-          <div className="caption-row">
-            <span className="delivered">
-              {[
-                delivered.width && `${delivered.width}w`,
-                delivered.format,
-                delivered.bytes !== undefined && kb(delivered.bytes),
-                delivered.ms !== undefined && `${delivered.ms.toFixed(0)} ms`,
-                delivered.cached && 'cache',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-            {naive && (
-              <span className="naive" title='What a sizes="100vw" srcset would have downloaded'>
-                100vw: {naive.width}w{naive.bytes !== undefined && ` · ${kb(naive.bytes)}`}
-              </span>
-            )}
-          </div>
-        )}
+        <div className="caption-row delivered">
+          {delivered &&
+            [
+              delivered.width && `${delivered.width}w`,
+              delivered.format,
+              delivered.bytes !== undefined && kb(delivered.bytes),
+              delivered.ms !== undefined && `${delivered.ms.toFixed(0)} ms`,
+              delivered.cached && 'cache',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+        </div>
+        <div className="caption-row naive" title='What a sizes="100vw" srcset would have downloaded'>
+          {naive && `100vw: ${naive.width}w${naive.bytes !== undefined ? ` · ${kb(naive.bytes)}` : ''}`}
+        </div>
       </figcaption>
     </figure>
   )

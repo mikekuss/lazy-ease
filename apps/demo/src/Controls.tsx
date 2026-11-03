@@ -92,11 +92,10 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
         <span>
           {totals.loaded}/{totals.started} loaded · {mb(totals.bytes)}
         </span>
-        {saved !== undefined && (
-          <span title='Images with a known size, compared with a sizes="100vw" srcset'>
-            {mb(bytes)} vs. {mb(naiveBytes)} with 100vw ({saved >= 0 ? `−${saved}` : `+${-saved}`} %)
-          </span>
-        )}
+        {/* Always rendered, so the sticky bar keeps its height when it fills in. */}
+        <span title='Images with a known size, compared with a sizes="100vw" srcset'>
+          {saved !== undefined && `${mb(bytes)} vs. ${mb(naiveBytes)} with 100vw (${saved >= 0 ? `−${saved}` : `+${-saved}`} %)`}
+        </span>
       </div>
       <button type="button" onClick={onReload} title="New URLs for every image, so the browser cache is cold">
         Reload images

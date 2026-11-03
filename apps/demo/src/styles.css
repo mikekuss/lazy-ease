@@ -122,6 +122,12 @@ button {
   padding-bottom: 5px;
 }
 
+.stats span {
+  min-height: 1.2em;
+  line-height: 1.2em;
+  white-space: nowrap;
+}
+
 main {
   max-width: 1200px;
   margin: 0 auto;
@@ -206,11 +212,32 @@ section > p {
   font-variant-numeric: tabular-nums;
 }
 
+/* One line each, whatever fills in later. */
 .caption-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: 10px;
   align-items: center;
+  height: 1.4em;
+  line-height: 1.4em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.caption-row.delivered,
+.caption-row.naive {
+  display: block;
+}
+
+.caption-row > span {
+  flex-shrink: 0;
+}
+
+.caption-row > span:last-child {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .label {
@@ -234,6 +261,9 @@ section > p {
   text-transform: uppercase;
   font-size: 0.65rem;
   letter-spacing: 0.04em;
+  /* Wide enough for "loading", so the box width beside it never moves. */
+  min-width: 6.2em;
+  text-align: center;
 }
 
 .state-idle {
