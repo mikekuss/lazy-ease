@@ -1,4 +1,4 @@
-type Callback = () => void
+type Callback = (isIntersecting: boolean) => void
 
 interface Pool {
   observer: IntersectionObserver
@@ -15,15 +15,11 @@ function getPool(rootMargin: string): Pool {
   const callbacks = new Map<Element, Callback>()
   const observer = new IntersectionObserver(
     (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue
-        const callback = callbacks.get(entry.target)
-        callbacks.delete(entry.target)
-        observer.unobserve(entry.target)
-        callback?.()
-      }
+      for (const entry of entries) callbacks.get(entry.target)?.(entry.isIntersecting)
     },
-    { rootMargin },
+    // Inside nested scroll containers rootMargin does nothing along the scroll
+    // axis (spec 7.1). Engines without scrollMargin ignore the unknown member.
+    { rootMargin, scrollMargin: rootMargin } as IntersectionObserverInit,
   )
   pool = { observer, callbacks }
   pools.set(rootMargin, pool)
@@ -31,20 +27,50 @@ function getPool(rootMargin: string): Pool {
 }
 
 /**
- * Calls `callback` once when `element` comes within `rootMargin` of the
- * viewport. Returns a function that cancels the subscription.
+ * Reports every time `element` enters or leaves the zone `rootMargin` around
+ * the viewport. Returns a function that stops observing.
  */
-export function whenVisible(element: Element, rootMargin: string, callback: Callback): () => void {
-  if (typeof IntersectionObserver === 'undefined') {
-    callback()
-    return () => {}
-  }
-
+export function observeIntersection(element: Element, rootMargin: string, callback: Callback): () => void {
   const pool = getPool(rootMargin)
   pool.callbacks.set(element, callback)
   pool.observer.observe(element)
   return () => {
     pool.callbacks.delete(element)
     pool.observer.unobserve(element)
+  }
+}
+
+export interface WhenVisibleOptions {
+  rootMargin: string
+  /** How long the element must stay in the zone before `callback` runs (spec 7.2). */
+  dwellTime: number
+}
+
+/**
+ * Calls `callback` once when `element` comes within `rootMargin` of the
+ * viewport and stays there for `dwellTime` ms. Leaving earlier cancels the
+ * wait. Returns a function that cancels the subscription.
+ */
+export function whenVisible(element: Element, { rootMargin, dwellTime }: WhenVisibleOptions, callback: () => void): () => void {
+  if (typeof IntersectionObserver === 'undefined') {
+    callback()
+    return () => {}
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const fire = () => {
+    stop()
+    callback()
+  }
+  const stop = observeIntersection(element, rootMargin, (isIntersecting) => {
+    clearTimeout(timer)
+    timer = undefined
+    if (!isIntersecting) return
+    if (dwellTime > 0) timer = setTimeout(fire, dwellTime)
+    else fire()
+  })
+  return () => {
+    clearTimeout(timer)
+    stop()
   }
 }

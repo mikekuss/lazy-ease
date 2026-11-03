@@ -83,13 +83,3 @@ export interface FullLadderOptions {
 export function fullLadder({ ladder, srcWidth }: FullLadderOptions): number[] {
   return capped(ladder, sourceCap(ladder, srcWidth))
 }
-
-/**
- * @deprecated Pre-revision candidate selection, still used by `Image.tsx`.
- * Step 3 replaces it with `measuredCandidates`, `classicCandidates` and
- * `fullLadder`.
- */
-export function candidateWidths(width: number | undefined, widths: readonly number[] = DEFAULT_WIDTHS): number[] {
-  if (width === undefined) return [...widths]
-  return [...new Set([snapWidth(width, widths), snapWidth(width * 2, widths)])]
-}
