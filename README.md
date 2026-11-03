@@ -173,7 +173,7 @@ The placeholder is an inline style on the box, so it's in the server HTML and pa
 
 Without the prop, the provider's neutral color is used, for external images too. An invalid value falls back to it with a development warning. The background is removed once the image has loaded (after the fade), so transparent images don't show it.
 
-**ThumbHash.** A decoded ThumbHash is an uncompressed PNG data URI of about 5.5 KB of base64 per image. So the server HTML gets only the hash's average color, and after hydration the component decodes the hash (memoized) and sets it as the background of images that haven't loaded yet. With `thumbhashSsr: 'image'` on the provider, or `priority` on the image, the decoded image goes into the server HTML instead. That's meant for the hero.
+**ThumbHash.** A decoded ThumbHash is an uncompressed PNG data URI of about 5.5 KB of base64 per image. So the server HTML gets only the hash's average color, and on the client the component decodes the hash (memoized) and sets it as the background of images that haven't loaded yet: measured-mode images when they near the viewport, so off-screen images never decode, and classic-mode images right after hydration. With `thumbhashSsr: 'image'` on the provider, or `priority` on the image, the decoded image goes into the server HTML instead. That's meant for the hero.
 
 **Metadata.** Compute placeholders, sizes and versions once, at upload or build time, and store them with the image:
 
@@ -249,7 +249,7 @@ The reference backend only serves files inside its root, so the default loader s
 
 - Every mode renders deterministic HTML: the box with its layout CSS and placeholder, and an `<img>` with `alt` and its dimensions. Lazy images have no `src` in the HTML. Nothing reads `window` or the DOM during render; format detection, ThumbHash decoding and measuring happen in effects. It works with `renderToString` and the streaming renderers.
 - Classic-mode images carry `src` and `srcset` in the HTML and are visible from the first paint. `priority` adds the preload link, which React hoists into `<head>`.
-- Measured-mode images render a `<noscript>` with a plain `<img loading="lazy">`: the full ladder in WebP, the declared crop, `sizes` from the prop or `100vw`, and `alt`. Visitors without JavaScript get a correctly sized image.
+- Measured-mode images render a `<noscript>` with a plain `<img loading="lazy">`: in WebP with the declared crop, the 1× and 2× candidates with `sizes="{width}px"` when `width` is known, otherwise the full ladder with `sizes="100vw"`, and `alt`. Visitors without JavaScript get a correctly sized image.
 
 Development warnings and errors are on unless `process.env.NODE_ENV` is `'production'`; bundlers replace it.
 
@@ -265,7 +265,6 @@ interface ImageRequest {
   quality: number          // always one of the loader's qualities
   format: 'avif' | 'webp' | 'jpeg' | 'auto'   // 'auto' only with formats: 'auto'
   version?: string         // the version prop
-  params?: Record<string, string>
 }
 
 interface ImageLoader {
@@ -394,11 +393,13 @@ These assume `src` is a path. If you list `domains`, the loader receives those a
 | `widths`, `ratios`, `qualities` | the loader defaults | Must match the loader's. |
 | `maxFileSize` | 32 MB | Larger sources are a `413`, checked with `stat` before decoding. |
 | `maxInputPixels` | 50 MP | Larger sources are a `413`. |
-| `timeout` | 10 s | Per render, in ms. |
-| `concurrency` | CPU count | Renders running at once. Concurrent requests for one variant share one render. |
+| `timeout` | 10 s | Per render, in ms, rounded up to whole seconds. Passed to sharp, which checks it while decoding and resizing but not inside the AVIF encoder. |
+| `concurrency` | half the CPUs, at least 1 | Renders running at once. Concurrent requests for one variant share one render. Each render holds the source file (up to `maxFileSize`) and its decoded pixels (up to `maxInputPixels` × 4 bytes, 200 MB at the defaults). |
 | `cacheSize` | 200 | Encoded images kept in an in-memory LRU. `0` turns it off. Production caching belongs in the CDN. |
+| `cacheBytes` | 64 MB | Total size of the LRU. The oldest entries go first; `0` turns it off. |
+| `avifEffort` | 4 | AVIF encoder effort, `0` (fastest) to `9` (smallest files). |
 
-The package also exports `DEFAULT_WIDTHS`, `DEFAULT_RATIOS`, `DEFAULT_QUALITIES` and `OUTPUT_FORMATS`.
+The package also exports `DEFAULT_WIDTHS`, `DEFAULT_RATIOS`, `DEFAULT_QUALITIES`, `OUTPUT_FORMATS`, and `render(file, params, options)`, the same pipeline the image route runs, for build scripts.
 
 ### CDN notes
 

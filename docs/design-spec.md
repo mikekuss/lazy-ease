@@ -1,6 +1,6 @@
 # lazy-ease design spec (v1)
 
-Status: reviewed draft. Incorporates the architecture review of 2026-11-03. Supersedes the behavior of the current scaffold where they differ. Section 16 lists what the review changed.
+Status: reviewed draft. Incorporates the architecture review of 2026-11-03 and the performance and simplicity review of the same day. Supersedes the behavior of the current scaffold where they differ. Sections 16 and 17 list what the reviews changed.
 
 ## 1. Goals
 
@@ -128,7 +128,6 @@ interface ImageRequest {
   quality: number          // always a value of the loader's qualities
   format: 'avif' | 'webp' | 'jpeg' | 'auto'   // 'auto' only for loaders that declare formats: 'auto'
   version?: string         // the `version` prop, opaque
-  params?: Record<string, string>   // backend-specific passthrough from the provider
 }
 
 interface ImageLoader {
@@ -161,12 +160,12 @@ Third-party loaders map the request to their own syntax. Known mappings: imgix `
 1. Before the image is near the viewport, no `src`/`srcset` is set.
 2. When the box enters the preload zone (and has been there for `dwellTime`), the component measures the box width in CSS px.
 3. It sets `srcset` to the **capped ladder** (with the crop ratio) and `sizes` to the measured width, e.g. `sizes="412px"`. The browser picks the candidate for its device pixel ratio. The cap: no candidate above `snap(2 × measured width)` (a DPR-3 device gets the 2× candidate, since browsers take the largest available when none reaches the DPR), and none above `srcWidth` when given (the backend never upscales, so those would be identical bytes under different URLs).
-4. A `ResizeObserver` keeps `sizes` current. `sizes` is **monotonic**: it is only raised, never lowered, so no engine ever considers a downgrade. It is written only when the snapped candidate for `measured width × DPR` changes, after a trailing debounce of 200 ms (a window drag fires every frame; a rotation is one change). When the box grows past a ladder step, the browser loads the larger candidate and keeps showing the old one until it is ready. The cap moves with the width.
+4. One `ResizeObserver`, shared by all images, keeps `sizes` current from the box's content rect. A fixed or ratio box whose first measurement already equals its `width` is not observed: it cannot grow, and `sizes` never shrinks. `sizes` is **monotonic**: it is only raised, never lowered, so no engine ever considers a downgrade. It is written only when the snapped candidate for `measured width × DPR` changes, after a trailing debounce of 200 ms (a window drag fires every frame; a rotation is one change). When the box grows past a ladder step, the browser loads the larger candidate and keeps showing the old one until it is ready. The cap moves with the width.
 5. In fill mode without `aspectRatio`, if the snapped box ratio moves to another ladder value, the `srcset` is rebuilt with the new ratio.
 
 Changing the `sizes` attribute is a relevant mutation that re-runs selection in every engine; viewport resizes alone are not (WebKit never re-selects on resize, [bug 149899](https://bugs.webkit.org/show_bug.cgi?id=149899)). Measured mode only relies on the attribute path.
 
-The srcset exists only in the client DOM, so the server HTML stays small.
+The measured srcset exists only in the client DOM. The server HTML carries only the `<noscript>` fallback (7.3), which has two candidates when `width` is known, so it stays small.
 
 **Cost.** Every measured-mode image waits for hydration, intersection and measurement; the preload scanner never sees it. Images that are likely in the first viewport should use classic mode (`sizes` or `priority`). In development the component warns when a measured-mode image is already intersecting the viewport when it hydrates.
 
@@ -181,7 +180,7 @@ These need URLs in the server HTML, before JavaScript runs, so nothing can be me
 
 ### 6.4 Format
 
-- **Client-rendered images** (measured mode): the component detects AVIF and WebP support once per page by decoding tiny embedded test images. Detection starts when the provider mounts (or on first import without a provider), so it normally finishes before the first image intersects. Images wait for it, with a 200 ms timeout after which WebP is used. The result is cached in memory. URLs carry the format explicitly (AVIF, then WebP, then JPEG). Loaders with `formats: 'auto'` skip detection and receive `format: 'auto'`.
+- **Client-rendered images** (measured mode): the component detects AVIF and WebP support once per page by decoding tiny embedded test images. Detection starts when the provider mounts (or on first import without a provider), so it normally finishes before the first image intersects. Images wait for it, with a 200 ms timeout after which WebP is used. The result is cached in memory; once it is known, an image reads it synchronously and sets its format in the same render as its first measurement, with no wait. URLs carry the format explicitly (AVIF, then WebP, then JPEG). Loaders with `formats: 'auto'` skip detection and receive `format: 'auto'`.
 - **Server-rendered images** (classic mode): the format can't be detected before JavaScript runs. They use WebP, which every target browser supports. No `<picture>`: a preload link per format would make AVIF-capable browsers fetch the LCP image twice, and AVIF is the slowest format to encode. No `Accept` negotiation (2).
 
 Support reference: AVIF in Safari 16.4+, Chromium 85+, Firefox 93+ ([caniuse](https://caniuse.com/avif)).
@@ -206,7 +205,7 @@ With `dwellTime > 0`, a box must stay in the preload zone for that long before i
 
 ### 7.3 No-JS
 
-Lazy images render a `<noscript>` with a plain `<img loading="lazy">` carrying the same `srcset` the classic mode would emit (full ladder, crop ratio, WebP), `sizes` from the prop or `100vw`, and `alt`, so no-JS users get a correctly sized image. React does not hydrate `<noscript>` children; the SSR test checks the markup is emitted unescaped.
+Lazy images render a `<noscript>` with a plain `<img loading="lazy">` carrying the `srcset` and `sizes` the classic mode would emit without `sizes` (6.3): `snap(w)` and `snap(2w)` with `sizes="{w}px"` when `width` is known, otherwise the full ladder with `sizes="100vw"`; crop ratio, WebP and `alt` as usual, so no-JS users get a correctly sized image. It is built once per image (memoized), not on every render. React does not hydrate `<noscript>` children; the SSR test checks the markup is emitted unescaped.
 
 ## 8. Placeholder
 
@@ -224,7 +223,7 @@ The default, when no prop is given, is the provider's neutral color. This applie
 **ThumbHash.** The decoder's PNG data URI is uncompressed: up to 32×32 RGBA, about 5.5 KB of base64 per image that gzips poorly. So:
 
 - On the server (and during hydration) the component renders only the hash's average color (`thumbHashToAverageRGBA`, no decode) as `background-color`. Goal 4 holds: color on first paint, no request.
-- After hydration, for images not yet `loaded`, it decodes the hash to a PNG data URI (memoized per hash) and sets `background-image`.
+- On the client, for images not yet `loaded`, it decodes the hash to a PNG data URI (memoized per hash) and sets `background-image`. Measured-mode images decode when their load is triggered (they enter the preload zone, or on mount with `eager`), so off-screen images never decode; classic-mode images decode right after hydration.
 - `thumbhashSsr: 'image'` on the provider, or `priority` on the image, renders the decoded image on the server instead. Intended for the hero only.
 
 The decoder is bundled and tree-shaken when unused.
@@ -273,7 +272,7 @@ The image app is mounted at the loader's `baseUrl` (default `/_img`). The source
 
 | Param | Required | Rule |
 | --- | --- | --- |
-| path | yes | Path inside the configured root. Resolved with `realpath` and checked against the root (symlinks included). Rejected: absolute URLs, `..` after normalization, null bytes, backslashes and drive letters, UNC prefixes, extensions outside `jpg jpeg png webp avif gif`. Unicode is NFC-normalized before lookup. |
+| path | yes | Path inside the configured root. Resolved with `realpath` and checked against the root's real path (symlinks included), which is resolved once per app. Rejected: absolute URLs, `..` after normalization, null bytes, backslashes and drive letters, UNC prefixes, extensions outside `jpg jpeg png webp avif gif`. Unicode is NFC-normalized before lookup. |
 | `w` | yes | Must be a width-ladder value, otherwise 400. |
 | `ar` | no | Must be a ratio-ladder value in canonical form, otherwise 400. With it the output is `w × round(w / ar)`, cropped with `cover` around the center. Without it, the width is scaled with the ratio kept. |
 | `q` | no | Must be an allowed quality (default `[75]`), otherwise 400. |
@@ -283,10 +282,11 @@ The image app is mounted at the loader's `baseUrl` (default `/_img`). The source
 - **Canonical only.** Parameters must appear in alphabetical order, once each, lowercase, with numbers in canonical form (`1.5` not `1.50`, `640` not `0640`). Anything else is 400. Unknown parameters are 400. This keeps one URL per variant on CDNs that key on the raw query string.
 - **Never upscaled.** If the source is smaller than the target, the output shrinks and the ratio is kept.
 - **Pipeline.** Auto-orient from EXIF before cropping, convert to sRGB, strip all metadata (EXIF, GPS, XMP) from the output. GIF: first frame only.
-- **Limits.** `limitInputPixels` 50 MP, input file size cap (default 32 MB, checked with `stat` before decoding), `failOn: 'warning'`, a per-render timeout (default 10 s), a concurrency cap on renders with coalescing (one render per cache key in flight; concurrent requests wait for it).
+- **Limits.** `limitInputPixels` 50 MP (sharp rejects the source before decoding its pixels), input file size cap (default 32 MB, checked with `stat` before decoding), `failOn: 'warning'`, a per-render timeout (default 10 s, sharp's `timeout()` in whole seconds, rounded up), a concurrency cap on renders with coalescing (one render per cache key in flight; concurrent requests wait for it). The timeout is checked while libvips evaluates the pipeline (decode, resize, color conversion); the AVIF encoder itself is not interrupted, so `avifEffort` (default 4) bounds AVIF encode time instead.
+- **Memory.** `concurrency` defaults to half the CPUs (at least 1), since libvips runs several threads per render. Each running render holds the input buffer (up to `maxFileSize`) and the decoded raster (up to `maxInputPixels` × 4 bytes, 200 MB at the defaults), so peak render memory is about `concurrency × (maxFileSize + 4 × maxInputPixels)`.
 - **Headers.** `Cache-Control: public, max-age=31536000, immutable`, `Content-Type`, `Content-Length`, `ETag` (hash of the cache key plus source mtime) with `304` support, `X-Content-Type-Options: nosniff`. `HEAD` is supported.
 - **Errors.** 400 for invalid parameters, 404 for a missing or forbidden source, 413 for a source over the limits, 504 on timeout.
-- The Node server keeps a small in-memory LRU. Production caching belongs in the CDN.
+- The Node server keeps a small in-memory LRU of encoded images, bounded by count (`cacheSize`, default 200) and by total bytes (`cacheBytes`, default 64 MB); the oldest entries go first, and an image larger than `cacheBytes` is not kept. Production caching belongs in the CDN.
 
 ### 12.2 Metadata route
 
@@ -312,7 +312,7 @@ Not part of the public server. `createMetaApp` is a separate Hono app for the de
 
 ## 14. Testing
 
-- Unit: width snapping, ratio-ladder snapping (all modes agree), candidate cap (2× and `srcWidth`), canonical URL building, loader URLs for the default and the three known third-party mappings, owned/external detection (protocol-relative, `data:`, ports, case), placeholder parsing (`thumbhash:` prefix, color, data URI).
+- Unit: client and server ladders and number formatting agree, width snapping, ratio-ladder snapping (all modes agree), candidate cap (2× and `srcWidth`), canonical URL building, loader URLs for the default and the three known third-party mappings, owned/external detection (protocol-relative, `data:`, ports, case), placeholder parsing (`thumbhash:` prefix, color, data URI).
 - Component (jsdom, mocked IntersectionObserver and ResizeObserver): state transitions, no URL before intersection, monotonic `sizes` updates and the debounce, fade only after decode and the decode timeout fallback, `complete && naturalWidth === 0` as error, placeholder output, dev warnings and dev errors for invalid prop combinations.
 - SSR: `renderToString` output per mode, classic-mode images at `opacity: 1`, only the average color for ThumbHash unless opted in, `<noscript>` markup unescaped, no DOM access during render, hydration without mismatch.
 - Server: canonical-parameter validation (order, case, duplicates, number formats), ladder validation, crop dimensions, no upscaling, path safety (including backslashes and Unicode), metadata stripping, limits (pixel count, file size, timeout), ETag/304, HEAD.
@@ -342,3 +342,12 @@ Not part of the public server. `createMetaApp` is a separate Hono app for the de
 - Backend limits, coalescing, timeout, metadata stripping, SVG/TIFF/animated sources rejected, `/meta` opt-in, Windows path rules (I9).
 - `sizes` monotonic; WebKit resize behavior documented (I10).
 - Minor: hidden-image claim scoped to measured mode, `scrollMargin`, `sizes="auto"` dropped, richer `<noscript>`, `thumbhash:` prefix, CSP note, reduced motion, `onLoad` semantics, `ref`, `src` change, `decoding`, preload dedupe rule, ETag/304/HEAD/nosniff, owned-detection rules, `fmt=auto` and public `/meta` cut.
+
+## 17. Changes from the 2026-11-03 performance and simplicity review
+
+- `<noscript>` uses the classic candidates (two when `width` is known) and is memoized (6.2, 7.3).
+- ThumbHash decoding waits for the load trigger in measured mode (8).
+- A known format detection result is read synchronously (6.4).
+- One shared `ResizeObserver` reading the content rect; boxes that cannot grow are not observed (6.2).
+- `params` removed from `ImageRequest`; `createLoader({ params })` stays (6.1).
+- Server: `concurrency` defaults to half the CPUs, the LRU is also bounded by bytes, memory per render documented, the root's `realpath` is resolved once, sharp's limits are the only pixel check and the only timeout, `avifEffort` option (12.1).

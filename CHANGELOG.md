@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+#### `lazy-ease`
+
+- The `<noscript>` fallback offers the 1× and 2× candidates when `width` is known instead of the full ladder, and is built once per image.
+- Off-screen measured-mode images no longer decode their ThumbHash at hydration; they decode when they near the viewport.
+- Once format detection has finished, images set their `srcset` in the same render as their first measurement.
+- All images share one `ResizeObserver`; fixed and ratio boxes already at their `width` are not observed.
+- `ImageRequest.params` is removed (the component never set it); `createLoader({ params })` stays.
+- The public exports are reduced to the component, provider, loader API, ladders, `formatNumber`, `snapRatio`, `fullLadder` and `encodePath`.
+
+#### `@lazy-ease/server`
+
+- `concurrency` defaults to half the CPUs. New `cacheBytes` (64 MB) bounds the in-memory LRU by size, and `avifEffort` (4) sets the AVIF encoder effort.
+- The render timeout is sharp's `timeout()` only, and the pixel limit is sharp's `limitInputPixels` only.
+- The root's real path is resolved once per app instead of on every request.
+- `render` and its option types are exported for build scripts.
+
 ## [0.1.0] - 2026-11-03
 
 First release, implementing the [v1 design spec](docs/design-spec.md).
