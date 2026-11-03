@@ -329,6 +329,17 @@ describe('measured mode', () => {
     expect(watched(narrow.box())).toBe(true)
   })
 
+  it('measures the content box, without wrapper padding and border', async () => {
+    const { box, img } = mount({ wrapperStyle: { padding: '0 10px', border: '5px solid red' } })
+    setRect(box(), { width: 330 })
+    await start(box())
+    expect(img().getAttribute('sizes')).toBe('300px')
+    // 430 - 30 = 400 selects 640, where 300 selected 384.
+    resize(box(), { width: 430 })
+    await advance(200)
+    expect(img().getAttribute('sizes')).toBe('400px')
+  })
+
   it('does not track the box ratio outside fill mode', async () => {
     const { box, img } = mount({ width: undefined, height: undefined, aspectRatio: 1.5 })
     setRect(box(), { width: 300, height: 200 })

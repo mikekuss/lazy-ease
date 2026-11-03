@@ -53,6 +53,16 @@ export function intersect(element: Element, isIntersecting = true): void {
   })
 }
 
+/** The rect minus padding and border, as a real ResizeObserver reports it. */
+function contentRectOf(element: Element): DOMRect {
+  const rect = rectOf(element)
+  const style = getComputedStyle(element)
+  const px = (...values: string[]) => values.reduce((sum, value) => sum + (parseFloat(value) || 0), 0)
+  const width = rect.width - px(style.paddingLeft, style.paddingRight, style.borderLeftWidth, style.borderRightWidth)
+  const height = rect.height - px(style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth)
+  return { ...rect, width, height, right: rect.left + width, bottom: rect.top + height }
+}
+
 export class MockResizeObserver {
   static instances = new Set<MockResizeObserver>()
   readonly elements = new Set<Element>()
@@ -77,7 +87,7 @@ export function resize(element: Element, rect: Partial<Rect>): void {
   act(() => {
     for (const observer of MockResizeObserver.instances) {
       if (!observer.elements.has(element)) continue
-      const entry = { target: element, contentRect: rectOf(element) } as unknown as ResizeObserverEntry
+      const entry = { target: element, contentRect: contentRectOf(element) } as unknown as ResizeObserverEntry
       observer.callback([entry], observer as unknown as ResizeObserver)
     }
   })

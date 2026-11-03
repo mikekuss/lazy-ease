@@ -168,6 +168,20 @@ function classicSources({ src, loader, width, sizes, srcWidth, crop, quality, ve
   }
 }
 
+/**
+ * The box's content size, the same box ResizeObserver's `contentRect`
+ * reports, so padding or a border from `wrapperStyle` doesn't count.
+ */
+function contentSize(box: HTMLElement): { width: number; height: number } {
+  const rect = box.getBoundingClientRect()
+  const style = getComputedStyle(box)
+  const px = (...values: string[]) => values.reduce((sum, value) => sum + (parseFloat(value) || 0), 0)
+  return {
+    width: Math.max(0, rect.width - px(style.paddingLeft, style.paddingRight, style.borderLeftWidth, style.borderRightWidth)),
+    height: Math.max(0, rect.height - px(style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth)),
+  }
+}
+
 function prefersReducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 }
@@ -341,7 +355,7 @@ function ImageBox({
     let timer: ReturnType<typeof setTimeout> | undefined
 
     // A hidden box measures 0 and waits for the ResizeObserver.
-    const initial = box.getBoundingClientRect()
+    const initial = contentSize(box)
     if (initial.width > 0) setMeasure((current) => current ?? firstMeasure(initial, options))
 
     // Once detection has finished, the format lands in the same render as
