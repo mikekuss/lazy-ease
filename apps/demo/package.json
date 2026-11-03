@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"tsx watch --conditions=source server.ts\" \"vite\"",
+    "build:static": "vite build --mode static && tsx --conditions=source scripts/build-static.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

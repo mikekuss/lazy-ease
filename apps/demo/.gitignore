@@ -1,2 +1,4 @@
 # Generated on first start, see scripts/generate-images.ts
 images/
+# Static build for GitHub Pages, see scripts/build-static.ts
+dist/

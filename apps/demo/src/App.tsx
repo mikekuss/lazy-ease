@@ -2,7 +2,10 @@ import { createLoader, LazyEaseProvider, type ImageLoader } from 'lazy-ease'
 import { useEffect, useMemo, useState } from 'react'
 import { Controls } from './Controls'
 import { DemoImage } from './DemoImage'
-import { FORMATS, loadSettings, saveSettings, throttleParams, type Settings } from './settings'
+import { BASE, STATIC } from './mode'
+import { EXTERNAL_IMAGE, FILL, FIXED_SIZES, GALLERY_SIZE, galleryRatio, HERO_RATIO, heroImage, RATIOS } from './plan'
+import { FORMATS, loadSettings, saveSettings, throttleParams, throttleProfile, type Settings } from './settings'
+import { createStaticLoader, type StaticFormat } from './staticLoader'
 
 /** One entry of /api/images: `computeMetadata` plus the path. */
 interface SourceImage {
@@ -14,15 +17,9 @@ interface SourceImage {
   color: string
 }
 
-const RATIOS: [string, number][] = [
-  ['1:1', 1],
-  ['4:3', 4 / 3],
-  ['3:4', 3 / 4],
-  ['16:9', 16 / 9],
-  ['2:3', 2 / 3],
-]
-
-const GALLERY_SIZE = 40
+// Written by scripts/build-static.ts in the static build.
+const IMAGE_LIST = STATIC ? `${BASE}api/images.json` : '/api/images'
+const GALLERY = STATIC ? GALLERY_SIZE.static : GALLERY_SIZE.live
 
 export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings)
@@ -33,7 +30,7 @@ export function App() {
     // On the first start the server is still generating the images, so retry.
     let timer: ReturnType<typeof setTimeout> | undefined
     const load = () =>
-      fetch('/api/images')
+      fetch(IMAGE_LIST)
         .then((response) => (response.ok ? (response.json() as Promise<SourceImage[]>) : Promise.reject(response.status)))
         .then(setImages)
         .catch(() => {
@@ -46,14 +43,22 @@ export function App() {
   useEffect(() => saveSettings(settings), [settings])
 
   // `run` makes every URL new, so "Reload images" starts with a cold browser
-  // cache. The demo server strips it and the throttle settings again.
-  const loader = useMemo<ImageLoader>(
-    () => ({
-      ...createLoader({ params: { ...throttleParams(settings), ...(run > 0 ? { run } : {}) } }),
+  // cache. The demo server strips it and the throttle settings again; the
+  // static host ignores the query string, and its service worker reads it.
+  const loader = useMemo<ImageLoader>(() => {
+    const runParam: Record<string, number> = run > 0 ? { run } : {}
+    if (STATIC) {
+      return createStaticLoader({
+        baseUrl: `${BASE}_img`,
+        formats: FORMATS[settings.formats] as readonly StaticFormat[],
+        params: { ...throttleProfile(settings), ...runParam },
+      })
+    }
+    return {
+      ...createLoader({ params: { ...throttleParams(settings), ...runParam } }),
       formats: FORMATS[settings.formats],
-    }),
-    [settings, run],
-  )
+    }
+  }, [settings, run])
   // Any change restarts the demo so you can watch it from a clean state.
   const demoKey = `${run}-${JSON.stringify(settings)}`
   const changeSettings = (next: Settings) => {
@@ -82,7 +87,9 @@ export function App() {
   // `sizes` there. In lazy mode, `sizes` would turn measuring off.
   const nativeSizes = (sizes: string) => (settings.loading === 'native' ? { sizes } : {})
   const pick = (i: number) => images[i % images.length]!
-  const hero = images.find((image) => image.width / image.height > 2) ?? images[0]
+  const hero = heroImage(images)
+  // A measured fill ratio can't be pre-rendered, so the static build fixes it.
+  const fillRatio = (ratio: number) => (STATIC ? { aspectRatio: ratio } : {})
 
   return (
     <LazyEaseProvider
@@ -99,9 +106,16 @@ export function App() {
         </div>
         <Controls settings={settings} onChange={changeSettings} onReload={reload} />
       </header>
+      {STATIC && (
+        <p className="static-banner">
+          Static demo: pre-rendered variants via a custom loader. Run <code>pnpm dev</code> for the live server.
+        </p>
+      )}
 
       {images.length === 0 || !hero ? (
-        <p className="empty">Loading the image list … is the demo server running on port 3001?</p>
+        <p className="empty">
+          {STATIC ? 'Loading the image list …' : 'Loading the image list … is the demo server running on port 3001?'}
+        </p>
       ) : (
         <div key={demoKey}>
           <section className="hero">
@@ -109,34 +123,22 @@ export function App() {
               {...source(hero)}
               alt="Hero"
               fill
-              aspectRatio={21 / 9}
-              sizes="100vw"
-              priority
+              aspectRatio={HERO_RATIO}
+              {...nativeSizes('100vw')}
               frame={{ aspectRatio: '21 / 9' }}
-              label="priority hero · fill · sizes=100vw"
+              label="hero · fill · 21:9"
             />
           </section>
 
           <main>
-            <p className="intro">
-              Each caption shows the box state, the measured box width, the delivered variant (width, format, bytes,
-              load time) and what a plain <code>sizes="100vw"</code> srcset would have downloaded instead. The hero
-              is classic mode: its URLs are in the HTML, it uses WebP and never fades. Everything else is measured
-              on the client after it nears the viewport.
-            </p>
 
             <section>
               <h2>Fixed size</h2>
               <p>
-                <code>width</code> and <code>height</code>: the box reserves its space, the server crops to the ratio,
-                and at most the 2× candidate is offered.
+                <code>width</code> and <code>height</code>
               </p>
               <div className="row">
-                {[
-                  { width: 320, height: 240 },
-                  { width: 200, height: 200 },
-                  { width: 480, height: 270 },
-                ].map((size, i) => (
+                {FIXED_SIZES.map((size, i) => (
                   <DemoImage key={i} {...source(pick(i + 2))} alt="" {...size} label={`${size.width}×${size.height}`} />
                 ))}
               </div>
@@ -145,8 +147,7 @@ export function App() {
             <section>
               <h2>Aspect ratio</h2>
               <p>
-                <code>aspectRatio</code> without a width: the box is as wide as its grid cell and the variant follows
-                the measured width.
+                <code>aspectRatio</code>, width from the grid cell
               </p>
               <div className="grid">
                 {RATIOS.map(([label, ratio], i) => (
@@ -165,22 +166,31 @@ export function App() {
             <section>
               <h2>Fill</h2>
               <p>
-                <code>fill</code> covers a positioned parent. Without <code>aspectRatio</code> the crop follows the
-                measured box ratio; resize the window to see it change.
+                {STATIC ? (
+                  <>
+                    <code>fill</code> with a fixed <code>aspectRatio</code>
+                  </>
+                ) : (
+                  <>
+                    <code>fill</code>, crop follows the box ratio
+                  </>
+                )}
               </p>
               <div className="row fill-row">
                 <DemoImage
-                  {...source(pick(5))}
+                  {...source(pick(FILL.banner.image))}
                   alt=""
                   fill
+                  {...fillRatio(FILL.banner.aspectRatio)}
                   frame={{ height: 260 }}
                   {...nativeSizes('(min-width: 900px) 60vw, 100vw')}
                   label="banner"
                 />
                 <DemoImage
-                  {...source(pick(4))}
+                  {...source(pick(FILL.frame.image))}
                   alt=""
                   fill
+                  {...fillRatio(FILL.frame.aspectRatio)}
                   frame={{ width: 220, height: 320 }}
                   {...nativeSizes('220px')}
                   label="220×320 frame"
@@ -190,17 +200,14 @@ export function App() {
 
             <section>
               <h2>External image</h2>
-              <p>
-                An absolute URL on a host outside <code>domains</code> loads as is: no srcset, no resizing, the
-                original JPEG. Layout, placeholder and fade still apply. The throttle does not apply to it.
-              </p>
+              <p>Original JPEG, not resized or throttled</p>
               <div className="row">
                 <DemoImage
-                  src={new URL(`/external/${pick(0).file}`, location.href).href}
+                  src={new URL(`${BASE}external/${pick(EXTERNAL_IMAGE).file}`, location.href).href}
                   alt=""
                   width={400}
-                  height={Math.round((400 * pick(0).height) / pick(0).width)}
-                  placeholder={placeholderFor(pick(0))}
+                  height={Math.round((400 * pick(EXTERNAL_IMAGE).height) / pick(EXTERNAL_IMAGE).width)}
+                  placeholder={placeholderFor(pick(EXTERNAL_IMAGE))}
                   label="external · 400px"
                 />
               </div>
@@ -208,17 +215,9 @@ export function App() {
 
             <section>
               <h2>Scroll gallery</h2>
-              <p>
-                {settings.loading === 'lazy'
-                  ? `Images start loading ${settings.rootMargin}px before they scroll into view` +
-                    (settings.dwellTime > 0 ? ` and after ${settings.dwellTime} ms there.` : '.')
-                  : settings.loading === 'native'
-                    ? 'The browser decides when to load (loading="lazy").'
-                    : 'Everything loads right away.'}
-              </p>
               <div className="gallery">
-                {Array.from({ length: GALLERY_SIZE }, (_, i) => {
-                  const [label, ratio] = RATIOS[(i * 2 + Math.floor(i / images.length)) % RATIOS.length]!
+                {Array.from({ length: GALLERY }, (_, i) => {
+                  const [label, ratio] = galleryRatio(i, images.length)
                   return (
                     <DemoImage
                       key={i}
