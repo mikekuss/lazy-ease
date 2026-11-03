@@ -1,12 +1,9 @@
+export { createImageApp, type ImageServerOptions } from './app.js'
 export {
+  DEFAULT_QUALITIES,
+  DEFAULT_RATIOS,
   DEFAULT_WIDTHS,
-  createImageApp,
-  type ImageServerOptions,
+  OUTPUT_FORMATS,
   type OutputFormat,
-} from './app.js'
-export {
-  createPlaceholder,
-  svgToDataUri,
-  type PlaceholderMode,
-  type PlaceholderOptions,
-} from './placeholder.js'
+} from './contract.js'
+export { computeMetadata, createMetaApp, type ImageMetadata, type MetaServerOptions } from './metadata.js'

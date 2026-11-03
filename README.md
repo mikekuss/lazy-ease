@@ -26,7 +26,7 @@ import { Image } from 'lazy-ease'
 | Package | Description |
 | --- | --- |
 | [`lazy-ease`](packages/react) | The React 19 `<Image>` component |
-| [`@lazy-ease/server`](packages/server) | Image resize and placeholder server (Hono + sharp) |
+| [`@lazy-ease/server`](packages/server) | Image resize server (Hono + sharp) and metadata tooling |
 | [`apps/demo`](apps/demo) | Demo page with network throttling |
 
 ## `<Image>` props
@@ -63,15 +63,53 @@ app.route('/_img', createImageApp({ root: './images' }))
 serve({ fetch: app.fetch, port: 3001 })
 ```
 
-| Route | Description |
-| --- | --- |
-| `GET /image?src&w&h&q&fmt` | Resized image. `w` snaps to an allowed width, `h` crops (cover). The component always sends an explicit `fmt`. `fmt=auto` negotiates via `Accept` |
-| `GET /meta?src&ar` | `{ width, height, placeholder }` with the placeholder as a data URI, to inline at build time, during SSR or in your CMS |
-| `GET /placeholder?src&ar&mode` | The raw placeholder SVG, `mode=blur` (default) or `color` (1×1) |
+Mount the app at the loader's `baseUrl` (default `/_img`). It has one route, `GET /{src path}` (`HEAD` too): the source path is the URL path, the parameters are the query string, exactly as `createLoader()` writes them:
 
-`createPlaceholder(file, { mode })` and `svgToDataUri(svg)` are exported for build scripts.
+```
+/_img/my%20photos/caf%C3%A9.jpg?ar=1.333&fmt=webp&q=75&v=AbC123&w=640
+```
 
-Sources are only read from `root`. Remote URLs and paths outside `root` are rejected. Images are never upscaled.
+| Param | Required | Rule |
+| --- | --- | --- |
+| `ar` | no | A ratio-ladder value (73 values from 0.25 to 4). Crops to `w × round(w / ar)` around the center. Without it the image is scaled with its ratio kept |
+| `fmt` | yes | `avif`, `webp` or `jpeg`. There is no `Accept` negotiation |
+| `q` | no | One of `qualities` (default `[75]`). Absent means the first one |
+| `v` | no | Opaque version token, 1–64 of `A–Z a–z 0–9 - . _ ~`, case kept. Only part of the URL, so a CDN sees a new key |
+| `w` | yes | A width-ladder value: 64, 128, 256, 384, 640, 750, 828, 1080, 1200, 1440, 1920, 2560, 3840 |
+
+**Canonical only.** Parameters must be in alphabetical order, once each, lowercase, with numbers written as the loader writes them (`1.5`, not `1.50`; `640`, not `0640`). Anything else, including unknown parameters, is a `400`. That leaves one URL per variant on CDNs that key on the raw query string.
+
+Sources are read from `root` only. Paths with backslashes, colons (drive letters, URL schemes), a leading `//` (UNC), dot segments or null bytes are a `400`; so are extensions other than `jpg jpeg png webp avif gif` (SVG and TIFF are not sources). Paths are NFC-normalized, resolved with `realpath` and must stay inside `root`, symlinks included, otherwise `404`.
+
+The renderer auto-orients from EXIF, crops, converts to sRGB and strips all metadata (EXIF, GPS, XMP, ICC). GIFs render their first frame. Images are never upscaled: a source smaller than the target gives a smaller output with the requested ratio.
+
+Responses carry `Cache-Control: public, max-age=31536000, immutable`, `Content-Type`, `Content-Length`, `X-Content-Type-Options: nosniff` and an `ETag` (hash of the variant and the source mtime); `If-None-Match` gets a `304`.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `root` | required | Directory the source images are read from |
+| `widths`, `ratios`, `qualities` | the loader defaults | Must match the loader's |
+| `maxFileSize` | 32 MB | Larger sources are a `413`, checked before decoding |
+| `maxInputPixels` | 50 MP | Larger sources are a `413` |
+| `timeout` | 10 s | Per render, in ms. A timeout is a `504` |
+| `concurrency` | CPU count | Renders running at once. Concurrent requests for one variant share one render |
+| `cacheSize` | 200 | Encoded images kept in an in-memory LRU. Production caching belongs in the CDN |
+
+### Metadata
+
+Metadata is computed by tooling, not by the public server. `computeMetadata(fileOrBuffer)` returns `{ width, height, thumbhash, color }`: the size after EXIF rotation (for `srcWidth`/`srcHeight`), a base64 [ThumbHash](https://evanw.github.io/thumbhash/) (use it as ``placeholder={`thumbhash:${thumbhash}`}``) and the dominant color as `#rrggbb`.
+
+For a demo or local tooling, `createMetaApp({ root })` serves the same object as JSON at `GET /{src path}`. Mount it on its own path so it can't collide with source paths:
+
+```ts
+app.route('/_meta', createMetaApp({ root: './images' }))
+```
+
+### CDN notes
+
+- **CloudFront.** The managed `CachingOptimized` policy excludes query strings. Use a cache policy with a query-string allowlist of `ar fmt q v w`. CloudFront keys on raw order and case, which the canonical URL takes care of.
+- **Cloudflare.** Caches by file extension by default. The URL ends in the source's extension, so that works; otherwise a Cache Rule must mark the path cacheable. Query strings are part of the default key, and the URL is already canonical.
+- Both collapse concurrent misses for one key, as the server does.
 
 ## Development
 

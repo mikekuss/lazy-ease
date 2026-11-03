@@ -1,52 +1,62 @@
+import { createHash } from 'node:crypto'
+import { availableParallelism } from 'node:os'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
-import sharp from 'sharp'
-import { createPlaceholder, orientedSize, svgToDataUri, type PlaceholderMode } from './placeholder.js'
+import { DEFAULT_QUALITIES, DEFAULT_RATIOS, DEFAULT_WIDTHS, formatNumber, parseImageQuery } from './contract.js'
+import {
+  DEFAULT_MAX_INPUT_PIXELS,
+  createRenderQueue,
+  mapSharpError,
+  render,
+  withTimeout,
+  type Encoded,
+} from './render.js'
 import { resolveSource } from './source.js'
-
-/** Keep in sync with DEFAULT_WIDTHS in the `lazy-ease` package. */
-export const DEFAULT_WIDTHS: readonly number[] = [
-  64, 128, 256, 384, 640, 750, 828, 1080, 1200, 1920, 2048, 3840,
-]
-
-export type OutputFormat = 'avif' | 'webp' | 'jpeg' | 'png'
-const OUTPUT_FORMATS: readonly OutputFormat[] = ['avif', 'webp', 'jpeg', 'png']
 
 export interface ImageServerOptions {
   /** Directory the source images are read from. */
   root: string
+  /** Width ladder. Must match the loader's. */
   widths?: readonly number[]
-  /** Formats offered to browsers that accept them, in order of preference. JPEG is the fallback. */
-  formats?: readonly OutputFormat[]
-  defaultQuality?: number
-  /** Cache-Control max-age in seconds. */
-  maxAge?: number
+  /** Ratio ladder. Must match the loader's. */
+  ratios?: readonly number[]
+  /** Allowed `q` values. Must match the loader's. The first one is used when `q` is absent. */
+  qualities?: readonly number[]
+  /** Sources larger than this many bytes are a 413, checked before decoding. Default 32 MB. */
+  maxFileSize?: number
+  /** Sources with more pixels than this are a 413. Default 50 MP. */
+  maxInputPixels?: number
+  /** Per-render timeout in ms; a timeout is a 504. Default 10 s. */
+  timeout?: number
+  /** Renders running at once. Default: the number of CPUs. */
+  concurrency?: number
   /** Number of encoded images kept in memory. 0 disables the cache. */
   cacheSize?: number
 }
 
-interface Encoded {
-  body: Uint8Array
-  type: string
-}
+const CACHE_CONTROL = 'public, max-age=31536000, immutable'
 
 /**
- * Hono app with three routes:
- * - `GET /image?src&w&h&q&fmt` resized, re-encoded image
- * - `GET /placeholder?src&ar&mode` tiny SVG placeholder
- * - `GET /meta?src&ar` JSON with intrinsic size and the placeholder as a data URI
+ * Hono app with one route, `GET /{src path}?ar&fmt&q&v&w` (spec 12.1). Mount
+ * it at the loader's `baseUrl`, e.g. `app.route('/_img', createImageApp(…))`.
+ * `HEAD` is answered by the same route.
  */
 export function createImageApp({
   root,
   widths = DEFAULT_WIDTHS,
-  formats = ['webp'],
-  defaultQuality = 75,
-  maxAge = 60 * 60 * 24 * 365,
+  ratios = DEFAULT_RATIOS,
+  qualities = DEFAULT_QUALITIES,
+  maxFileSize = 32 * 1024 * 1024,
+  maxInputPixels = DEFAULT_MAX_INPUT_PIXELS,
+  timeout = 10_000,
+  concurrency = availableParallelism(),
   cacheSize = 200,
 }: ImageServerOptions): Hono {
+  if (qualities.length === 0) throw new RangeError('qualities must not be empty')
   const app = new Hono()
   const cache = new Map<string, Encoded>()
-  const maxWidth = widths[widths.length - 1] ?? 3840
+  const queue = createRenderQueue(concurrency)
+  const ladders = { widths, ratios, qualities }
 
   const remember = (key: string, value: Encoded) => {
     if (cacheSize <= 0) return
@@ -54,114 +64,63 @@ export function createImageApp({
     cache.set(key, value)
     if (cache.size > cacheSize) cache.delete(cache.keys().next().value!)
   }
+  const recall = (key: string) => {
+    const value = cache.get(key)
+    if (value) remember(key, value)
+    return value
+  }
 
-  const cacheHeaders = { 'Cache-Control': `public, max-age=${maxAge}, immutable` }
+  app.get('/:path{.+}', async (c) => {
+    const url = c.req.url
+    const queryStart = url.indexOf('?')
+    // Validate the raw string: Hono's parsed query would hide order, duplicates and encoding.
+    const params = parseImageQuery(queryStart === -1 ? '' : url.slice(queryStart + 1), ladders)
+    const source = await resolveSource(root, c.req.param('path'))
+    if (source.size > maxFileSize) throw new HTTPException(413, { message: 'Source file is too large' })
 
-  app.get('/image', async (c) => {
-    const file = await resolveSource(root, c.req.query('src'))
-    const requestedWidth = parseNumber(c.req.query('w'), 'w')
-    if (requestedWidth === undefined) throw new HTTPException(400, { message: 'Missing w' })
-    const requestedHeight = parseNumber(c.req.query('h'), 'h')
-    if (requestedHeight !== undefined && requestedHeight > maxWidth * 4) {
-      throw new HTTPException(400, { message: 'h is too large' })
+    // `v` does not change the bytes, so it is not part of the render key.
+    const key = [
+      source.file,
+      formatNumber(params.width),
+      params.aspectRatio === undefined ? '' : formatNumber(params.aspectRatio),
+      formatNumber(params.quality),
+      params.format,
+    ].join('|')
+    const etag = `"${createHash('sha256').update(`${key}|${source.mtimeMs}`).digest('base64url').slice(0, 32)}"`
+    const headers = {
+      'Cache-Control': CACHE_CONTROL,
+      ETag: etag,
+      'X-Content-Type-Options': 'nosniff',
     }
-    const quality = clamp(parseNumber(c.req.query('q'), 'q') ?? defaultQuality, 1, 100)
-    const fmt = c.req.query('fmt') ?? 'auto'
-    const format = negotiate(fmt, c.req.header('accept') ?? '', formats)
 
-    // Snap to an allowed width and keep the requested aspect ratio.
-    const width = widths.find((w) => w >= requestedWidth) ?? maxWidth
-    const height = requestedHeight && Math.round((requestedHeight * width) / requestedWidth)
+    if (matches(c.req.header('if-none-match'), etag)) return c.body(null, 304, headers)
 
-    const key = [file, width, height, quality, format].join('|')
-    let encoded = cache.get(key)
+    const cacheKey = `${key}|${source.mtimeMs}`
+    let encoded = recall(cacheKey)
     if (!encoded) {
-      encoded = await encode(file, width, height, quality, format)
-      remember(key, encoded)
+      encoded = await queue
+        .run(cacheKey, () => withTimeout(render(source.file, params, { maxInputPixels, timeout }), timeout))
+        .catch((error: unknown) => {
+          throw mapSharpError(error)
+        })
+      remember(cacheKey, encoded)
     }
 
     return c.body(encoded.body as Uint8Array<ArrayBuffer>, 200, {
-      ...cacheHeaders,
+      ...headers,
       'Content-Type': encoded.type,
-      ...(fmt === 'auto' ? { Vary: 'Accept' } : null),
+      'Content-Length': String(encoded.body.byteLength),
     })
-  })
-
-  app.get('/placeholder', async (c) => {
-    const file = await resolveSource(root, c.req.query('src'))
-    const mode = (c.req.query('mode') ?? 'blur') as PlaceholderMode
-    if (mode !== 'blur' && mode !== 'color') throw new HTTPException(400, { message: 'Invalid mode' })
-    const svg = await createPlaceholder(file, { aspectRatio: parseNumber(c.req.query('ar'), 'ar'), mode })
-    return c.body(svg, 200, { ...cacheHeaders, 'Content-Type': 'image/svg+xml' })
-  })
-
-  app.get('/meta', async (c) => {
-    const file = await resolveSource(root, c.req.query('src'))
-    const { width, height } = orientedSize(await sharp(file).metadata())
-    const placeholder = await createPlaceholder(file, { aspectRatio: parseNumber(c.req.query('ar'), 'ar') })
-    return c.json({ width, height, placeholder: svgToDataUri(placeholder) }, 200, cacheHeaders)
   })
 
   return app
 }
 
-async function encode(
-  file: string,
-  width: number,
-  height: number | undefined,
-  quality: number,
-  format: OutputFormat,
-): Promise<Encoded> {
-  const image = sharp(file).rotate()
-  const source = orientedSize(await image.metadata())
-
-  // Never upscale. Shrink the target box instead so the aspect ratio survives.
-  const scale = Math.min(
-    1,
-    (source.width ?? width) / width,
-    height ? (source.height ?? height) / height : 1,
-  )
-  image.resize({
-    width: Math.round(width * scale),
-    height: height ? Math.round(height * scale) : undefined,
-    fit: height ? 'cover' : 'inside',
-    position: 'centre',
+/** `If-None-Match` uses the weak comparison, so `W/"x"` matches `"x"`. */
+function matches(header: string | undefined, etag: string): boolean {
+  if (!header) return false
+  return header.split(',').some((tag) => {
+    const trimmed = tag.trim()
+    return trimmed === '*' || trimmed.replace(/^W\//, '') === etag
   })
-
-  switch (format) {
-    case 'avif':
-      image.avif({ quality, effort: 4 })
-      break
-    case 'webp':
-      image.webp({ quality })
-      break
-    case 'jpeg':
-      image.jpeg({ quality, mozjpeg: true })
-      break
-    case 'png':
-      image.png()
-      break
-  }
-  return { body: await image.toBuffer(), type: `image/${format}` }
-}
-
-function negotiate(fmt: string, accept: string, formats: readonly OutputFormat[]): OutputFormat {
-  if (fmt !== 'auto') {
-    if ((OUTPUT_FORMATS as readonly string[]).includes(fmt)) return fmt as OutputFormat
-    throw new HTTPException(400, { message: 'Invalid fmt' })
-  }
-  return formats.find((format) => accept.includes(`image/${format}`)) ?? 'jpeg'
-}
-
-function parseNumber(value: string | undefined, name: string): number | undefined {
-  if (value === undefined || value === '') return undefined
-  const number = Number(value)
-  if (!Number.isFinite(number) || number <= 0) {
-    throw new HTTPException(400, { message: `Invalid ${name}` })
-  }
-  return number
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, Math.round(value)))
 }
