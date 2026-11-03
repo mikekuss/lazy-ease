@@ -32,7 +32,7 @@ const { width, height, thumbhash, color } = await computeMetadata('./images/phot
 | `widths`, `ratios`, `qualities` | the loader defaults | Must match the loader's. |
 | `maxFileSize` | 32 MB | Larger sources are a `413`, checked before decoding. |
 | `maxInputPixels` | 50 MP | Larger sources are a `413`. |
-| `timeout` | 10 s | Per render, in ms, rounded up to whole seconds. Checked while decoding and resizing, not inside the AVIF encoder. A timeout is a `504`. |
+| `timeout` | 10 s | Per render, in ms. The request is answered with a `504` after this long. sharp also receives it (whole seconds, rounded up) to stop decode and resize work, but an AVIF encode already running finishes in the background, so `avifEffort` bounds that part. |
 | `concurrency` | half the CPUs, at least 1 | Renders running at once; libvips adds its own threads per render. |
 | `cacheSize` | 200 | Encoded images kept in the in-memory LRU. `0` turns it off. |
 | `cacheBytes` | 64 MB | Total size of the LRU; the oldest entries go first. `0` turns it off. |

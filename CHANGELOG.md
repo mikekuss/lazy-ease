@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 #### `@lazy-ease/server`
 
 - `concurrency` defaults to half the CPUs. New `cacheBytes` (64 MB) bounds the in-memory LRU by size, and `avifEffort` (4) sets the AVIF encoder effort.
-- The render timeout is sharp's `timeout()` only, and the pixel limit is sharp's `limitInputPixels` only.
+- The pixel limit is sharp's `limitInputPixels` only.
 - The root's real path is resolved once per app instead of on every request.
 - `render` and its option types are exported for build scripts.
 

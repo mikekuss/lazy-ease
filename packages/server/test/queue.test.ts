@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRenderQueue, mapSharpError } from '../src/render.js'
+import { createRenderQueue, mapSharpError, withTimeout } from '../src/render.js'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -76,6 +76,16 @@ describe('createRenderQueue', () => {
 
   it('rejects a concurrency below 1', () => {
     expect(() => createRenderQueue(0)).toThrow(RangeError)
+  })
+})
+
+describe('withTimeout', () => {
+  it('passes a fast result through', async () => {
+    expect(await withTimeout(Promise.resolve(1), 100)).toBe(1)
+  })
+
+  it('rejects with a 504 when too slow', async () => {
+    await expect(withTimeout(new Promise(() => {}), 5)).rejects.toMatchObject({ status: 504 })
   })
 })
 

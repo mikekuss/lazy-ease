@@ -10,6 +10,7 @@ import {
   createRenderQueue,
   mapSharpError,
   render,
+  withTimeout,
   type Encoded,
 } from './render.js'
 import { realRoot, resolveSource } from './source.js'
@@ -28,9 +29,10 @@ export interface ImageServerOptions {
   /** Sources with more pixels than this are a 413. Default 50 MP. */
   maxInputPixels?: number
   /**
-   * Per-render timeout in ms, rounded up to whole seconds; a timeout is a 504.
-   * sharp checks it while libvips evaluates the pipeline, not inside the AVIF
-   * encoder. Default 10 s.
+   * Per-render timeout in ms: the request is answered with a 504 after this
+   * long. sharp also receives it, in whole seconds rounded up, to stop decode
+   * and resize work, but an AVIF encode already running finishes in the
+   * background, so `avifEffort` bounds that part. Default 10 s.
    */
   timeout?: number
   /**
@@ -124,7 +126,7 @@ export function createImageApp({
     let encoded = recall(cacheKey)
     if (!encoded) {
       encoded = await queue
-        .run(cacheKey, () => render(source.file, params, { maxInputPixels, timeout, avifEffort }))
+        .run(cacheKey, () => withTimeout(render(source.file, params, { maxInputPixels, timeout, avifEffort }), timeout))
         .catch((error: unknown) => {
           throw mapSharpError(error)
         })

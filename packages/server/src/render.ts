@@ -37,8 +37,9 @@ export interface RenderOptions {
   maxInputPixels?: number
   /**
    * In ms, rounded up to whole seconds for sharp's `timeout()` (a 504 through
-   * `mapSharpError`). sharp checks it while libvips evaluates the pipeline,
-   * not inside the AVIF encoder. Default 10 s.
+   * `mapSharpError`), which stops decode and resize work but not an AVIF
+   * encode that is already running. Bounding the response is up to the
+   * caller (`withTimeout`). Default 10 s.
    */
   timeout?: number
   /** AVIF encoder effort, 0 (fastest) to 9 (smallest). Default 4. */
@@ -92,6 +93,22 @@ export async function render(
       break
   }
   return { body: await image.toBuffer(), type: `image/${format}` }
+}
+
+/**
+ * Rejects with a 504 when `promise` takes longer than `ms`. This bounds the
+ * response; the work behind `promise` keeps running until it settles.
+ */
+export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new HTTPException(504, { message: 'Render timed out' })), ms)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export interface RenderQueue {

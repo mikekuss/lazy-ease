@@ -393,7 +393,7 @@ These assume `src` is a path. If you list `domains`, the loader receives those a
 | `widths`, `ratios`, `qualities` | the loader defaults | Must match the loader's. |
 | `maxFileSize` | 32 MB | Larger sources are a `413`, checked with `stat` before decoding. |
 | `maxInputPixels` | 50 MP | Larger sources are a `413`. |
-| `timeout` | 10 s | Per render, in ms, rounded up to whole seconds. Passed to sharp, which checks it while decoding and resizing but not inside the AVIF encoder. |
+| `timeout` | 10 s | Per render, in ms. The request is answered with a `504` after this long. sharp also receives it (whole seconds, rounded up) to stop decode and resize work, but an AVIF encode already running finishes in the background, so `avifEffort` bounds that part. |
 | `concurrency` | half the CPUs, at least 1 | Renders running at once. Concurrent requests for one variant share one render. Each render holds the source file (up to `maxFileSize`) and its decoded pixels (up to `maxInputPixels` × 4 bytes, 200 MB at the defaults). |
 | `cacheSize` | 200 | Encoded images kept in an in-memory LRU. `0` turns it off. Production caching belongs in the CDN. |
 | `cacheBytes` | 64 MB | Total size of the LRU. The oldest entries go first; `0` turns it off. |

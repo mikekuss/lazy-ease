@@ -328,6 +328,11 @@ describe('limits', () => {
     expect((await get('/broken.jpg?fmt=webp&w=64')).status).toBe(500)
   })
 
+  it('504 when a render takes longer than the timeout', async () => {
+    const slow = mounted({ timeout: 1, cacheSize: 0 })
+    expect((await slow.request('/big.jpg?ar=0.5&fmt=avif&w=1920')).status).toBe(504)
+  })
+
   it('passes the timeout to sharp in whole seconds', async () => {
     const timeout = vi.spyOn(sharp.prototype, 'timeout')
     try {
@@ -341,8 +346,7 @@ describe('limits', () => {
   })
 
   it('504 when sharp reports a timeout', async () => {
-    // What sharp rejects with once the pipeline runs past `timeout` seconds.
-    // No real render is reliably slow enough: the AVIF encoder is not interrupted.
+    // What sharp rejects with once decode or resize runs past `timeout` seconds.
     const toBuffer = vi.spyOn(sharp.prototype, 'toBuffer').mockRejectedValue(new Error('timeout: 42% complete'))
     try {
       expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=avif&w=1920')).status).toBe(504)
