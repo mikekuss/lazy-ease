@@ -1,15 +1,31 @@
 {
   "name": "@lazy-ease/server",
-  "version": "0.0.0",
-  "description": "Image resize and optimization server for lazy-ease",
+  "version": "0.1.0",
+  "description": "Image resize and optimization server for lazy-ease (Hono + sharp), with metadata tooling",
   "license": "MIT",
   "author": "Mike Kuss",
+  "homepage": "https://mikekuss.github.io/lazy-ease/",
+  "bugs": {
+    "url": "https://github.com/mikekuss/lazy-ease/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mikekuss/lazy-ease.git",
     "directory": "packages/server"
   },
+  "keywords": [
+    "lazy-ease",
+    "image",
+    "resize",
+    "sharp",
+    "hono",
+    "thumbhash",
+    "webp",
+    "avif",
+    "cdn"
+  ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "source": "./src/index.ts",
@@ -17,7 +33,21 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
