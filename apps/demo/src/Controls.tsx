@@ -89,9 +89,9 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
       />
 
       <div className="stats" aria-live="polite">
-        <span>
-          {totals.loaded}/{totals.started} loaded · {mb(totals.bytes)}
-        </span>
+        {/* One text node per line in a fixed-width box: updating the numbers
+            moves nothing, not even the text's start. */}
+        <span>{`${totals.loaded}/${totals.started} loaded · ${mb(totals.bytes)}`}</span>
         {/* Always rendered, so the sticky bar keeps its height when it fills in. */}
         <span title='Images with a known size, compared with a sizes="100vw" srcset'>
           {saved !== undefined && `${mb(bytes)} vs. ${mb(naiveBytes)} with 100vw (${saved >= 0 ? `−${saved}` : `+${-saved}`} %)`}
@@ -139,7 +139,7 @@ interface RangeProps {
 
 function Range({ label, unit, value, onChange, ...input }: RangeProps) {
   return (
-    <label className="field">
+    <label className="field range">
       <span>
         {label} <output>{value} {unit}</output>
       </span>

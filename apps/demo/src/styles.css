@@ -18,6 +18,12 @@
   box-sizing: border-box;
 }
 
+/* The scrollbar appearing once the images are in would narrow the page and
+   rewrap the control bar. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -29,6 +35,7 @@ code {
 }
 
 .topbar {
+  /* Sticky also makes it the containing block of .throttle-note. */
   position: sticky;
   top: 0;
   z-index: 10;
@@ -83,8 +90,20 @@ code {
   padding-bottom: 4px;
 }
 
+/* Fixed width, so the value changing from "50 ms" to "2000 ms" never moves
+   the controls after it. */
+.field.range {
+  width: 170px;
+}
+
+.field.range > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .field input[type='range'] {
-  width: 150px;
+  width: 100%;
 }
 
 .field input:disabled {
@@ -113,9 +132,15 @@ button {
 .stats {
   display: flex;
   flex-direction: column;
-  align-items: end;
+  /* Start-aligned, so the text's origin stays put as the numbers grow. */
+  text-align: start;
   gap: 2px;
   margin-left: auto;
+  /* Fixed width, wide enough for "40/40 loaded · 12.34 MB" and
+     "12.34 MB vs. 12.34 MB with 100vw (−100 %)": the counts filling in
+     never move the box or wrap it onto a new line. */
+  width: 19rem;
+  max-width: 100%;
   font-size: 0.85rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -123,9 +148,12 @@ button {
 }
 
 .stats span {
-  min-height: 1.2em;
+  height: 1.2em;
   line-height: 1.2em;
+  max-width: 100%;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 main {
@@ -203,6 +231,9 @@ section > p {
 }
 
 .demo-image figcaption {
+  /* The nowrap rows must not size the card: "200×200 LOADING box 200px" is
+     wider than a 200px image, and growing the card would rewrap its row. */
+  contain: inline-size;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -261,9 +292,16 @@ section > p {
   text-transform: uppercase;
   font-size: 0.65rem;
   letter-spacing: 0.04em;
-  /* Wide enough for "loading", so the box width beside it never moves. */
-  min-width: 6.2em;
-  text-align: center;
+  display: inline-grid;
+  justify-items: center;
+}
+
+.state > span {
+  grid-area: 1 / 1;
+}
+
+.state > .off {
+  visibility: hidden;
 }
 
 .state-idle {
@@ -291,7 +329,6 @@ section > p {
 
   .stats {
     margin-left: 0;
-    align-items: start;
   }
 }
 
@@ -305,9 +342,17 @@ section > p {
   border-bottom: 1px solid var(--border);
 }
 
+/* Hangs below the bar instead of taking a row in it, so it coming and going
+   when the service worker takes over never changes the bar's height. */
 .throttle-note {
-  flex-basis: 100%;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
   margin: 0;
+  padding: 6px 24px;
   font-size: 0.85rem;
   color: #e3b341;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
 }
