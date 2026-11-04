@@ -96,6 +96,8 @@ function describe(img: HTMLImageElement): Delivered {
   }
 }
 
+const STATES = ['idle', 'loading', 'loaded', 'error'] as const
+
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
 
 /**
@@ -184,7 +186,16 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
       <figcaption>
         <div className="caption-row">
           {label && <span className="label">{label}</span>}
-          <span className={`state state-${state}`}>{state}</span>
+          {/* Every state word sits in the same grid cell and only the current
+              one is visible: the badge is as wide as the widest word, and a
+              state change moves no text. */}
+          <span className={`state state-${state}`}>
+            {STATES.map((name) => (
+              <span key={name} className={name === state ? undefined : 'off'} aria-hidden={name !== state}>
+                {name}
+              </span>
+            ))}
+          </span>
           <span>{boxWidth !== undefined && `box ${boxWidth}px`}</span>
         </div>
         <div className="caption-row delivered">
