@@ -1,4 +1,4 @@
-import { thumbHashToAverageRGBA, thumbHashToDataURL } from 'thumbhash'
+import { thumbHashToApproximateAspectRatio, thumbHashToAverageRGBA, thumbHashToDataURL } from 'thumbhash'
 import { formatNumber } from './numbers.js'
 
 /** Inline style for the box. Assignable to React's `CSSProperties`. */
@@ -19,6 +19,8 @@ export type Placeholder =
       ssrStyle: PlaceholderStyle
       /** The decoded image, for after hydration. Memoized per hash. */
       clientStyle: () => PlaceholderStyle
+      /** The source's approximate width / height, stored in the hash. */
+      ratio: number
     }
   /** Not a usable placeholder. Renders nothing; the component warns in development. */
   | { kind: 'invalid'; ssrStyle: PlaceholderStyle; reason: string }
@@ -116,6 +118,7 @@ export function parsePlaceholder(value: string): Placeholder {
       kind: 'thumbhash',
       ssrStyle: { backgroundColor: averageColor(bytes) },
       clientStyle: () => imageStyle(hash, bytes),
+      ratio: thumbHashToApproximateAspectRatio(bytes),
     }
   }
 

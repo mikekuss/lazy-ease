@@ -1,3 +1,4 @@
+import type { FocalPoint } from './focal.js'
 import { formatNumber } from './numbers.js'
 import { DEFAULT_RATIOS } from './ratios.js'
 import { DEFAULT_WIDTHS } from './widths.js'
@@ -17,6 +18,13 @@ export interface ImageRequest {
   format: ImageFormat | 'auto'
   /** The `version` prop, opaque. */
   version?: string
+  /**
+   * Where to crop around, in whole percent of the source (spec 6.1). Only
+   * with `aspectRatio`, and absent for the center. A loader whose backend
+   * crops must keep this point as close to the crop's center as the source
+   * edges allow.
+   */
+  focalPoint?: FocalPoint
 }
 
 /**
@@ -112,7 +120,7 @@ export function encodePath(src: string): string {
 
 /**
  * Loader for the reference backend. Emits the canonical URL from spec 6.1:
- * `{baseUrl}/{path}?ar=…&fmt=…&q=…&v=…&w=…`, parameters sorted, absent ones
+ * `{baseUrl}/{path}?ar=…&fmt=…&fx=…&fy=…&q=…&v=…&w=…`, parameters sorted, absent ones
  * omitted, numbers in canonical form.
  */
 export function createLoader({
@@ -128,13 +136,15 @@ export function createLoader({
     ratios,
     qualities,
     formats: DEFAULT_FORMATS,
-    url: ({ src, width, aspectRatio, quality, format, version }) => {
+    url: ({ src, width, aspectRatio, quality, format, version, focalPoint }) => {
       const extra = Object.entries(params).map(([key, value]) => [key.toLowerCase(), value])
       const values: Record<string, string | number | undefined> = {
         ...Object.fromEntries(extra),
         // The contract's own parameters win over a passthrough of the same name.
         ar: aspectRatio,
         fmt: format,
+        fx: focalPoint?.x,
+        fy: focalPoint?.y,
         q: quality,
         v: version || undefined,
         w: width,
