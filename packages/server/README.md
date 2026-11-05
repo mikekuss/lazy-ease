@@ -3,6 +3,7 @@
 The reference image backend for [`@lazy-ease/react`](https://www.npmjs.com/package/@lazy-ease/react): a [Hono](https://hono.dev) app that resizes, crops and encodes images with [sharp](https://sharp.pixelplumbing.com), plus metadata tooling for upload or build scripts. Node 22+.
 
 ```bash
+# Not on npm yet; for now, use it from this repository.
 npm install @lazy-ease/server hono @hono/node-server
 ```
 

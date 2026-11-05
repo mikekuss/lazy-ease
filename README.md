@@ -28,8 +28,9 @@ What it does:
 
 ```bash
 npm install @lazy-ease/react
-npm install @lazy-ease/server   # on the server, Node 22+
 ```
+
+`@lazy-ease/server` (Node 22+) isn't on npm yet. Until it is, use it from this repository, or bring your own backend through a [custom loader](#loaders).
 
 `@lazy-ease/react` has `react` and `react-dom` 19 as peer dependencies.
 

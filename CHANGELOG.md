@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The READMEs no longer link to `@lazy-ease/server` on npm, where it isn't published yet. They point to the repository instead.
+
 ## [0.2.0] - 2026-11-06
 
 ### Added
