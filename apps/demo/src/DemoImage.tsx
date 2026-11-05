@@ -2,7 +2,7 @@ import { createLoader, fullLadder, Image, useLazyEaseConfig, type ImageFormat, t
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { BASE, STATIC } from './mode'
 import { createStaticLoader } from './staticLoader'
-import { removeRecord, updateRecord } from './stats'
+import { removeRecord, updateRecord, whenIdle } from './stats'
 
 interface Delivered {
   width?: number
@@ -33,14 +33,26 @@ interface DemoImageProps extends ImageProps {
 // No demo params, so these requests are neither throttled nor cache-busted.
 const plainLoader = STATIC ? createStaticLoader({ baseUrl: `${BASE}_img` }) : createLoader()
 const headSizes = new Map<string, Promise<number | undefined>>()
+let headQueue = Promise.resolve()
 
-/** Body size of a variant from a HEAD request, once per URL. */
-function contentLength(url: string): Promise<number | undefined> {
+/**
+ * Body size of a variant from a HEAD request, once per URL. The server renders
+ * the variant to answer, so HEADs run one at a time and only while no image is
+ * loading; otherwise they would skew the load times the demo shows.
+ */
+function contentLength(url: string, wanted: () => boolean): Promise<number | undefined> {
   let size = headSizes.get(url)
   if (!size) {
-    size = fetch(url, { method: 'HEAD' })
-      .then((response) => (response.ok ? Number(response.headers.get('content-length')) || undefined : undefined))
-      .catch(() => undefined)
+    size = headQueue.then(whenIdle).then(() => {
+      if (!wanted()) {
+        headSizes.delete(url)
+        return undefined
+      }
+      return fetch(url, { method: 'HEAD' })
+        .then((response) => (response.ok ? Number(response.headers.get('content-length')) || undefined : undefined))
+        .catch(() => undefined)
+    })
+    headQueue = size.then(() => undefined)
     headSizes.set(url, size)
   }
   return size
@@ -142,7 +154,7 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
         format: fmt as ImageFormat,
       })
       setView((view) => ({ ...view, naive: { width } }))
-      void contentLength(url).then((bytes) => {
+      void contentLength(url, () => alive).then((bytes) => {
         if (!alive) return
         setView((view) => ({ ...view, naive: { width, bytes } }))
         updateRecord(id, { naiveBytes: bytes })

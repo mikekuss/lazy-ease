@@ -49,6 +49,20 @@ export function removeRecord(id: string): void {
   if (records.delete(id)) changed()
 }
 
+/** Resolves once no image is loading, so side requests never compete with them. */
+export function whenIdle(): Promise<void> {
+  const idle = () => ![...records.values()].some((record) => record.state === 'loading')
+  if (idle()) return Promise.resolve()
+  return new Promise((resolve) => {
+    const listener = () => {
+      if (!idle()) return
+      listeners.delete(listener)
+      resolve()
+    }
+    listeners.add(listener)
+  })
+}
+
 export function useTotals(): Totals {
   return useSyncExternalStore(
     (listener) => {
