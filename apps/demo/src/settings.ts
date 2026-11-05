@@ -1,4 +1,4 @@
-import type { ImageFormat, LoadingStrategy } from 'lazy-ease'
+import type { ImageFormat, LoadingStrategy } from '@lazy-ease/react'
 import { STATIC } from './mode'
 import { PRESETS, type NetworkProfile, type PresetName } from './throttle'
 

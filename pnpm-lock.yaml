@@ -23,15 +23,15 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.6
         version: 2.1.6(hono@4.13.16)
+      '@lazy-ease/react':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@lazy-ease/server':
         specifier: workspace:*
         version: link:../../packages/server
       hono:
         specifier: ^4.13.16
         version: 4.13.16
-      lazy-ease:
-        specifier: workspace:*
-        version: link:../../packages/react
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -66,15 +66,15 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.6
         version: 2.1.6(hono@4.13.16)
+      '@lazy-ease/react':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@lazy-ease/server':
         specifier: workspace:*
         version: link:../../packages/server
       hono:
         specifier: ^4.13.16
         version: 4.13.16
-      lazy-ease:
-        specifier: workspace:*
-        version: link:../../packages/react
       react:
         specifier: ^19.3.1
         version: 19.3.1

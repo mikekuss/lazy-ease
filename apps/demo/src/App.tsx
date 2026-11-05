@@ -1,4 +1,4 @@
-import { createLoader, LazyEaseProvider, type ImageLoader } from 'lazy-ease'
+import { createLoader, LazyEaseProvider, type ImageLoader } from '@lazy-ease/react'
 import { useEffect, useMemo, useState } from 'react'
 import { Controls } from './Controls'
 import { DemoImage } from './DemoImage'

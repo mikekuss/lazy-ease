@@ -1,4 +1,4 @@
-import { DEFAULT_WIDTHS, fullLadder, snapRatio } from 'lazy-ease'
+import { DEFAULT_WIDTHS, fullLadder, snapRatio } from '@lazy-ease/react'
 
 /**
  * Which source and crop each demo section uses. App renders from these, and

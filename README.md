@@ -5,7 +5,7 @@ Lazy-loaded, right-sized images for React 19, with an inline placeholder and a c
 **[Live demo](https://mikekuss.github.io/lazy-ease/)**. The hosted demo serves pre-rendered variants through a static loader, so arbitrary measured fill ratios aren't available there; run it locally (see [Development](#development)) for the full behavior.
 
 ```tsx
-import { Image } from 'lazy-ease'
+import { Image } from '@lazy-ease/react'
 
 <Image src="/photos/lake.jpg" alt="Lake at dawn" width={320} height={240} />
 ```
@@ -20,18 +20,18 @@ What it does:
 
 | Package | |
 | --- | --- |
-| [`lazy-ease`](packages/react) | The `<Image>` component, `<LazyEaseProvider>` and the loader interface. Needs React 19. |
+| [`@lazy-ease/react`](packages/react) | The `<Image>` component, `<LazyEaseProvider>` and the loader interface. Needs React 19. |
 | [`@lazy-ease/server`](packages/server) | The reference image backend (Node, [Hono](https://hono.dev) and [sharp](https://sharp.pixelplumbing.com)) and metadata tooling for upload or build scripts. |
 | [`apps/demo`](apps/demo) | Demo with network throttling. Not published. |
 
 ## Install
 
 ```bash
-npm install lazy-ease
+npm install @lazy-ease/react
 npm install @lazy-ease/server   # on the server, Node 22+
 ```
 
-`lazy-ease` has `react` and `react-dom` 19 as peer dependencies.
+`@lazy-ease/react` has `react` and `react-dom` 19 as peer dependencies.
 
 ## Quick start
 
@@ -51,7 +51,7 @@ serve({ fetch: app.fetch, port: 3001 })
 Then render images. The provider is optional; mounting one starts format detection early and sets defaults for its subtree:
 
 ```tsx
-import { Image, LazyEaseProvider } from 'lazy-ease'
+import { Image, LazyEaseProvider } from '@lazy-ease/react'
 
 export function App() {
   return (
@@ -285,7 +285,7 @@ The default width ladder is `64 128 256 384 640 750 828 1080 1200 1440 1920 2560
 `createLoader()` targets `@lazy-ease/server`:
 
 ```ts
-import { createLoader } from 'lazy-ease'
+import { createLoader } from '@lazy-ease/react'
 
 const loader = createLoader({
   baseUrl: '/_img',          // where the image app is mounted
@@ -318,7 +318,7 @@ const webpOnly = { ...createLoader(), formats: ['webp', 'jpeg'] as const }
 imgix, Cloudinary and Cloudflare Images all negotiate the format through `Accept`, so their loaders declare `formats: 'auto'` and the component skips format detection.
 
 ```ts
-import { DEFAULT_WIDTHS, type ImageLoader } from 'lazy-ease'
+import { DEFAULT_WIDTHS, type ImageLoader } from '@lazy-ease/react'
 
 // imgix: w, ar={ar}:1, fit=crop, fm/auto=format, q
 export const imgix: ImageLoader = {

@@ -1,13 +1,13 @@
-# lazy-ease
+# @lazy-ease/react
 
 Lazy-loaded, right-sized images for React 19, with an inline placeholder and a crossfade.
 
 ```bash
-npm install lazy-ease
+npm install @lazy-ease/react
 ```
 
 ```tsx
-import { Image, LazyEaseProvider } from 'lazy-ease'
+import { Image, LazyEaseProvider } from '@lazy-ease/react'
 
 <LazyEaseProvider>
   <Image src="/photos/lake.jpg" alt="Lake at dawn" width={320} height={240} />

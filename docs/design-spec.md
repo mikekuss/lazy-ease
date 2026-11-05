@@ -39,7 +39,7 @@ Status: reviewed draft. Incorporates the architecture review of 2026-11-03 and t
 
 | Package | Role |
 | --- | --- |
-| `lazy-ease` | React 19 component, provider, loader interface, default loader for the reference backend. No runtime dependencies besides React; the ThumbHash decoder is tree-shaken when unused. |
+| `@lazy-ease/react` | React 19 component, provider, loader interface, default loader for the reference backend. No runtime dependencies besides React; the ThumbHash decoder is tree-shaken when unused. |
 | `@lazy-ease/server` | Node reference backend (Hono + sharp) and metadata tooling for upload or build scripts. |
 | `apps/demo` | Demo with network throttling. Not published. |
 

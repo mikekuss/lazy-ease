@@ -2,7 +2,7 @@ import { HTTPException } from 'hono/http-exception'
 
 /**
  * Widths the backend renders (spec 3). Must match `DEFAULT_WIDTHS` in the
- * `lazy-ease` package; the server does not import it.
+ * `@lazy-ease/react` package; the server does not import it.
  */
 export const DEFAULT_WIDTHS: readonly number[] = [
   64, 128, 256, 384, 640, 750, 828, 1080, 1200, 1440, 1920, 2560, 3840,

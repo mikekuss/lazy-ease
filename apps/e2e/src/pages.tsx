@@ -1,4 +1,4 @@
-import { Image, LazyEaseProvider } from 'lazy-ease'
+import { Image, LazyEaseProvider } from '@lazy-ease/react'
 import { useEffect, type ReactNode } from 'react'
 
 export interface FixtureImage {
