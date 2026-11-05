@@ -1,4 +1,4 @@
-import type { LoadingStrategy } from 'lazy-ease'
+import type { LoadingStrategy } from '@lazy-ease/react'
 import { STATIC, useThrottleWorkerActive } from './mode'
 import type { PlaceholderKind, Settings } from './settings'
 import { useTotals } from './stats'

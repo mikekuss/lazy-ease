@@ -1,4 +1,4 @@
-import { DEFAULT_RATIOS, DEFAULT_WIDTHS, encodePath, formatNumber, type ImageFormat, type ImageLoader, type ImageRequest } from 'lazy-ease'
+import { DEFAULT_RATIOS, DEFAULT_WIDTHS, encodePath, formatNumber, type ImageFormat, type ImageLoader, type ImageRequest } from '@lazy-ease/react'
 
 /**
  * A custom loader for a static host (spec 6.1). GitHub Pages ignores query

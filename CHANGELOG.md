@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `lazy-ease` and `@lazy-ease/server` are documented here. Both packages are versioned together.
+All notable changes to `@lazy-ease/react` and `@lazy-ease/server` are documented here. Both packages are versioned together.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -12,7 +12,7 @@ First release, implementing the [v1 design spec](docs/design-spec.md).
 
 ### Added
 
-#### `lazy-ease`
+#### `@lazy-ease/react`
 
 - `<Image>` for React 19 with four layout modes (fill, fixed, ratio, intrinsic) that reserve space before the image loads, and development errors for invalid prop combinations.
 - Measured mode (the default): the box is measured when it nears the viewport, and the `srcset` is capped at 2× the measured width and at `srcWidth`. `sizes` only grows on resize, debounced, so upgrades happen only when a ladder step is crossed. In fill mode the crop follows the box ratio. All images share one `ResizeObserver`; fixed and ratio boxes already at their `width` are not observed. Once format detection has finished, an image sets its `srcset` in the same render as its first measurement.

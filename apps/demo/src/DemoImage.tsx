@@ -1,4 +1,4 @@
-import { createLoader, fullLadder, Image, useLazyEaseConfig, type ImageFormat, type ImageProps } from 'lazy-ease'
+import { createLoader, fullLadder, Image, useLazyEaseConfig, type ImageFormat, type ImageProps } from '@lazy-ease/react'
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { BASE, STATIC } from './mode'
 import { createStaticLoader } from './staticLoader'
