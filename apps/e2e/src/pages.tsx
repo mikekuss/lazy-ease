@@ -1,5 +1,6 @@
 import { Image, LazyEaseProvider } from '@lazy-ease/react'
 import { useEffect, type ReactNode } from 'react'
+import { FOCUS } from './focus.js'
 
 export interface FixtureImage {
   src: string
@@ -127,8 +128,6 @@ function FirstViewport({ images: { copies } }: PageProps) {
   )
 }
 
-/** The focal point of the `focus` fixture, where its blue dot is. */
-export const FOCUS = { x: 70, y: 60 }
 
 function Focus({ images: { focus } }: PageProps) {
   return (

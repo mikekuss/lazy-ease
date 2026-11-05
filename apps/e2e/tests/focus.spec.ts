@@ -1,6 +1,6 @@
 import { expect, test, type Locator } from '@playwright/test'
 import sharp from 'sharp'
-import { FOCUS } from '../src/pages.js'
+import { FOCUS } from '../src/focus.js'
 import { trackImageRequests, waitForHydration } from './helpers.js'
 
 // Spec 5.4: the focal point sits as close to the box center as the image
