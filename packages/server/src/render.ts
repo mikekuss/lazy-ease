@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { HTTPException } from 'hono/http-exception'
 import sharp, { type Metadata, type SharpOptions } from 'sharp'
-import type { ImageParams } from './contract.js'
+import { cropWindow, type ImageParams } from './contract.js'
 
 export const DEFAULT_MAX_INPUT_PIXELS = 50_000_000
 export const DEFAULT_TIMEOUT = 10_000
@@ -48,7 +48,8 @@ export interface RenderOptions {
 
 /**
  * Renders one variant (spec 12.1): auto-orient, crop to `w × round(w / ar)`
- * around the center when `ar` is given, never upscale, sRGB, no metadata.
+ * around the focal point (default: the center) when `ar` is given, never
+ * upscale, sRGB, no metadata.
  */
 export async function render(
   file: string,
@@ -60,9 +61,17 @@ export async function render(
   const input = await readFile(file)
   // limitInputPixels rejects an oversized source before its pixels are decoded.
   const image = sharp(input, inputOptions(maxInputPixels)).timeout({ seconds: Math.ceil(timeout / 1000) })
-  const source = orientedSize(await image.metadata())
+  const oriented = orientedSize(await image.metadata())
 
-  const { width, aspectRatio, quality, format } = params
+  const { width, aspectRatio, focalPoint, quality, format } = params
+  // Auto-orient first, so the crop window is in the coordinates the focal point was picked in.
+  image.rotate()
+  let source = oriented
+  if (aspectRatio && focalPoint && oriented.width && oriented.height) {
+    const window = cropWindow(oriented.width, oriented.height, aspectRatio, focalPoint)
+    image.extract(window)
+    source = { width: window.width, height: window.height }
+  }
   const height = aspectRatio ? Math.round(width / aspectRatio) : undefined
   // Never upscale. Shrink the target box instead so the aspect ratio survives.
   const scale = Math.min(
@@ -71,7 +80,6 @@ export async function render(
     height ? (source.height ?? height) / height : 1,
   )
   image
-    .rotate()
     .resize({
       width: Math.max(1, Math.round(width * scale)),
       height: height ? Math.max(1, Math.round(height * scale)) : undefined,

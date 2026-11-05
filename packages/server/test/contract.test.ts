@@ -193,3 +193,29 @@ describe('parseImageQuery', () => {
     ['fmt=webp&w=640&x=1'],
   ])('rejects the unknown parameter in %j', rejects)
 })
+
+describe('focal point parameters', () => {
+  it('accepts fx and fy with ar', () => {
+    expect(parse('ar=1.5&fmt=webp&fx=30&fy=70&q=75&w=640').focalPoint).toEqual({ x: 30, y: 70 })
+    expect(parse('ar=1&fmt=webp&fx=0&fy=100&w=640').focalPoint).toEqual({ x: 0, y: 100 })
+    expect(parse('ar=1&fmt=webp&fx=50&fy=10&w=640').focalPoint).toEqual({ x: 50, y: 10 })
+  })
+
+  it('has no focal point without them', () => {
+    expect(parse('ar=1.5&fmt=webp&w=640').focalPoint).toBeUndefined()
+  })
+
+  it.each([
+    ['fmt=webp&fx=30&fy=70&w=640', 'require ar'],
+    ['ar=1&fmt=webp&fx=30&w=640', 'together'],
+    ['ar=1&fmt=webp&fy=30&w=640', 'together'],
+    ['ar=1&fmt=webp&fx=50&fy=50&w=640', 'omit'],
+    ['ar=1&fmt=webp&fx=030&fy=70&w=640', 'whole numbers'],
+    ['ar=1&fmt=webp&fx=30.5&fy=70&w=640', 'whole numbers'],
+    ['ar=1&fmt=webp&fx=101&fy=70&w=640', 'whole numbers'],
+    ['ar=1&fmt=webp&fx=-1&fy=70&w=640', 'whole numbers'],
+    ['ar=1&fmt=webp&fy=70&fx=30&w=640', 'alphabetical'],
+  ])('rejects %s', (query, message) => {
+    expect(() => parse(query)).toThrow(message)
+  })
+})

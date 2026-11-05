@@ -15,6 +15,7 @@ import {
 import { preload } from 'react-dom'
 import { useLazyEaseConfig, type LoadingStrategy } from './context.js'
 import { DEV, warnOnce } from './dev.js'
+import { coverPosition, cropWindow, focusInWindow, normalizeFocalPoint, percentPosition, type FocalPoint } from './focal.js'
 import { detectFormat, resolvedFormat } from './format.js'
 import { invalidCombination, resolveLayout } from './layout.js'
 import {
@@ -52,6 +53,12 @@ export interface ImageProps
   srcHeight?: number
   /** Opaque cache-busting token passed to the loader. */
   version?: string
+  /**
+   * The point to keep in view when the image is cropped, in percent of the
+   * source (0–100). Kept as close to the box center as the image edges
+   * allow, on the server and in the browser. Default: the center.
+   */
+  focalPoint?: FocalPoint
   /** Snapped to the nearest quality the loader allows. */
   quality?: number
   loading?: LoadingStrategy
@@ -149,6 +156,7 @@ interface ClassicSourcesOptions {
   crop?: number
   quality: number
   version?: string
+  focus?: FocalPoint
 }
 
 /**
@@ -156,12 +164,19 @@ interface ClassicSourcesOptions {
  * priority preload is built from the same strings, so React dedupes it with
  * the `<img>` (spec 7.1).
  */
-function classicSources({ src, loader, width, sizes, srcWidth, crop, quality, version }: ClassicSourcesOptions): ClassicSources {
+function classicSources({ src, loader, width, sizes, srcWidth, crop, quality, version, focus }: ClassicSourcesOptions): ClassicSources {
   const widths =
     sizes !== undefined || width === undefined
       ? fullLadder({ ladder: loader.widths, srcWidth })
       : classicCandidates({ width, ladder: loader.widths, srcWidth })
-  const request = { src, aspectRatio: crop, quality, format: serverFormat(loader), version }
+  const request = {
+    src,
+    aspectRatio: crop,
+    quality,
+    format: serverFormat(loader),
+    version,
+    focalPoint: crop === undefined ? undefined : focus,
+  }
   return {
     src: loader.url({ ...request, width: widths[Math.floor(widths.length / 2)]! }),
     srcSet: buildSrcSet({ ...request, widths, loader }),
@@ -182,6 +197,29 @@ function contentSize(box: HTMLElement): { width: number; height: number } {
     width: Math.max(0, rect.width - px(style.paddingLeft, style.paddingRight, style.borderLeftWidth, style.borderRightWidth)),
     height: Math.max(0, rect.height - px(style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth)),
   }
+}
+
+interface FocusOptions {
+  focus: FocalPoint
+  /** The ratio the backend crops to, if it crops. */
+  crop?: number
+  srcWidth?: number
+  srcHeight?: number
+}
+
+/**
+ * The CSS position that puts the focal point as close to the box center as
+ * the delivered image allows (spec 5.4). A server-cropped image already has
+ * the point near its center, so only the small rest of the crop is left,
+ * which needs the source size to place exactly; without it, the center is
+ * within about 1 % of the box. An uncropped image needs the source ratio, or
+ * falls back to a percentage.
+ */
+function focusPosition({ focus, crop, srcWidth, srcHeight }: FocusOptions): string | undefined {
+  if (!srcWidth || !srcHeight) return crop === undefined ? percentPosition(focus) : undefined
+  if (crop === undefined) return coverPosition(srcWidth / srcHeight, focus)
+  const window = cropWindow(srcWidth, srcHeight, crop, focus)
+  return coverPosition(crop, focusInWindow(srcWidth, srcHeight, window, focus))
 }
 
 function prefersReducedMotion(): boolean {
@@ -238,6 +276,7 @@ function ImageBox({
   srcWidth,
   srcHeight,
   version,
+  focalPoint,
   quality,
   loading,
   rootMargin,
@@ -274,6 +313,13 @@ function ImageBox({
   const fadeMs = fadeDuration ?? config.fadeDuration
   const trackRatio = layout.mode === 'fill' && aspectRatio === undefined
   const crop = layout.declaredRatio === undefined ? undefined : snapRatio(layout.declaredRatio, loader.ratios)
+  // Intrinsic images are never cropped, so they have nothing to focus.
+  const fx = layout.mode === 'intrinsic' ? undefined : focalPoint?.x
+  const fy = layout.mode === 'intrinsic' ? undefined : focalPoint?.y
+  const focus = useMemo(
+    () => (fx === undefined || fy === undefined ? undefined : normalizeFocalPoint({ x: fx, y: fy })),
+    [fx, fy],
+  )
 
   const resolved = useMemo(
     () => resolvePlaceholder(placeholder ?? config.placeholder, config.placeholder),
@@ -314,6 +360,12 @@ function ImageBox({
       warnOnce(
         `intrinsic:${src}`,
         `${src} has no height to reserve and will shift the layout when it loads. Add \`height\`, \`aspectRatio\` or \`fill\`.`,
+      )
+    }
+    if (focus && !(srcWidth && srcHeight) && (!owned || (classic && crop === undefined))) {
+      warnOnce(
+        `focus:${src}`,
+        `${src} is cropped only by the browser, which needs \`srcWidth\` and \`srcHeight\` to center the focal point. Falling back to object-position.`,
       )
     }
     if (loaderProp && !owned) {
@@ -394,8 +446,8 @@ function ImageBox({
   }, [triggered, classic, owned, loader, srcWidth, trackRatio, layout.mode, width])
 
   const classicUrls = useMemo(
-    () => (classic && owned ? classicSources({ src, loader, width, sizes, srcWidth, crop, quality: q, version }) : undefined),
-    [classic, owned, src, loader, width, sizes, srcWidth, crop, q, version],
+    () => (classic && owned ? classicSources({ src, loader, width, sizes, srcWidth, crop, quality: q, version, focus }) : undefined),
+    [classic, owned, src, loader, width, sizes, srcWidth, crop, q, version, focus],
   )
 
   const ratio = trackRatio ? measure?.ratio : crop
@@ -408,9 +460,10 @@ function ImageBox({
       quality: q,
       format,
       version,
+      focalPoint: ratio === undefined ? undefined : focus,
       loader,
     })
-  }, [classic, owned, measure, format, src, loader, srcWidth, ratio, q, version])
+  }, [classic, owned, measure, format, src, loader, srcWidth, ratio, q, version, focus])
   const srcSet = classicUrls?.srcSet ?? measuredSrcSet
   const imgSizes = classicUrls?.sizes ?? (measuredSrcSet && measure ? `${measure.width}px` : undefined)
   const externalSrc = !owned && (classic || triggered) ? src : undefined
@@ -518,6 +571,37 @@ function ImageBox({
     } else placeholderStyle = triggered || mounted ? parsed.clientStyle() : parsed.ssrStyle
   }
 
+  // The ratio the backend crops the displayed image to, if it crops.
+  const servedCrop = owned ? (classic ? crop : ratio) : undefined
+  const position = focus && focusPosition({ focus, crop: servedCrop, srcWidth, srcHeight })
+  const noscriptPosition = focus && focusPosition({ focus, crop: owned ? crop : undefined, srcWidth, srcHeight })
+
+  // With a focal point, an image placeholder moves to a layer inside the box,
+  // where container units can place it like the image (spec 8).
+  let layerStyle: CSSProperties | undefined
+  if (focus && placeholderStyle?.backgroundImage) {
+    const { backgroundImage, backgroundSize, backgroundPosition: _, ...rest } = placeholderStyle
+    const placeholderRatio =
+      srcWidth && srcHeight
+        ? srcWidth / srcHeight
+        : resolved.placeholder.kind === 'thumbhash'
+          ? resolved.placeholder.ratio
+          : undefined
+    layerStyle = {
+      position: 'absolute',
+      inset: 0,
+      pointerEvents: 'none',
+      backgroundImage,
+      backgroundSize,
+      backgroundPosition: placeholderRatio ? coverPosition(placeholderRatio, focus) : percentPosition(focus),
+    }
+    placeholderStyle = rest
+  }
+  // A size container gives the image and the layer the box size in CSS.
+  const focusBoxStyle: CSSProperties | undefined = focus ? { containerType: 'size' } : undefined
+  // Positioned, so it paints above the placeholder layer.
+  const focusImgStyle: CSSProperties | undefined = focus ? { position: 'relative', objectPosition: position } : undefined
+
   let fadeStyle: CSSProperties | undefined
   if (fades && source !== undefined) {
     fadeStyle =
@@ -538,8 +622,9 @@ function ImageBox({
       ref={boxRef}
       className={wrapperClassName}
       data-state={state}
-      style={{ ...layout.boxStyle, ...placeholderStyle, ...wrapperStyle }}
+      style={{ ...layout.boxStyle, ...focusBoxStyle, ...placeholderStyle, ...wrapperStyle }}
     >
+      {layerStyle && <span aria-hidden="true" style={layerStyle} />}
       <img
         {...imgProps}
         ref={imgRef}
@@ -558,7 +643,7 @@ function ImageBox({
         className={className}
         onLoad={handleLoad}
         onError={handleError}
-        style={{ ...layout.imgStyle, ...fadeStyle, ...style }}
+        style={{ ...layout.imgStyle, ...focusImgStyle, ...fadeStyle, ...style }}
       />
       {!classic && (
         <NoScriptImage
@@ -570,10 +655,16 @@ function ImageBox({
           crop={crop}
           srcWidth={srcWidth}
           version={version}
+          focus={focus}
           width={imgWidth}
           height={imgHeight}
           className={className}
-          style={{ ...layout.imgStyle, ...(layout.mode === 'intrinsic' ? null : { position: 'absolute', inset: 0 }), ...style }}
+          style={{
+            ...layout.imgStyle,
+            ...(layout.mode === 'intrinsic' ? null : { position: 'absolute', inset: 0 }),
+            ...(noscriptPosition ? { objectPosition: noscriptPosition } : null),
+            ...style,
+          }}
         />
       )}
     </span>
@@ -589,6 +680,7 @@ interface NoScriptImageProps {
   crop?: number
   srcWidth?: number
   version?: string
+  focus?: FocalPoint
   width?: number
   height?: number
   className?: string
@@ -600,11 +692,11 @@ interface NoScriptImageProps {
  * candidates (1× and 2× of `width`, or the full ladder without it), declared
  * crop, WebP, since nothing can be measured.
  */
-function NoScriptImage({ src, owned, loader, quality, crop, srcWidth, version, ...img }: NoScriptImageProps) {
+function NoScriptImage({ src, owned, loader, quality, crop, srcWidth, version, focus, ...img }: NoScriptImageProps) {
   const { width } = img
   const sources = useMemo(
-    () => (owned ? classicSources({ src, loader, width, srcWidth, crop, quality, version }) : undefined),
-    [owned, src, loader, width, srcWidth, crop, quality, version],
+    () => (owned ? classicSources({ src, loader, width, srcWidth, crop, quality, version, focus }) : undefined),
+    [owned, src, loader, width, srcWidth, crop, quality, version, focus],
   )
   if (!sources) {
     return (

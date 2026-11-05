@@ -1,5 +1,6 @@
 import { Image, LazyEaseProvider } from '@lazy-ease/react'
 import { useEffect, type ReactNode } from 'react'
+import { FOCUS } from './focus.js'
 
 export interface FixtureImage {
   src: string
@@ -17,6 +18,8 @@ export interface PageData {
     small: FixtureImage
     /** Copies of the photo under other names, for pages that need several distinct sources. */
     copies: FixtureImage[]
+    /** 1600×500, white with a blue dot at the focal point (70 %, 60 %). */
+    focus: FixtureImage
   }
 }
 
@@ -33,6 +36,8 @@ const CSS = `
   .hero { position: relative; aspect-ratio: 2; }
   .row { display: flex; gap: 16px; padding: 16px; }
   .fluid { padding: 0; }
+  .banner { position: relative; height: 200px; }
+  .avatar { position: relative; width: 200px; height: 200px; }
 `
 
 type PageProps = Pick<PageData, 'images'>
@@ -123,6 +128,37 @@ function FirstViewport({ images: { copies } }: PageProps) {
   )
 }
 
+
+function Focus({ images: { focus } }: PageProps) {
+  return (
+    <>
+      {/* Classic, uncropped: only the browser crops, from the source ratio. */}
+      <div className="banner">
+        <Image
+          src={focus.src}
+          alt=""
+          fill
+          sizes="100vw"
+          priority
+          srcWidth={focus.width}
+          srcHeight={focus.height}
+          focalPoint={FOCUS}
+          wrapperClassName="focus-banner"
+        />
+      </div>
+      {/* Measured: the server crops 1:1 around the point. */}
+      <div className="avatar">
+        <Image src={focus.src} alt="" fill srcWidth={focus.width} srcHeight={focus.height} focalPoint={FOCUS} wrapperClassName="focus-avatar" />
+      </div>
+      {/* The size container must not change how fixed and ratio boxes size themselves. */}
+      <div style={{ width: 300 }}>
+        <Image src={focus.src} alt="" width={160} height={120} focalPoint={FOCUS} wrapperClassName="focus-fixed" />
+        <Image src={focus.src} alt="" aspectRatio={2} focalPoint={FOCUS} wrapperClassName="focus-ratio" />
+      </div>
+    </>
+  )
+}
+
 export const pages: Record<string, (props: PageProps) => ReactNode> = {
   'below-fold': BelowFold,
   dpr: Dpr,
@@ -131,6 +167,7 @@ export const pages: Record<string, (props: PageProps) => ReactNode> = {
   fade: Fade,
   priority: Priority,
   'first-viewport': FirstViewport,
+  focus: Focus,
 }
 
 function HydrationFlag() {

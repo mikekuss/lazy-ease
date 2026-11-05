@@ -12,8 +12,7 @@ Status: reviewed draft. Incorporates the architecture review of 2026-11-03 and t
 
 ## 2. Non-goals for v1
 
-- Art direction (different crops per media query). Planned for v2 together with focus points.
-- Focus-point cropping. v2.
+- Art direction (different crops per media query). Planned for v2.
 - Resizing images we do not host (external images).
 - `overrideSrc`, `getImageProps()`, format configuration, a global loader file, fixed source lists.
 - Backends other than the Node reference server. The AWS reference deployment (CloudFront → regional Lambda with sharp → S3 cache) is v1.1, Cloudflare later.
@@ -66,6 +65,7 @@ Status: reviewed draft. Incorporates the architecture review of 2026-11-03 and t
 | `sizes` | `string` | measured | Classic `sizes`. When set, measuring is not used for width selection and the full ladder is offered (6.3). Wins over `width` for candidate selection. |
 | `srcWidth`, `srcHeight` | `number` | | Intrinsic size of the source, from `computeMetadata`. Ladder widths above `srcWidth` are not offered (6.2). Optional but recommended. |
 | `version` | `string` | | Opaque cache-busting token (content hash or mtime) passed to the loader as `version` (6.1). |
+| `focalPoint` | `{ x: number; y: number }` | center | Point of the source to keep in view when cropping, percent 0–100. See 5.4. |
 | `quality` | `number` | loader | Snapped to the nearest quality the loader allows. |
 | `loading` | `'lazy' \| 'native' \| 'eager'` | `'lazy'` | See 7.1. `native` requires `sizes` or `width`. |
 | `rootMargin` | `string` | provider (`'400px'`) | Preload distance for `lazy`. |
@@ -98,6 +98,30 @@ The `<img>` is `width: 100%; height: 100%; object-fit: cover` in fill, fixed and
 
 `intrinsic` cannot reserve height, so it causes layout shift. The component logs a development warning suggesting `height`, `aspectRatio` or `fill`.
 
+### 5.4 Focal point
+
+`focalPoint` is a point in the source, `x` and `y` in percent of its width and height. Values are rounded to whole percent and clamped to 0–100; non-finite values are ignored. The center (50, 50) is the default and is treated as no focal point. Intrinsic mode never crops and ignores it.
+
+**Semantics.** Every crop, on the server or in the browser, keeps the point as close to the center of the result as the image edges allow: the window is the largest one of the target ratio, centered on the point and then clamped to the source. This is what imgix (`fp-x`/`fp-y`) and Cloudflare (`gravity`) do. It is not `object-position: x% y%`.
+
+**Server.** With a crop ratio, the request carries `focalPoint` (6.1) and the backend cuts the window from the oriented source before scaling (12.1). Window in whole source pixels: for a source wider than the ratio, `w = round(H × ar)`, `left = clamp(round(x% × W − w / 2), 0, W − w)`; otherwise `h = round(W / ar)`, `top = clamp(round(y% × H − h / 2), 0, H − h)`. Client and server share this formula.
+
+**Browser.** The box gets `container-type: size` and the `<img>` `position: relative` (so it paints above the placeholder layer) and an `object-position` in container units. For a delivered image of ratio `R` and the point at `(fx, fy)` in it, rendered with `cover`:
+
+```
+rw = max(100cqw, 100cqh × R)        rh = max(100cqh, 100cqw / R)
+x  = clamp(100cqw − rw, 50cqw − fx × rw, 0px)
+y  = clamp(100cqh − rh, 50cqh − fy × rh, 0px)
+```
+
+It needs no script and no measurement, so it is right in the server HTML and on every resize.
+
+- Uncropped image (classic fill without `aspectRatio`, external images): `R = srcWidth / srcHeight`, the point is `focalPoint`. Without `srcWidth` and `srcHeight` the ratio is unknown: `object-position: x% y%` and a development warning.
+- Server-cropped image: `R` is the crop ratio and the point is where `focalPoint` lands in the server's window, computed from `srcWidth`/`srcHeight`. Only the ratio ladder's rest (at most 2.2 %) is left to crop; without the source size the rest is cropped around the center, off by at most about 1 % of the box.
+- Image placeholders (data URI, decoded ThumbHash) move from the box to an `aria-hidden` layer (`position: absolute; inset: 0`) with the same formula as `background-position`. `R` is `srcWidth / srcHeight`, or the ThumbHash's stored ratio. Colors stay on the box.
+
+A loader whose backend crops must honor `focalPoint` with these semantics; otherwise the browser's positioning does not match the delivered image.
+
 ### 5.3 Provider
 
 `<LazyEaseProvider>` sets defaults for a subtree. Nested providers merge.
@@ -128,6 +152,7 @@ interface ImageRequest {
   quality: number          // always a value of the loader's qualities
   format: 'avif' | 'webp' | 'jpeg' | 'auto'   // 'auto' only for loaders that declare formats: 'auto'
   version?: string         // the `version` prop, opaque
+  focalPoint?: { x: number; y: number }   // whole percent 0–100; only with aspectRatio; absent at the center (5.4)
 }
 
 interface ImageLoader {
@@ -145,15 +170,15 @@ A plain function `(request) => string` is accepted as shorthand and gets the def
 
 **Bound.** Cache variants per source are at most `widths × ratios × qualities × formats` = 13 × 73 × 1 × 3. In practice a source is rendered at a handful of ratios.
 
-**Canonical URL.** The default loader emits `{baseUrl}/{src path}?ar={ar}&fmt={fmt}&q={q}&v={version}&w={w}`:
+**Canonical URL.** The default loader emits `{baseUrl}/{src path}?ar={ar}&fmt={fmt}&fx={x}&fy={y}&q={q}&v={version}&w={w}`:
 
-- Parameters in alphabetical order, names and values lowercase, absent parameters omitted (`ar` when there is no crop, `v` when there is no version).
+- Parameters in alphabetical order, names and values lowercase, absent parameters omitted (`ar` when there is no crop, `fx` and `fy` without a focal point, `v` when there is no version).
 - Numbers without trailing zeros or exponent (`1.5`, not `1.50`), at most 3 decimals.
 - The source path is the URL path, each segment `encodeURIComponent`-encoded, so the URL ends in the source's extension. This matters for CDNs that cache by extension (12.4).
 
 Order and case matter for CDN cache keys ([CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/QueryStringParameters.html)), and the backend rejects non-canonical strings (12.1), so no two URLs for the same variant can exist.
 
-Third-party loaders map the request to their own syntax. Known mappings: imgix `w`, `ar={ar}:1`, `fit=crop`, `fm`, `q`; Cloudinary `w_`, `ar_`, `c_fill`, `f_`, `q_`; Cloudflare Images `width`, `height=round(w/ar)`, `fit=cover`, `format`, `quality` (it has no ratio parameter). All three negotiate the format through `Accept`, so their loaders declare `formats: 'auto'` and the component skips detection.
+Third-party loaders map the request to their own syntax. Known mappings: imgix `w`, `ar={ar}:1`, `fit=crop`, `fm`, `q`; Cloudinary `w_`, `ar_`, `c_fill`, `f_`, `q_`; Cloudflare Images `width`, `height=round(w/ar)`, `fit=cover`, `format`, `quality` (it has no ratio parameter). Focal point: imgix `crop=focalpoint`, `fp-x`, `fp-y`; Cloudflare `gravity={x}x{y}`, both as fractions of 1 with the semantics of 5.4; Cloudinary `g_xy_center` with `x_`/`y_` in pixels, so it needs the source size. All three negotiate the format through `Accept`, so their loaders declare `formats: 'auto'` and the component skips detection.
 
 ### 6.2 Measured mode (default when `sizes` is not set)
 
@@ -274,7 +299,8 @@ The image app is mounted at the loader's `baseUrl` (default `/_img`). The source
 | --- | --- | --- |
 | path | yes | Path inside the configured root. Resolved with `realpath` and checked against the root's real path (symlinks included), which is resolved once per app. Rejected: absolute URLs, `..` after normalization, null bytes, backslashes and drive letters, UNC prefixes, extensions outside `jpg jpeg png webp avif gif`. Unicode is NFC-normalized before lookup. |
 | `w` | yes | Must be a width-ladder value, otherwise 400. |
-| `ar` | no | Must be a ratio-ladder value in canonical form, otherwise 400. With it the output is `w × round(w / ar)`, cropped with `cover` around the center. Without it, the width is scaled with the ratio kept. |
+| `ar` | no | Must be a ratio-ladder value in canonical form, otherwise 400. With it the output is `w × round(w / ar)`, cropped with `cover` around the center, or around `fx`/`fy`. Without it, the width is scaled with the ratio kept. |
+| `fx`, `fy` | no | The focal point (5.4), whole numbers 0–100 without leading zeros. Both or neither, only with `ar`, never both `50`; otherwise 400. The window is cut from the oriented source, then scaled; part of the render key and the `ETag`. |
 | `q` | no | Must be an allowed quality (default `[75]`), otherwise 400. |
 | `fmt` | yes | `avif`, `webp` or `jpeg`. |
 | `v` | no | Opaque, at most 64 URL-safe characters. Ignored by the renderer; it exists for the cache key. |
@@ -351,3 +377,7 @@ Not part of the public server. `createMetaApp` is a separate Hono app for the de
 - One shared `ResizeObserver` reading the content rect; boxes that cannot grow are not observed (6.2).
 - `params` removed from `ImageRequest`; `createLoader({ params })` stays (6.1).
 - Server: `concurrency` defaults to half the CPUs, the LRU is also bounded by bytes, memory per render documented, the root's `realpath` is resolved once, sharp's `limitInputPixels` is the only pixel check, the timeout's two layers (504 response, sharp's work limit) are spelled out, `avifEffort` option (12.1).
+
+## 18. Changes for 0.2.0
+
+- Focal point (5.4): `focalPoint` prop, `ImageRequest.focalPoint`, `fx`/`fy` in the canonical URL and on the server, browser positioning in container units, placeholder layer. Removed from the non-goals.

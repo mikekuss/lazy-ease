@@ -1,3 +1,4 @@
+import type { FocalPoint } from './focal.js'
 import type { ImageFormat, ImageLoader } from './loader.js'
 
 export interface SrcSetOptions {
@@ -9,6 +10,8 @@ export interface SrcSetOptions {
   quality: number
   format: ImageFormat | 'auto'
   version?: string
+  /** Normalized; only with `aspectRatio`. */
+  focalPoint?: FocalPoint
   loader: Pick<ImageLoader, 'url'>
 }
 

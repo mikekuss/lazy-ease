@@ -72,6 +72,51 @@ describe('rendering', () => {
     expect(pixel(info.width - 10)[2]).toBeGreaterThan(200)
   })
 
+  it('crops around the focal point, stopping at the edges', async () => {
+    // A 1:4 window of a red|blue split: all red at x = 0, all blue at x = 100.
+    await writeFile(path.join(fixtures.root, 'split.png'), await (await split(800, 800)).png().toBuffer())
+    for (const [fx, channel] of [
+      [0, 0],
+      [100, 2],
+      [10, 0],
+      [90, 2],
+    ] as const) {
+      const { buffer, meta } = await decode(await get(`/split.png?ar=0.25&fmt=webp&fx=${fx}&fy=50&w=128`))
+      expect([meta.width, meta.height]).toEqual([128, 512])
+      const { data, info } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true })
+      for (const x of [5, info.width - 5]) {
+        expect(data[(256 * info.width + x) * info.channels + channel], `fx=${fx} x=${x}`).toBeGreaterThan(200)
+      }
+    }
+  })
+
+  it('crops around the focal point after orienting', async () => {
+    // exif.jpg displays as 200×400, red on top, blue at the bottom.
+    for (const [fy, channel] of [
+      [0, 0],
+      [100, 2],
+    ] as const) {
+      const { buffer, meta } = await decode(await get(`/exif.jpg?ar=1&fmt=webp&fx=50&fy=${fy}&w=128`))
+      expect([meta.width, meta.height]).toEqual([128, 128])
+      const { data, info } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true })
+      for (const y of [5, info.height - 5]) {
+        expect(data[(y * info.width + 64) * info.channels + channel], `fy=${fy} y=${y}`).toBeGreaterThan(200)
+      }
+    }
+  })
+
+  it('never upscales the focal crop window', async () => {
+    // small.jpg is 300×200; a 1:1 window is 200×200.
+    const { meta } = await decode(await get('/small.jpg?ar=1&fmt=webp&fx=0&fy=50&w=1080'))
+    expect([meta.width, meta.height]).toEqual([200, 200])
+  })
+
+  it('renders a different variant per focal point', async () => {
+    const a = await get('/big.jpg?ar=1&fmt=webp&fx=10&fy=50&w=256')
+    const b = await get('/big.jpg?ar=1&fmt=webp&fx=90&fy=50&w=256')
+    expect(a.headers.get('etag')).not.toBe(b.headers.get('etag'))
+  })
+
   it('scales without a crop when ar is absent', async () => {
     const { meta } = await decode(await get('/big.jpg?fmt=webp&w=640'))
     expect([meta.width, meta.height]).toEqual([640, 320])

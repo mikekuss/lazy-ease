@@ -110,6 +110,7 @@ export function createImageApp({
       source.file,
       formatNumber(params.width),
       params.aspectRatio === undefined ? '' : formatNumber(params.aspectRatio),
+      params.focalPoint === undefined ? '' : `${params.focalPoint.x},${params.focalPoint.y}`,
       formatNumber(params.quality),
       params.format,
     ].join('|')

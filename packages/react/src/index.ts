@@ -16,6 +16,7 @@ export {
   type LoaderOptions,
   type ResolvedLoader,
 } from './loader.js'
+export { type FocalPoint } from './focal.js'
 export { formatNumber } from './numbers.js'
 export { DEFAULT_RATIOS, snapRatio } from './ratios.js'
 export { DEFAULT_WIDTHS, fullLadder, type FullLadderOptions } from './widths.js'

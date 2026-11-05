@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-06
+
+### Added
+
+#### `@lazy-ease/react`
+
+- `focalPoint={{ x, y }}` (percent of the source, 0–100, rounded to whole percent) keeps a point in view when the image is cropped. The point ends up as close to the box center as the image edges allow, the semantics of imgix's `fp-x`/`fp-y` and Cloudflare's `gravity`. The center is the default and is never sent.
+- `ImageRequest.focalPoint`, set when the request has a crop ratio, and `fx`/`fy` in the URLs `createLoader()` writes. A new focal point is a new URL and loads a new variant. The `FocalPoint` type is exported.
+- With a focal point, the box is a size container and the `<img>` gets an `object-position` in container units, so images the server doesn't crop (classic fill without `aspectRatio`, external images) are placed right in the server HTML and on every resize. Uncropped images need `srcWidth` and `srcHeight` for this; without them they fall back to `object-position: x% y%` with a development warning. Image placeholders move to a layer inside the box and are placed the same way.
+- README sections on the focal point and on the Next.js App Router (provider and loaders in a client file).
+
+#### `@lazy-ease/server`
+
+- `fx` and `fy` crop around the focal point: whole numbers 0–100, both or neither, only with `ar`, never both `50`. The window is cut from the oriented source before scaling and is part of the render key and the `ETag`. The `FocalPoint` type is exported.
+
 ## [0.1.0] - 2026-11-04
 
 First release, implementing the [v1 design spec](docs/design-spec.md).
@@ -25,6 +40,7 @@ First release, implementing the [v1 design spec](docs/design-spec.md).
 - `<noscript>` fallback, built once per image, with a WebP `srcset` of the 1× and 2× candidates when `width` is known and the full ladder otherwise.
 - External images: anything that isn't a path or on a configured `domains` host loads as is.
 - `<LazyEaseProvider>` with nestable defaults, the `ImageLoader` interface (object or function form), and `createLoader()`, which writes the canonical URL for `@lazy-ease/server`.
+- `<Image>` and `<LazyEaseProvider>` are client modules (`'use client'`), so React Server Components can render them.
 - Public exports: `<Image>`, the provider, the loader API, the shared width and ratio ladders (`DEFAULT_WIDTHS`, `DEFAULT_RATIOS`), `formatNumber`, `snapRatio`, `fullLadder` and `encodePath`.
 
 #### `@lazy-ease/server`
@@ -40,5 +56,6 @@ First release, implementing the [v1 design spec](docs/design-spec.md).
 
 - Measured mode now sets `sizes` before `srcset`. WebKit selects a candidate as soon as `srcset` is set, so it used to fetch the `100vw` candidate first and then the right one.
 
-[Unreleased]: https://github.com/mikekuss/lazy-ease/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/mikekuss/lazy-ease/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/mikekuss/lazy-ease/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mikekuss/lazy-ease/releases/tag/v0.1.0

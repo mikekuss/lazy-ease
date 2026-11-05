@@ -35,11 +35,25 @@ async function fixtureImage(file: string, width: number, height: number): Promis
   return { src: `/${file}`, ...(await computeMetadata(full)) }
 }
 
+/** White, with a blue dot of radius 24 at (70 %, 60 %): where it lands shows the crop. */
+async function focusImage(file: string): Promise<FixtureImage> {
+  const full = path.join(root, file)
+  if (!(await stat(full).catch(() => undefined))) {
+    const dot = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><circle cx="24" cy="24" r="24" fill="#0000ff"/></svg>')
+    await sharp({ create: { width: 1600, height: 500, channels: 3, background: '#ffffff' } })
+      .composite([{ input: dot, left: 1120 - 24, top: 300 - 24 }])
+      .png()
+      .toFile(full)
+  }
+  return { src: `/${file}`, ...(await computeMetadata(full)) }
+}
+
 await mkdir(root, { recursive: true })
 const images: PageData['images'] = {
   photo: await fixtureImage('photo.jpg', 2400, 1600),
   small: await fixtureImage('small.jpg', 500, 400),
   copies: await Promise.all([1, 2, 3].map((n) => fixtureImage(`copy-${n}.jpg`, 1200, 800))),
+  focus: await focusImage('focus.png'),
 }
 
 // Both sides are bundled with esbuild: tsx applies the JSX setting only to

@@ -40,13 +40,47 @@ function buildRatios(): number[] {
 /** Crop ratios the backend renders (spec 6.1), 73 values from 0.25 to 4. */
 export const DEFAULT_RATIOS: readonly number[] = buildRatios()
 
+/** A point in the source, in whole percent of its width and height. */
+export interface FocalPoint {
+  x: number
+  y: number
+}
+
 export interface ImageParams {
   width: number
   /** Absent when there is no crop. */
   aspectRatio?: number
+  /** Absent for the center. Only with `aspectRatio`. */
+  focalPoint?: FocalPoint
   quality: number
   format: OutputFormat
   version?: string
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+export interface CropWindow {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/**
+ * The part of a `width × height` source that a crop to `ratio` keeps (spec
+ * 12.1): the largest window of that ratio, placed so the focal point is as
+ * close to its center as the source edges allow. Whole pixels. Must match
+ * `cropWindow` in `@lazy-ease/react`.
+ */
+export function cropWindow(width: number, height: number, ratio: number, focus: FocalPoint): CropWindow {
+  if (width / height > ratio) {
+    const w = clamp(Math.round(height * ratio), 1, width)
+    const left = clamp(Math.round((focus.x / 100) * width - w / 2), 0, width - w)
+    return { left, top: 0, width: w, height }
+  }
+  const h = clamp(Math.round(width / ratio), 1, height)
+  const top = clamp(Math.round((focus.y / 100) * height - h / 2), 0, height - h)
+  return { left: 0, top, width, height: h }
 }
 
 export interface Ladders {
@@ -55,7 +89,9 @@ export interface Ladders {
   qualities: readonly number[]
 }
 
-const PARAM_NAMES = new Set(['ar', 'fmt', 'q', 'v', 'w'])
+const PARAM_NAMES = new Set(['ar', 'fmt', 'fx', 'fy', 'q', 'v', 'w'])
+// Whole percent, 0 to 100, no leading zeros.
+const PERCENT = /^(?:100|[1-9]?[0-9])$/
 // RFC 3986 unreserved characters, which encodeURIComponent leaves alone.
 const VERSION = /^[A-Za-z0-9._~-]{1,64}$/
 
@@ -102,6 +138,16 @@ export function parseImageQuery(raw: string, { widths, ratios, qualities }: Ladd
     const aspectRatio = canonical(ar, ratios)
     if (aspectRatio === undefined) throw invalid('ar must be a ladder ratio in canonical form')
     params.aspectRatio = aspectRatio
+  }
+
+  const fx = values.get('fx')
+  const fy = values.get('fy')
+  if (fx !== undefined || fy !== undefined) {
+    if (fx === undefined || fy === undefined) throw invalid('fx and fy must be given together')
+    if (params.aspectRatio === undefined) throw invalid('fx and fy require ar')
+    if (!PERCENT.test(fx) || !PERCENT.test(fy)) throw invalid('fx and fy must be whole numbers from 0 to 100')
+    if (fx === '50' && fy === '50') throw invalid('The center is the default; omit fx and fy')
+    params.focalPoint = { x: Number(fx), y: Number(fy) }
   }
 
   const q = values.get('q')
