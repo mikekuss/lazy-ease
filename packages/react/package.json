@@ -1,6 +1,6 @@
 {
   "name": "@lazy-ease/react",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lazy-loaded, right-sized React images with an inline placeholder and a crossfade",
   "license": "MIT",
   "author": "Mike Kuss",

@@ -82,6 +82,7 @@ export function App() {
 | `fill` | `boolean` | `false` | The box fills its positioned parent. |
 | `sizes` | `string` | measured | Classic `sizes`. Turns off measuring and offers the full width ladder (classic mode). Wins over `width` for candidate selection. |
 | `srcWidth`, `srcHeight` | `number` | | Intrinsic size of the source, from `computeMetadata`. Widths above `srcWidth` aren't offered, since the backend never upscales. Optional but recommended. |
+| `focalPoint` | `{ x, y }` | center | The point to keep in view when the image is cropped, in percent of the source (0–100). See [Focal point](#focal-point). |
 | `version` | `string` | | Opaque cache-busting token (content hash or mtime), sent as `v`. |
 | `quality` | `number` | provider (`75`) | Snapped to the nearest quality the loader allows. |
 | `loading` | `'lazy' \| 'native' \| 'eager'` | provider (`'lazy'`) | See [Loading](#loading). `native` requires `width` or `sizes`. |
@@ -132,6 +133,23 @@ These combinations throw in development: `height` without `width`; `fill` with `
 | `placeholder` | `'#e5e7eb'` | |
 | `fadeDuration` | `400` | |
 | `thumbhashSsr` | `'color'` | `'image'` renders decoded ThumbHash images in the server HTML instead of only their average color. |
+
+## Focal point
+
+`focalPoint={{ x, y }}` keeps a point of the source in view when the image is cropped. `x` and `y` are percent of the source's width and height (0–100), rounded to whole percent. The point ends up as close to the box center as the image edges allow, the way imgix's `fp-x`/`fp-y` and Cloudflare's `gravity` work. That is not `object-position: x% y%`, which lines up the image's `x%` with the box's `x%`.
+
+```tsx
+<div style={{ position: 'relative', height: 200 }}>
+  <Image src="/banner.jpg" alt="…" fill sizes="100vw" priority srcWidth={1600} srcHeight={500} focalPoint={{ x: 70, y: 60 }} />
+</div>
+```
+
+- **On the server.** When the request has a crop ratio, `focalPoint` goes into the `ImageRequest` and `createLoader()` writes it as `fx` and `fy`. The server cuts the largest window of that ratio from the source, placed around the point, then scales it. A new focal point is a new URL, so it loads a new variant. The center is the default and is never sent, so URLs without a focal point don't change.
+- **In the browser.** The box becomes a size container (`container-type: size`) and the `<img>` gets an `object-position` written in container units, so it is right in the server HTML and after every resize, without script. It covers what the server doesn't crop: images without a crop ratio (classic fill without `aspectRatio`, external images) and the up to 2.2 % the ratio ladder leaves over. It needs the source ratio, so pass `srcWidth` and `srcHeight`; without them an uncropped image falls back to `object-position: x% y%` with a development warning.
+- **Placeholder.** An image placeholder (data URI or decoded ThumbHash) moves from the box to a layer inside it and is placed the same way. Colors stay on the box.
+- Intrinsic images are never cropped, so `focalPoint` does nothing there.
+
+A custom loader whose backend crops must keep `focalPoint` as close to the crop's center as the source edges allow, or the browser's positioning won't match.
 
 ## Measured and classic mode
 
@@ -253,6 +271,39 @@ The reference backend only serves files inside its root, so the default loader s
 
 Development warnings and errors are on unless `process.env.NODE_ENV` is `'production'`; bundlers replace it.
 
+## Next.js App Router
+
+`<Image>` and `<LazyEaseProvider>` are client components (`'use client'`), so Server Components can render them directly. A loader holds functions, and functions can't be passed from a Server Component to a client component. So mount the provider, or any `loader` prop, inside a client file of your own:
+
+```tsx
+// app/providers.tsx
+'use client'
+import { LazyEaseProvider, type ImageLoader } from '@lazy-ease/react'
+
+const loader: ImageLoader = { /* … */ }
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return <LazyEaseProvider loader={loader}>{children}</LazyEaseProvider>
+}
+```
+
+```tsx
+// app/layout.tsx (a Server Component)
+import { Providers } from './providers'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+```
+
+Plain exports such as `createLoader()`, `DEFAULT_WIDTHS` or `formatNumber` also work in Server Components.
+
 ## Loaders
 
 A loader turns an image request into a URL and declares what the backend can render. It's the only coupling between the component and the backend.
@@ -265,6 +316,7 @@ interface ImageRequest {
   quality: number          // always one of the loader's qualities
   format: 'avif' | 'webp' | 'jpeg' | 'auto'   // 'auto' only with formats: 'auto'
   version?: string         // the version prop
+  focalPoint?: { x: number; y: number }   // whole percent; only with aspectRatio, absent at the center
 }
 
 interface ImageLoader {
@@ -297,11 +349,11 @@ const loader = createLoader({
 It also takes `widths` and `ratios`. It emits the canonical URL:
 
 ```
-{baseUrl}/{src path}?ar={ar}&fmt={fmt}&q={q}&v={version}&w={w}
-/_img/my%20photos/caf%C3%A9.jpg?ar=1.333&fmt=webp&q=75&v=AbC123&w=640
+{baseUrl}/{src path}?ar={ar}&fmt={fmt}&fx={x}&fy={y}&q={q}&v={version}&w={w}
+/_img/my%20photos/caf%C3%A9.jpg?ar=1.333&fmt=webp&fx=30&fy=70&q=75&v=AbC123&w=640
 ```
 
-- Parameters in alphabetical order, lowercase names, absent ones omitted (`ar` without a crop, `v` without a version).
+- Parameters in alphabetical order, lowercase names, absent ones omitted (`ar` without a crop, `fx` and `fy` at the center, `v` without a version).
 - Numbers without trailing zeros or exponent, at most 3 decimals (`1.5`, not `1.50`).
 - The source path is the URL path, each segment `encodeURIComponent`-encoded, so the URL ends in the source's extension.
 
@@ -315,19 +367,20 @@ const webpOnly = { ...createLoader(), formats: ['webp', 'jpeg'] as const }
 
 ### Third-party loaders
 
-imgix, Cloudinary and Cloudflare Images all negotiate the format through `Accept`, so their loaders declare `formats: 'auto'` and the component skips format detection.
+imgix, Cloudinary and Cloudflare Images all negotiate the format through `Accept`, so their loaders declare `formats: 'auto'` and the component skips format detection. imgix (`crop=focalpoint`, `fp-x`, `fp-y`) and Cloudflare (`gravity`) take the focal point in the same sense, as fractions of 1. Cloudinary's `g_xy_center` wants pixels, so it needs the source size.
 
 ```ts
 import { DEFAULT_WIDTHS, type ImageLoader } from '@lazy-ease/react'
 
-// imgix: w, ar={ar}:1, fit=crop, fm/auto=format, q
+// imgix: w, ar={ar}:1, fit=crop, crop=focalpoint, fp-x, fp-y, fm/auto=format, q
 export const imgix: ImageLoader = {
   widths: DEFAULT_WIDTHS,
   qualities: [75],
   formats: 'auto',
-  url: ({ src, width, aspectRatio, quality }) =>
+  url: ({ src, width, aspectRatio, quality, focalPoint }) =>
     `https://example.imgix.net${src}?auto=format&w=${width}&q=${quality}` +
-    (aspectRatio ? `&ar=${aspectRatio}:1&fit=crop` : ''),
+    (aspectRatio ? `&ar=${aspectRatio}:1&fit=crop` : '') +
+    (focalPoint ? `&crop=focalpoint&fp-x=${focalPoint.x / 100}&fp-y=${focalPoint.y / 100}` : ''),
 }
 
 // Cloudinary: w_, ar_, c_fill, f_, q_
@@ -341,13 +394,19 @@ export const cloudinary: ImageLoader = {
   },
 }
 
-// Cloudflare Images: width, height=round(w/ar), fit=cover, format, quality (no ratio parameter)
+// Cloudflare Images: width, height=round(w/ar), fit=cover, gravity, format, quality (no ratio parameter)
 export const cloudflare: ImageLoader = {
   widths: DEFAULT_WIDTHS,
   qualities: [75],
   formats: 'auto',
-  url: ({ src, width, aspectRatio, quality }) => {
-    const t = [`width=${width}`, aspectRatio && `height=${Math.round(width / aspectRatio)},fit=cover`, 'format=auto', `quality=${quality}`]
+  url: ({ src, width, aspectRatio, quality, focalPoint }) => {
+    const t = [
+      `width=${width}`,
+      aspectRatio && `height=${Math.round(width / aspectRatio)},fit=cover`,
+      focalPoint && `gravity=${focalPoint.x / 100}x${focalPoint.y / 100}`,
+      'format=auto',
+      `quality=${quality}`,
+    ]
     return `/cdn-cgi/image/${t.filter(Boolean).join(',')}${src}`
   },
 }
@@ -365,8 +424,9 @@ These assume `src` is a path. If you list `domains`, the loader receives those a
 
 | Param | Required | Rule |
 | --- | --- | --- |
-| `ar` | no | A ratio-ladder value. Crops to `w × round(w / ar)` around the center. Without it the image is scaled with its ratio kept. |
+| `ar` | no | A ratio-ladder value. Crops to `w × round(w / ar)` around the focal point, by default the center. Without it the image is scaled with its ratio kept. |
 | `fmt` | yes | `avif`, `webp` or `jpeg`. There is no `Accept` negotiation. |
+| `fx`, `fy` | no | The focal point, whole percent from `0` to `100`. Only both together and only with `ar`; the center (`50`, `50`) is left out. The crop window is the largest one of ratio `ar`, as close to centered on the point as the source edges allow. |
 | `q` | no | One of `qualities` (default `[75]`). Absent means the first one. |
 | `v` | no | Opaque version token, 1–64 of `A–Z a–z 0–9 - . _ ~`, case kept. Only part of the URL, so a CDN sees a new key; it doesn't change the bytes or the `ETag`. |
 | `w` | yes | A width-ladder value. |
@@ -405,14 +465,14 @@ The package also exports `DEFAULT_WIDTHS`, `DEFAULT_RATIOS`, `DEFAULT_QUALITIES`
 
 Put a CDN in front of the image app; its year-long `immutable` responses are meant to be cached there.
 
-- **CloudFront.** The managed `CachingOptimized` policy excludes query strings. Use a cache policy with a query-string allowlist of `ar fmt q v w`. CloudFront keys on the raw order and case, which the canonical URL takes care of.
+- **CloudFront.** The managed `CachingOptimized` policy excludes query strings. Use a cache policy with a query-string allowlist of `ar fmt fx fy q v w`. CloudFront keys on the raw order and case, which the canonical URL takes care of.
 - **Cloudflare.** Caches by file extension by default. The URL ends in the source's extension, so that works; otherwise a Cache Rule must mark the path cacheable. Query strings are part of the default key, and the URL is already canonical.
 - Both collapse concurrent misses for one key, as the server does.
 
 ## Known limitations
 
 - `onLoad` doesn't fire for an image that finished loading before hydration. `data-state` still becomes `loaded`.
-- Art direction (a different crop per media query) and focus-point cropping are planned for v2.
+- Art direction (a different crop per media query) is planned for v2.
 - `rootMargin` inside nested scroll containers, see [Loading](#loading).
 
 ## Development
