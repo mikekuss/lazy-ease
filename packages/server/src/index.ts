@@ -4,6 +4,7 @@ export {
   DEFAULT_RATIOS,
   DEFAULT_WIDTHS,
   OUTPUT_FORMATS,
+  type FocalPoint,
   type ImageParams,
   type OutputFormat,
 } from './contract.js'
