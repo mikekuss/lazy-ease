@@ -20,6 +20,29 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # The published shape: what npm installs, not the workspace sources.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # pnpm pack (publishConfig.exports applies only under pnpm), publint,
+      # attw and the tarball contents.
+      - run: pnpm check:packages
+      # The smoke app installs Next and React with npm; their versions are
+      # pinned in the script, so its hash keys the cache.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-next-smoke-${{ hashFiles('scripts/next-smoke.mjs') }}
+      - run: pnpm check:next
+
   e2e:
     runs-on: ubuntu-latest
     steps:

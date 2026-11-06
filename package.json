@@ -8,10 +8,14 @@
     "build": "pnpm --filter \"./packages/*\" build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "e2e": "pnpm --filter e2e e2e"
+    "e2e": "pnpm --filter e2e e2e",
+    "check:packages": "node scripts/check-packages.mjs",
+    "check:next": "node scripts/next-smoke.mjs"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
     "@types/node": "^26.6.6",
+    "publint": "0.3.25",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   }
