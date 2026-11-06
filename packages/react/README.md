@@ -14,7 +14,7 @@ import { Image, LazyEaseProvider } from '@lazy-ease/react'
 </LazyEaseProvider>
 ```
 
-Images are measured on the client and loaded at their rendered size (× DPR, capped at 2), cropped by the server and in AVIF or WebP. The placeholder (a color, a data URI or a ThumbHash) is in the server HTML. The default loader targets [`@lazy-ease/server`](https://www.npmjs.com/package/@lazy-ease/server) mounted at `/_img`; imgix, Cloudinary and Cloudflare Images work through custom loaders.
+Images are measured on the client and loaded at their rendered size (× DPR, capped at 2), cropped by the server and in AVIF or WebP. The placeholder (a color, a data URI or a ThumbHash) is in the server HTML. The default loader targets [`@lazy-ease/server`](https://github.com/mikekuss/lazy-ease/tree/main/packages/server) (not on npm yet) mounted at `/_img`; imgix, Cloudinary and Cloudflare Images work through custom loaders.
 
 Peer dependencies: `react` and `react-dom` 19.
 
