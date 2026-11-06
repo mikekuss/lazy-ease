@@ -500,6 +500,8 @@ pnpm check:next       # Next.js App Router build against the packed @lazy-ease/r
 
 The demo generates its sample images on first start. Drop your own photos into `apps/demo/images` to try them instead. The full design is in [docs/design-spec.md](docs/design-spec.md).
 
+Releases are published from GitHub Actions when a version tag is pushed; the steps are in [RELEASING.md](RELEASING.md).
+
 ## License
 
 [MIT](LICENSE)

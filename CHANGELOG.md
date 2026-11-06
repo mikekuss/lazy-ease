@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - The READMEs no longer link to `@lazy-ease/server` on npm, where it isn't published yet. They point to the repository instead.
+- `@lazy-ease/react` is published from GitHub Actions with npm Trusted Publishing, so new versions carry a provenance attestation.
 
 ## [0.2.0] - 2026-11-06
 
