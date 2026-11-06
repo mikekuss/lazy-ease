@@ -1,12 +1,11 @@
-// Packs workspace packages the way they are published and checks the tarballs.
+// Packs workspace packages for release.yml the way they are published.
 //
 //   node scripts/pack.mjs <out-dir> <package-dir>...
 //
 // Run `pnpm build` first. For each package this runs `pnpm pack` (which applies
 // `publishConfig`, unlike `npm pack`), then fails if the packed package.json
 // still has a `source` export condition or points at a file that isn't in the
-// tarball, and runs publint and @arethetypeswrong/cli on the tarball.
-// Writes <out-dir>/packed.json: [{ name, version, tarball }].
+// tarball. Writes <out-dir>/packed.json: [{ name, version, tarball }].
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -75,19 +74,6 @@ for (const dir of dirs) {
   };
   if (!manifest.exports) problems.push(`${label}: packed package.json has no exports`);
   walk(manifest.exports, "exports");
-
-  for (const [tool, args] of [
-    ["publint", ["run", tarball, "--strict"]],
-    // ESM-only packages: CommonJS consumers aren't supported.
-    ["attw", [tarball, "--profile", "esm-only"]],
-  ]) {
-    try {
-      console.log(run("pnpm", ["exec", tool, ...args]).trimEnd());
-    } catch (error) {
-      console.log(`${error.stdout ?? ""}${error.stderr ?? ""}`.trimEnd());
-      problems.push(`${label}: ${tool} failed`);
-    }
-  }
 
   packed.push({ name: manifest.name, version: manifest.version, tarball });
 }

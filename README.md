@@ -491,7 +491,7 @@ pnpm e2e        # Playwright, Chromium and WebKit
 
 The demo generates its sample images on first start. Drop your own photos into `apps/demo/images` to try them instead. The full design is in [docs/design-spec.md](docs/design-spec.md).
 
-`node scripts/pack.mjs <out-dir> packages/react packages/server` packs the packages as they are published and checks the tarballs with publint and Are the Types Wrong (run `pnpm build` first). Releases are published from GitHub Actions when a version tag is pushed; the steps are in [RELEASING.md](RELEASING.md).
+Releases are published from GitHub Actions when a version tag is pushed; the steps are in [RELEASING.md](RELEASING.md).
 
 ## License
 

@@ -100,7 +100,7 @@ jobs:
       - run: pnpm build
 
       # pnpm pack applies publishConfig (npm pack would keep the `source`
-      # export). Fails on a `source` condition, missing files, publint or attw.
+      # export). Fails on a `source` condition or a missing export target.
       - name: Pack and check
         run: node scripts/pack.mjs "$RUNNER_TEMP/pack" $PACKAGES
 
