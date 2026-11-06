@@ -489,6 +489,15 @@ pnpm build
 pnpm e2e        # Playwright, Chromium and WebKit
 ```
 
+To check the packages as npm would install them, after `pnpm build`:
+
+```bash
+pnpm check:packages   # pnpm pack, publint, attw, tarball contents
+pnpm check:next       # Next.js App Router build against the packed @lazy-ease/react
+```
+
+`check:packages` leaves the tarballs in `.cache/packs`, and `check:next` installs from there, so run it second. The Next.js check needs network access for npm.
+
 The demo generates its sample images on first start. Drop your own photos into `apps/demo/images` to try them instead. The full design is in [docs/design-spec.md](docs/design-spec.md).
 
 ## License
