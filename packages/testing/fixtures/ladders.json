@@ -1,0 +1,401 @@
+{
+  "format": "lazy-ease-fixtures",
+  "fixtureVersion": 1,
+  "contract": "0.3",
+  "file": "ladders",
+  "description": "Default width, ratio, quality and format sets, and how a value snaps to a ladder.",
+  "data": {
+    "widths": [
+      64,
+      128,
+      256,
+      384,
+      640,
+      750,
+      828,
+      1080,
+      1200,
+      1440,
+      1920,
+      2560,
+      3840
+    ],
+    "ratios": [
+      0.25,
+      0.261,
+      0.273,
+      0.285,
+      0.297,
+      0.31,
+      0.324,
+      0.339,
+      0.354,
+      0.369,
+      0.386,
+      0.403,
+      0.42,
+      0.429,
+      0.439,
+      0.459,
+      0.479,
+      0.5,
+      0.522,
+      0.545,
+      0.563,
+      0.569,
+      0.595,
+      0.621,
+      0.648,
+      0.667,
+      0.677,
+      0.707,
+      0.738,
+      0.75,
+      0.771,
+      0.805,
+      0.841,
+      0.878,
+      0.917,
+      0.958,
+      1,
+      1.044,
+      1.091,
+      1.139,
+      1.189,
+      1.242,
+      1.297,
+      1.333,
+      1.354,
+      1.414,
+      1.477,
+      1.5,
+      1.542,
+      1.61,
+      1.682,
+      1.756,
+      1.778,
+      1.834,
+      1.915,
+      2,
+      2.089,
+      2.181,
+      2.278,
+      2.333,
+      2.378,
+      2.484,
+      2.594,
+      2.709,
+      2.828,
+      2.954,
+      3.084,
+      3.221,
+      3.364,
+      3.513,
+      3.668,
+      3.83,
+      4
+    ],
+    "qualities": [
+      75
+    ],
+    "formats": [
+      "avif",
+      "webp",
+      "jpeg"
+    ]
+  },
+  "cases": [
+    {
+      "id": "width-zero",
+      "op": "snapWidth",
+      "input": {
+        "width": 0
+      },
+      "expected": {
+        "width": 64
+      }
+    },
+    {
+      "id": "width-negative",
+      "op": "snapWidth",
+      "input": {
+        "width": -5
+      },
+      "expected": {
+        "width": 64
+      }
+    },
+    {
+      "id": "width-under-minimum",
+      "op": "snapWidth",
+      "input": {
+        "width": 10
+      },
+      "expected": {
+        "width": 64
+      }
+    },
+    {
+      "id": "width-exact-minimum",
+      "op": "snapWidth",
+      "input": {
+        "width": 64
+      },
+      "expected": {
+        "width": 64
+      }
+    },
+    {
+      "id": "width-just-above-step",
+      "op": "snapWidth",
+      "input": {
+        "width": 64.5
+      },
+      "expected": {
+        "width": 128
+      }
+    },
+    {
+      "id": "width-between-steps",
+      "op": "snapWidth",
+      "input": {
+        "width": 1000
+      },
+      "expected": {
+        "width": 1080
+      }
+    },
+    {
+      "id": "width-exact-maximum",
+      "op": "snapWidth",
+      "input": {
+        "width": 3840
+      },
+      "expected": {
+        "width": 3840
+      }
+    },
+    {
+      "id": "width-above-maximum",
+      "op": "snapWidth",
+      "input": {
+        "width": 5000
+      },
+      "expected": {
+        "width": 3840
+      }
+    },
+    {
+      "id": "custom-ladder-between",
+      "op": "snapWidth",
+      "input": {
+        "width": 600,
+        "ladder": [
+          128,
+          256,
+          512,
+          1024
+        ]
+      },
+      "expected": {
+        "width": 1024
+      }
+    },
+    {
+      "id": "custom-ladder-above",
+      "op": "snapWidth",
+      "input": {
+        "width": 2000,
+        "ladder": [
+          128,
+          256,
+          512,
+          1024
+        ]
+      },
+      "expected": {
+        "width": 1024
+      }
+    },
+    {
+      "id": "custom-ladder-under",
+      "op": "snapWidth",
+      "input": {
+        "width": 1,
+        "ladder": [
+          128,
+          256,
+          512,
+          1024
+        ]
+      },
+      "expected": {
+        "width": 128
+      }
+    },
+    {
+      "id": "ratio-square",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 1
+      },
+      "expected": {
+        "ratio": 1
+      }
+    },
+    {
+      "id": "ratio-four-thirds",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 1.3333333333333333
+      },
+      "expected": {
+        "ratio": 1.333
+      }
+    },
+    {
+      "id": "ratio-four-thirds-rounded",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 1.3333
+      },
+      "expected": {
+        "ratio": 1.333
+      }
+    },
+    {
+      "id": "ratio-nine-sixteenths",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 0.5625
+      },
+      "expected": {
+        "ratio": 0.563
+      }
+    },
+    {
+      "id": "ratio-between",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 1.7
+      },
+      "expected": {
+        "ratio": 1.682
+      }
+    },
+    {
+      "id": "ratio-below-ladder",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 0.1
+      },
+      "expected": {
+        "ratio": 0.25
+      }
+    },
+    {
+      "id": "ratio-above-ladder",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 10
+      },
+      "expected": {
+        "ratio": 4
+      }
+    },
+    {
+      "id": "ratio-cinema",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 2.35
+      },
+      "expected": {
+        "ratio": 2.333
+      }
+    },
+    {
+      "id": "custom-ratio-lower",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 1.414,
+        "ladder": [
+          1,
+          2
+        ]
+      },
+      "expected": {
+        "ratio": 1
+      }
+    },
+    {
+      "id": "custom-ratio-upper",
+      "op": "snapRatio",
+      "input": {
+        "ratio": 1.4143,
+        "ladder": [
+          1,
+          2
+        ]
+      },
+      "expected": {
+        "ratio": 2
+      }
+    },
+    {
+      "id": "quality-exact",
+      "op": "snapQuality",
+      "input": {
+        "quality": 75,
+        "allowed": [
+          75
+        ]
+      },
+      "expected": {
+        "quality": 75
+      }
+    },
+    {
+      "id": "quality-nearest",
+      "op": "snapQuality",
+      "input": {
+        "quality": 80,
+        "allowed": [
+          50,
+          75,
+          90
+        ]
+      },
+      "expected": {
+        "quality": 75
+      }
+    },
+    {
+      "id": "quality-tie-goes-up",
+      "op": "snapQuality",
+      "input": {
+        "quality": 82.5,
+        "allowed": [
+          75,
+          90
+        ]
+      },
+      "expected": {
+        "quality": 90
+      }
+    },
+    {
+      "id": "quality-below",
+      "op": "snapQuality",
+      "input": {
+        "quality": 10,
+        "allowed": [
+          50,
+          75
+        ]
+      },
+      "expected": {
+        "quality": 50
+      }
+    }
+  ]
+}

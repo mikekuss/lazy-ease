@@ -1,5 +1,5 @@
-// Builds a minimal Next.js App Router app against the packed @lazy-ease/react
-// and @lazy-ease/core tarballs, installed with npm in a temporary folder, and checks the
+// Builds a minimal Next.js App Router app against the packed @lazy-ease/react,
+// @lazy-ease/core and @lazy-ease/testing tarballs, installed with npm in a temporary folder, and checks the
 // prerendered HTML. Catches a lost 'use client' directive, a broken export and
 // server-rendered styles that don't reach the HTML.
 // Run `pnpm build && pnpm check:packages` first; it leaves the tarballs in .cache/packs.
@@ -18,8 +18,9 @@ const packDir = join(root, '.cache', 'packs')
 const packed = (name) => existsSync(packDir) && readdirSync(packDir).find((file) => file.startsWith(`lazy-ease-${name}-`) && file.endsWith('.tgz'))
 const tarball = packed('react')
 const coreTarball = packed('core')
-if (!tarball || !coreTarball) {
-  console.error('No @lazy-ease/react or @lazy-ease/core tarball in .cache/packs. Run `pnpm build && pnpm check:packages` first.')
+const testingTarball = packed('testing')
+if (!tarball || !coreTarball || !testingTarball) {
+  console.error('No @lazy-ease/react, @lazy-ease/core or @lazy-ease/testing tarball in .cache/packs. Run `pnpm build && pnpm check:packages` first.')
   process.exit(1)
 }
 const fileSpec = (file) => `file:${join(packDir, file).replaceAll('\\', '/')}`
@@ -37,6 +38,7 @@ const files = {
       dependencies: {
         '@lazy-ease/core': fileSpec(coreTarball),
         '@lazy-ease/react': fileSpec(tarball),
+        '@lazy-ease/testing': fileSpec(testingTarball),
         next: NEXT,
         react: REACT,
         'react-dom': REACT,
@@ -85,14 +87,22 @@ export function Providers({ children }) {
   // A Server Component that imports <Image> and the plain functions directly.
   'app/page.jsx': `
 import { Image, createLoader, DEFAULT_WIDTHS } from '@lazy-ease/react'
+import { casesOf } from '@lazy-ease/testing'
 
 const reference = createLoader({ baseUrl: '/_img' })
+
+// The fixture JSON goes through the bundler's JSON modules; core writes each URL.
+const fixtureUrls = casesOf('urls', 'url', { skipTopics: ['nfc', 'token'] })
+const fixtureMismatches = fixtureUrls
+  .filter(({ input, expected }) => createLoader(input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }).url(input.request) !== expected.url)
+  .map(({ id }) => id)
 
 export default function Page() {
   const url = reference.url({ src: '/a.jpg', width: DEFAULT_WIDTHS[0], quality: 75, format: 'webp' })
   return (
     <main>
       <p id="reference-url">{url}</p>
+      <p id="fixture-urls">{[\`fixture URLs: \${fixtureUrls.length - fixtureMismatches.length} of \${fixtureUrls.length} match\`, ...fixtureMismatches].join(' ')}</p>
       <div style={{ position: 'relative', width: '100%', height: 400 }}>
         <Image
           src="/banner.jpg"
@@ -149,6 +159,12 @@ const expectations = [
   ['a URL from the provider loader', '/custom-loader/banner.jpg?w='],
   ['the createLoader() URL', '/_img/a.jpg?fmt=webp&amp;q=75&amp;w='],
 ]
+// Every non-pending URL record of @lazy-ease/testing, reproduced inside the Next build.
+const testingDir = join(root, 'packages', 'testing')
+const urlCases = JSON.parse(readFileSync(join(testingDir, 'fixtures', 'urls.json'), 'utf8')).cases.filter(
+  (c) => c.op === 'url' && !(c.topics ?? []).some((t) => t === 'nfc' || t === 'token'),
+)
+expectations.push(['every fixture URL from core', `fixture URLs: ${urlCases.length} of ${urlCases.length} match</p>`])
 let failures = 0
 for (const [what, needle] of expectations) {
   if (html.includes(needle)) console.log(`✓ HTML has ${what}`)

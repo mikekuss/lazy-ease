@@ -1,0 +1,509 @@
+{
+  "format": "lazy-ease-fixtures",
+  "fixtureVersion": 1,
+  "contract": "0.3",
+  "file": "outputs",
+  "description": "Pixel size the reference backend encodes for a request, from oriented source dimensions.",
+  "cases": [
+    {
+      "id": "uncropped-downscale",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 2000,
+        "srcHeight": 1000,
+        "width": 640
+      },
+      "expected": {
+        "requestWidth": 640,
+        "width": 640,
+        "height": 320
+      }
+    },
+    {
+      "id": "uncropped-no-upscale",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 300,
+        "srcHeight": 200,
+        "width": 640
+      },
+      "expected": {
+        "requestWidth": 640,
+        "width": 300,
+        "height": 200
+      }
+    },
+    {
+      "id": "uncropped-height-rounds",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 801,
+        "srcHeight": 599,
+        "width": 384
+      },
+      "expected": {
+        "requestWidth": 384,
+        "width": 384,
+        "height": 287
+      }
+    },
+    {
+      "id": "square-crop-full",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 1200,
+        "srcHeight": 400,
+        "width": 384,
+        "aspectRatio": 1
+      },
+      "expected": {
+        "requestWidth": 384,
+        "width": 384,
+        "height": 384
+      }
+    },
+    {
+      "id": "square-crop-capped-by-source",
+      "op": "outputSize",
+      "note": "The square window has 400 x 400 pixels; never upscaled",
+      "input": {
+        "srcWidth": 1200,
+        "srcHeight": 400,
+        "width": 640,
+        "aspectRatio": 1
+      },
+      "expected": {
+        "requestWidth": 640,
+        "width": 400,
+        "height": 400
+      }
+    },
+    {
+      "id": "square-crop-focal-capped",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 1200,
+        "srcHeight": 400,
+        "width": 640,
+        "aspectRatio": 1,
+        "focalPoint": {
+          "x": 10,
+          "y": 50
+        }
+      },
+      "expected": {
+        "requestWidth": 640,
+        "width": 400,
+        "height": 400
+      }
+    },
+    {
+      "id": "four-thirds-crop",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 2000,
+        "srcHeight": 1000,
+        "width": 640,
+        "aspectRatio": 1.333
+      },
+      "expected": {
+        "requestWidth": 640,
+        "width": 640,
+        "height": 480
+      }
+    },
+    {
+      "id": "portrait-crop-of-landscape",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 2000,
+        "srcHeight": 1000,
+        "width": 256,
+        "aspectRatio": 0.563
+      },
+      "expected": {
+        "requestWidth": 256,
+        "width": 256,
+        "height": 455
+      }
+    },
+    {
+      "id": "wide-crop-of-portrait",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 600,
+        "srcHeight": 1200,
+        "width": 128,
+        "aspectRatio": 1.778
+      },
+      "expected": {
+        "requestWidth": 128,
+        "width": 128,
+        "height": 72
+      }
+    },
+    {
+      "id": "tiny-source-collapses",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 40,
+        "srcHeight": 40,
+        "width": 128,
+        "aspectRatio": 1
+      },
+      "expected": {
+        "requestWidth": 128,
+        "width": 40,
+        "height": 40
+      }
+    },
+    {
+      "id": "tiny-source-uncropped",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 40,
+        "srcHeight": 40,
+        "width": 128
+      },
+      "expected": {
+        "requestWidth": 128,
+        "width": 40,
+        "height": 40
+      }
+    },
+    {
+      "id": "under-minimum-source",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 100,
+        "srcHeight": 75,
+        "width": 128
+      },
+      "expected": {
+        "requestWidth": 128,
+        "width": 100,
+        "height": 75
+      }
+    },
+    {
+      "id": "fractional-width-uncropped",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 2000,
+        "srcHeight": 1000,
+        "width": 63.6
+      },
+      "expected": {
+        "requestWidth": 63.6,
+        "width": 64,
+        "height": 32
+      }
+    },
+    {
+      "id": "fractional-width-half",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 2000,
+        "srcHeight": 1000,
+        "width": 100.5
+      },
+      "expected": {
+        "requestWidth": 100.5,
+        "width": 101,
+        "height": 51
+      }
+    },
+    {
+      "id": "fractional-width-cropped",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 2000,
+        "srcHeight": 1000,
+        "width": 100.5,
+        "aspectRatio": 1
+      },
+      "expected": {
+        "requestWidth": 100.5,
+        "width": 101,
+        "height": 101
+      }
+    },
+    {
+      "id": "fractional-width-small-source",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 40,
+        "srcHeight": 40,
+        "width": 63.6,
+        "aspectRatio": 1
+      },
+      "expected": {
+        "requestWidth": 63.6,
+        "width": 40,
+        "height": 40
+      }
+    },
+    {
+      "id": "height-rounds-to-zero-wide",
+      "op": "outputSize",
+      "note": "round(10 / 25) = 0: no target height, so the width alone scales the source: 10 x 5",
+      "input": {
+        "srcWidth": 2000,
+        "srcHeight": 1000,
+        "width": 10,
+        "aspectRatio": 25
+      },
+      "expected": {
+        "requestWidth": 10,
+        "width": 10,
+        "height": 5
+      }
+    },
+    {
+      "id": "height-rounds-to-zero-one-pixel",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 2000,
+        "srcHeight": 1000,
+        "width": 1.1,
+        "aspectRatio": 2.333
+      },
+      "expected": {
+        "requestWidth": 1.1,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "id": "height-rounds-to-zero-focal",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 1200,
+        "srcHeight": 400,
+        "width": 1.1,
+        "aspectRatio": 2.333,
+        "focalPoint": {
+          "x": 30,
+          "y": 45
+        }
+      },
+      "expected": {
+        "requestWidth": 1.1,
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "id": "extreme-tall-crop",
+      "op": "outputSize",
+      "note": "A 3 x 10 window; 64 x 256 shrinks to 3 x 10",
+      "input": {
+        "srcWidth": 4000,
+        "srcHeight": 10,
+        "width": 64,
+        "aspectRatio": 0.25,
+        "focalPoint": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "expected": {
+        "requestWidth": 64,
+        "width": 3,
+        "height": 10
+      }
+    },
+    {
+      "id": "extreme-tall-crop-centered",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 4000,
+        "srcHeight": 10,
+        "width": 64,
+        "aspectRatio": 0.25
+      },
+      "expected": {
+        "requestWidth": 64,
+        "width": 3,
+        "height": 10
+      }
+    },
+    {
+      "id": "extreme-wide-crop",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 10,
+        "srcHeight": 4000,
+        "width": 3840,
+        "aspectRatio": 4,
+        "focalPoint": {
+          "x": 37,
+          "y": 62
+        }
+      },
+      "expected": {
+        "requestWidth": 3840,
+        "width": 10,
+        "height": 3
+      }
+    },
+    {
+      "id": "focal-vs-center-rounding",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 801,
+        "srcHeight": 599,
+        "width": 640,
+        "aspectRatio": 1.333,
+        "focalPoint": {
+          "x": 70,
+          "y": 45
+        }
+      },
+      "expected": {
+        "requestWidth": 640,
+        "width": 640,
+        "height": 480
+      }
+    },
+    {
+      "id": "center-rounding",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 801,
+        "srcHeight": 599,
+        "width": 640,
+        "aspectRatio": 1.333
+      },
+      "expected": {
+        "requestWidth": 640,
+        "width": 640,
+        "height": 480
+      }
+    },
+    {
+      "id": "oriented-6-uncropped",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 200,
+        "srcHeight": 400,
+        "width": 128,
+        "stored": {
+          "width": 400,
+          "height": 200,
+          "orientation": 6
+        }
+      },
+      "expected": {
+        "requestWidth": 128,
+        "width": 128,
+        "height": 256
+      }
+    },
+    {
+      "id": "oriented-6-square",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 200,
+        "srcHeight": 400,
+        "width": 640,
+        "aspectRatio": 1,
+        "focalPoint": {
+          "x": 50,
+          "y": 0
+        },
+        "stored": {
+          "width": 400,
+          "height": 200,
+          "orientation": 6
+        }
+      },
+      "expected": {
+        "requestWidth": 640,
+        "width": 200,
+        "height": 200
+      }
+    },
+    {
+      "id": "oriented-6-wide",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 200,
+        "srcHeight": 400,
+        "width": 384,
+        "aspectRatio": 2,
+        "stored": {
+          "width": 400,
+          "height": 200,
+          "orientation": 6
+        }
+      },
+      "expected": {
+        "requestWidth": 384,
+        "width": 200,
+        "height": 100
+      }
+    },
+    {
+      "id": "oriented-8-portrait",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 200,
+        "srcHeight": 400,
+        "width": 128,
+        "aspectRatio": 0.5,
+        "focalPoint": {
+          "x": 20,
+          "y": 75
+        },
+        "stored": {
+          "width": 400,
+          "height": 200,
+          "orientation": 8
+        }
+      },
+      "expected": {
+        "requestWidth": 128,
+        "width": 128,
+        "height": 256
+      }
+    },
+    {
+      "id": "invalid-source-width",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 0,
+        "srcHeight": 100,
+        "width": 64
+      },
+      "expected": {
+        "error": "range"
+      }
+    },
+    {
+      "id": "invalid-request-width",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 100,
+        "srcHeight": 100,
+        "width": 0
+      },
+      "expected": {
+        "error": "range"
+      }
+    },
+    {
+      "id": "invalid-ratio",
+      "op": "outputSize",
+      "input": {
+        "srcWidth": 100,
+        "srcHeight": 100,
+        "width": 64,
+        "aspectRatio": 0
+      },
+      "expected": {
+        "error": "range"
+      }
+    }
+  ]
+}

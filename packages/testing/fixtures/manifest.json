@@ -1,0 +1,61 @@
+{
+  "format": "lazy-ease-fixtures",
+  "fixtureVersion": 1,
+  "contract": "0.3",
+  "files": [
+    {
+      "name": "ladders.json",
+      "bytes": 6302,
+      "sha256": "a32a0bd38c868051afbec2e39bc4afaea1a9ee1d92b0932392cb2cc9061cbe76",
+      "cases": 25
+    },
+    {
+      "name": "numbers.json",
+      "bytes": 5610,
+      "sha256": "b4552fcf44040786fc9ce92378f39c13621806cf78b96eab546cce259148758f",
+      "cases": 30
+    },
+    {
+      "name": "focal.json",
+      "bytes": 2485,
+      "sha256": "3cd782d6f2fdf1fdd05540b82056f1c2831677fdf5de2436cd6cec43059bfc53",
+      "cases": 10
+    },
+    {
+      "name": "crops.json",
+      "bytes": 8243,
+      "sha256": "90bd13a5018cf0e2e5b9f5f13c864f362512954f0d582a3ac2cd43688b88d4ff",
+      "cases": 20
+    },
+    {
+      "name": "outputs.json",
+      "bytes": 10351,
+      "sha256": "eaa01e6ffcee34b0d255e223ba522c7647cfc211a9185e2e0b57892f7540b934",
+      "cases": 31
+    },
+    {
+      "name": "candidates.json",
+      "bytes": 21149,
+      "sha256": "30c78749733e993295096ab4670301201395f802d0dfeabfb408eb41bf83c1f4",
+      "cases": 18
+    },
+    {
+      "name": "urls.json",
+      "bytes": 11613,
+      "sha256": "dfa4170b7d62fe7eac743fe8bd807756f004a2dc9f3c12e366d964d547887468",
+      "cases": 39
+    },
+    {
+      "name": "backend.json",
+      "bytes": 13595,
+      "sha256": "0735fecf35891caedc516000393bd6d7df3abe6516074fb274a3d03e74aaede3",
+      "cases": 56
+    },
+    {
+      "name": "tokens.json",
+      "bytes": 20923,
+      "sha256": "76b28697472b733a5577eb4b9d7a6659745d1c7d5d9c27be7ad3c25027e3b33c",
+      "cases": 48
+    }
+  ]
+}

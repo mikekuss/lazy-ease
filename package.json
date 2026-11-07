@@ -10,10 +10,12 @@
     "test": "vitest run",
     "e2e": "pnpm --filter e2e e2e",
     "check:packages": "node scripts/check-packages.mjs",
-    "check:next": "node scripts/next-smoke.mjs"
+    "check:next": "node scripts/next-smoke.mjs",
+    "check:fixtures": "python3 scripts/check-fixtures.py"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
+    "@lazy-ease/testing": "workspace:*",
     "@types/node": "^26.6.6",
     "publint": "0.3.25",
     "typescript": "^7.0.2",

@@ -1,0 +1,143 @@
+{
+  "format": "lazy-ease-fixtures",
+  "fixtureVersion": 1,
+  "contract": "0.3",
+  "file": "focal",
+  "description": "Focal point normalization: whole percent, clamped to 0-100, the center is absent.",
+  "cases": [
+    {
+      "id": "plain",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": 30,
+        "y": 45
+      },
+      "expected": {
+        "focalPoint": {
+          "x": 30,
+          "y": 45
+        }
+      }
+    },
+    {
+      "id": "center-is-absent",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": 50,
+        "y": 50
+      },
+      "expected": {
+        "focalPoint": null
+      }
+    },
+    {
+      "id": "rounds-to-center",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": 49.6,
+        "y": 50.4
+      },
+      "expected": {
+        "focalPoint": null
+      }
+    },
+    {
+      "id": "half-rounds-up",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": 49.5,
+        "y": 50.5
+      },
+      "expected": {
+        "focalPoint": {
+          "x": 50,
+          "y": 51
+        }
+      }
+    },
+    {
+      "id": "clamped",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": -3,
+        "y": 120
+      },
+      "expected": {
+        "focalPoint": {
+          "x": 0,
+          "y": 100
+        }
+      }
+    },
+    {
+      "id": "half-at-edges",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": 0.5,
+        "y": 99.5
+      },
+      "expected": {
+        "focalPoint": {
+          "x": 1,
+          "y": 100
+        }
+      }
+    },
+    {
+      "id": "negative-half",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": -0.5,
+        "y": 50
+      },
+      "expected": {
+        "focalPoint": {
+          "x": 0,
+          "y": 50
+        }
+      }
+    },
+    {
+      "id": "fractions",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": 33.333,
+        "y": 66.667
+      },
+      "expected": {
+        "focalPoint": {
+          "x": 33,
+          "y": 67
+        }
+      }
+    },
+    {
+      "id": "corner-min",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": 0,
+        "y": 0
+      },
+      "expected": {
+        "focalPoint": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "corner-max",
+      "op": "normalizeFocalPoint",
+      "input": {
+        "x": 100,
+        "y": 100
+      },
+      "expected": {
+        "focalPoint": {
+          "x": 100,
+          "y": 100
+        }
+      }
+    }
+  ]
+}

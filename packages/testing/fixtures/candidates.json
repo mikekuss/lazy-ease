@@ -1,0 +1,1033 @@
+{
+  "format": "lazy-ease-fixtures",
+  "fixtureVersion": 1,
+  "contract": "0.3",
+  "file": "candidates",
+  "description": "Candidate request widths per layout mode, their encoded sizes, and the deduplicated srcset or single URL.",
+  "cases": [
+    {
+      "id": "measured-large-source",
+      "input": {
+        "mode": "measured",
+        "slotWidth": 300,
+        "srcWidth": 2000,
+        "srcHeight": 1000
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384,
+          640
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 32
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 64
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 128
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 192
+          },
+          {
+            "requestWidth": 640,
+            "width": 640,
+            "height": 320
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 32
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 64
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 128
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 192
+          },
+          {
+            "requestWidth": 640,
+            "width": 640,
+            "height": 320
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "measured-capped-by-source",
+      "input": {
+        "mode": "measured",
+        "slotWidth": 300,
+        "srcWidth": 400,
+        "srcHeight": 300
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 48
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 96
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 192
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 288
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 48
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 96
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 192
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 288
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "measured-under-minimum-slot",
+      "input": {
+        "mode": "measured",
+        "slotWidth": 10,
+        "srcWidth": 2000,
+        "srcHeight": 1000
+      },
+      "expected": {
+        "requestWidths": [
+          64
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 32
+          }
+        ],
+        "srcset": null,
+        "single": {
+          "requestWidth": 64,
+          "width": 64,
+          "height": 32
+        }
+      }
+    },
+    {
+      "id": "measured-cropped-rounding",
+      "input": {
+        "mode": "measured",
+        "slotWidth": 200,
+        "srcWidth": 801,
+        "srcHeight": 599,
+        "aspectRatio": 1.333
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384,
+          640
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 48
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 96
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 192
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 288
+          },
+          {
+            "requestWidth": 640,
+            "width": 640,
+            "height": 480
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 48
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 96
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 192
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 288
+          },
+          {
+            "requestWidth": 640,
+            "width": 640,
+            "height": 480
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "measured-oriented-source",
+      "note": "Oriented 200 x 400 (stored 400 x 200, EXIF 6)",
+      "input": {
+        "mode": "measured",
+        "slotWidth": 150,
+        "srcWidth": 200,
+        "srcHeight": 400,
+        "aspectRatio": 1
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 64
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 128
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 64
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 128
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "fixed-avatar",
+      "input": {
+        "mode": "fixed",
+        "slotWidth": 56,
+        "srcWidth": 1000,
+        "srcHeight": 1000,
+        "aspectRatio": 1,
+        "focalPoint": {
+          "x": 40,
+          "y": 30
+        }
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 64
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 128
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 64
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 128
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "fixed-avatar-tiny-source",
+      "note": "A 40 px original can only produce 40 px: one URL",
+      "input": {
+        "mode": "fixed",
+        "slotWidth": 56,
+        "srcWidth": 40,
+        "srcHeight": 40,
+        "aspectRatio": 1
+      },
+      "expected": {
+        "requestWidths": [
+          64
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 40,
+            "height": 40
+          }
+        ],
+        "srcset": null,
+        "single": {
+          "requestWidth": 64,
+          "width": 40,
+          "height": 40
+        }
+      }
+    },
+    {
+      "id": "fixed-card",
+      "input": {
+        "mode": "fixed",
+        "slotWidth": 320,
+        "srcWidth": 1600,
+        "srcHeight": 1200,
+        "aspectRatio": 1.333
+      },
+      "expected": {
+        "requestWidths": [
+          384,
+          640
+        ],
+        "outputs": [
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 288
+          },
+          {
+            "requestWidth": 640,
+            "width": 640,
+            "height": 480
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 288
+          },
+          {
+            "requestWidth": 640,
+            "width": 640,
+            "height": 480
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "full-crop-dedupe",
+      "note": "Every request from 640 up encodes the same 400 x 400 window",
+      "input": {
+        "mode": "full",
+        "slotWidth": 0,
+        "srcWidth": 1200,
+        "srcHeight": 400,
+        "aspectRatio": 1
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384,
+          640,
+          750,
+          828,
+          1080,
+          1200
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 64
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 128
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 256
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 384
+          },
+          {
+            "requestWidth": 640,
+            "width": 400,
+            "height": 400
+          },
+          {
+            "requestWidth": 750,
+            "width": 400,
+            "height": 400
+          },
+          {
+            "requestWidth": 828,
+            "width": 400,
+            "height": 400
+          },
+          {
+            "requestWidth": 1080,
+            "width": 400,
+            "height": 400
+          },
+          {
+            "requestWidth": 1200,
+            "width": 400,
+            "height": 400
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 64
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 128
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 256
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 384
+          },
+          {
+            "requestWidth": 640,
+            "width": 400,
+            "height": 400
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "full-focal-dedupe",
+      "input": {
+        "mode": "full",
+        "slotWidth": 0,
+        "srcWidth": 1200,
+        "srcHeight": 400,
+        "aspectRatio": 1,
+        "focalPoint": {
+          "x": 75,
+          "y": 20
+        }
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384,
+          640,
+          750,
+          828,
+          1080,
+          1200
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 64
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 128
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 256
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 384
+          },
+          {
+            "requestWidth": 640,
+            "width": 400,
+            "height": 400
+          },
+          {
+            "requestWidth": 750,
+            "width": 400,
+            "height": 400
+          },
+          {
+            "requestWidth": 828,
+            "width": 400,
+            "height": 400
+          },
+          {
+            "requestWidth": 1080,
+            "width": 400,
+            "height": 400
+          },
+          {
+            "requestWidth": 1200,
+            "width": 400,
+            "height": 400
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 64
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 128
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 256
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 384
+          },
+          {
+            "requestWidth": 640,
+            "width": 400,
+            "height": 400
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "full-extreme-crop",
+      "input": {
+        "mode": "full",
+        "slotWidth": 0,
+        "srcWidth": 4000,
+        "srcHeight": 10,
+        "aspectRatio": 0.25,
+        "focalPoint": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384,
+          640,
+          750,
+          828,
+          1080,
+          1200,
+          1440,
+          1920,
+          2560,
+          3840
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 128,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 256,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 384,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 640,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 750,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 828,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 1080,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 1200,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 1440,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 1920,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 2560,
+            "width": 3,
+            "height": 10
+          },
+          {
+            "requestWidth": 3840,
+            "width": 3,
+            "height": 10
+          }
+        ],
+        "srcset": null,
+        "single": {
+          "requestWidth": 64,
+          "width": 3,
+          "height": 10
+        }
+      }
+    },
+    {
+      "id": "full-uncropped",
+      "input": {
+        "mode": "full",
+        "slotWidth": 0,
+        "srcWidth": 1600,
+        "srcHeight": 1000
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384,
+          640,
+          750,
+          828,
+          1080,
+          1200,
+          1440
+        ],
+        "outputs": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 40
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 80
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 160
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 240
+          },
+          {
+            "requestWidth": 640,
+            "width": 640,
+            "height": 400
+          },
+          {
+            "requestWidth": 750,
+            "width": 750,
+            "height": 469
+          },
+          {
+            "requestWidth": 828,
+            "width": 828,
+            "height": 518
+          },
+          {
+            "requestWidth": 1080,
+            "width": 1080,
+            "height": 675
+          },
+          {
+            "requestWidth": 1200,
+            "width": 1200,
+            "height": 750
+          },
+          {
+            "requestWidth": 1440,
+            "width": 1440,
+            "height": 900
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 64,
+            "width": 64,
+            "height": 40
+          },
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 80
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 160
+          },
+          {
+            "requestWidth": 384,
+            "width": 384,
+            "height": 240
+          },
+          {
+            "requestWidth": 640,
+            "width": 640,
+            "height": 400
+          },
+          {
+            "requestWidth": 750,
+            "width": 750,
+            "height": 469
+          },
+          {
+            "requestWidth": 828,
+            "width": 828,
+            "height": 518
+          },
+          {
+            "requestWidth": 1080,
+            "width": 1080,
+            "height": 675
+          },
+          {
+            "requestWidth": 1200,
+            "width": 1200,
+            "height": 750
+          },
+          {
+            "requestWidth": 1440,
+            "width": 1440,
+            "height": 900
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "custom-ladder-tiny-source",
+      "input": {
+        "mode": "measured",
+        "slotWidth": 30,
+        "ladder": [
+          128,
+          256,
+          512,
+          1024
+        ],
+        "srcWidth": 100,
+        "srcHeight": 75
+      },
+      "expected": {
+        "requestWidths": [
+          128
+        ],
+        "outputs": [
+          {
+            "requestWidth": 128,
+            "width": 100,
+            "height": 75
+          }
+        ],
+        "srcset": null,
+        "single": {
+          "requestWidth": 128,
+          "width": 100,
+          "height": 75
+        }
+      }
+    },
+    {
+      "id": "custom-ladder-large-source",
+      "input": {
+        "mode": "full",
+        "slotWidth": 0,
+        "ladder": [
+          128,
+          256,
+          512,
+          1024
+        ],
+        "srcWidth": 5000,
+        "srcHeight": 2500
+      },
+      "expected": {
+        "requestWidths": [
+          128,
+          256,
+          512,
+          1024
+        ],
+        "outputs": [
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 64
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 128
+          },
+          {
+            "requestWidth": 512,
+            "width": 512,
+            "height": 256
+          },
+          {
+            "requestWidth": 1024,
+            "width": 1024,
+            "height": 512
+          }
+        ],
+        "srcset": [
+          {
+            "requestWidth": 128,
+            "width": 128,
+            "height": 64
+          },
+          {
+            "requestWidth": 256,
+            "width": 256,
+            "height": 128
+          },
+          {
+            "requestWidth": 512,
+            "width": 512,
+            "height": 256
+          },
+          {
+            "requestWidth": 1024,
+            "width": 1024,
+            "height": 512
+          }
+        ],
+        "single": null
+      }
+    },
+    {
+      "id": "unknown-metadata-measured",
+      "note": "Without source dimensions the encoded size is unknown: one URL",
+      "input": {
+        "mode": "measured",
+        "slotWidth": 300
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384,
+          640
+        ],
+        "outputs": null,
+        "srcset": null,
+        "single": {
+          "requestWidth": 640,
+          "width": null,
+          "height": null
+        }
+      }
+    },
+    {
+      "id": "unknown-metadata-fixed",
+      "input": {
+        "mode": "fixed",
+        "slotWidth": 320
+      },
+      "expected": {
+        "requestWidths": [
+          384,
+          640
+        ],
+        "outputs": null,
+        "srcset": null,
+        "single": {
+          "requestWidth": 640,
+          "width": null,
+          "height": null
+        }
+      }
+    },
+    {
+      "id": "unknown-metadata-full",
+      "input": {
+        "mode": "full",
+        "slotWidth": 0,
+        "ladder": [
+          128,
+          256,
+          512,
+          1024
+        ]
+      },
+      "expected": {
+        "requestWidths": [
+          128,
+          256,
+          512,
+          1024
+        ],
+        "outputs": null,
+        "srcset": null,
+        "single": {
+          "requestWidth": 1024,
+          "width": null,
+          "height": null
+        }
+      }
+    },
+    {
+      "id": "unknown-height-only-width",
+      "note": "srcWidth caps the ladder, but the output size still needs both dimensions",
+      "input": {
+        "mode": "measured",
+        "slotWidth": 300,
+        "srcWidth": 2000
+      },
+      "expected": {
+        "requestWidths": [
+          64,
+          128,
+          256,
+          384,
+          640
+        ],
+        "outputs": null,
+        "srcset": null,
+        "single": {
+          "requestWidth": 640,
+          "width": null,
+          "height": null
+        }
+      }
+    }
+  ]
+}
