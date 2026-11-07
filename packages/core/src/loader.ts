@@ -1,6 +1,6 @@
 import type { FocalPoint } from './focal.js'
 import { formatNumber } from './numbers.js'
-import { DEFAULT_RATIOS } from './ratios.js'
+import { defaultRatios } from './ratios.js'
 import { DEFAULT_WIDTHS } from './widths.js'
 
 export type ImageFormat = 'avif' | 'webp' | 'jpeg'
@@ -63,11 +63,11 @@ export function normalizeLoader(loader: ImageLoader | ImageLoaderFunction): Reso
       ? {
           url: loader,
           widths: DEFAULT_WIDTHS,
-          ratios: DEFAULT_RATIOS,
+          ratios: defaultRatios(),
           qualities: DEFAULT_QUALITIES,
           formats: DEFAULT_FORMATS,
         }
-      : { ...loader, ratios: loader.ratios ?? DEFAULT_RATIOS }
+      : { ...loader, ratios: loader.ratios ?? defaultRatios() }
   normalized.set(loader, resolved)
   return resolved
 }
@@ -91,6 +91,11 @@ export interface LoaderOptions {
   widths?: readonly number[]
   ratios?: readonly number[]
   qualities?: readonly number[]
+  /**
+   * Formats the backend renders, best first among AVIF, WebP and JPEG.
+   * Default: all three. With one format the browser needs no probe.
+   */
+  formats?: readonly ImageFormat[]
   /** Extra query parameters added to every URL, sorted in with the others. */
   params?: Record<string, string | number>
 }
@@ -130,8 +135,9 @@ export function encodePath(src: string): string {
 export function createLoader({
   baseUrl = '/_img',
   widths = DEFAULT_WIDTHS,
-  ratios = DEFAULT_RATIOS,
+  ratios = defaultRatios(),
   qualities = DEFAULT_QUALITIES,
+  formats = DEFAULT_FORMATS,
   params = {},
 }: LoaderOptions = {}): ResolvedLoader {
   const base = baseUrl.replace(/\/+$/, '')
@@ -139,7 +145,7 @@ export function createLoader({
     widths,
     ratios,
     qualities,
-    formats: DEFAULT_FORMATS,
+    formats,
     url: ({ src, width, aspectRatio, quality, format, version, focalPoint }) => {
       const extra = Object.entries(params).map(([key, value]) => [key.toLowerCase(), value])
       const values: Record<string, string | number | undefined> = {

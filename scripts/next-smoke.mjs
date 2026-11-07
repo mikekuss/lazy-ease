@@ -87,7 +87,14 @@ export function Providers({ children }) {
   // A Server Component that imports <Image> and the plain functions directly.
   'app/page.jsx': `
 import { Image, createLoader, DEFAULT_WIDTHS } from '@lazy-ease/react'
+import { candidateSet, createLazyEase } from '@lazy-ease/core'
+import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { casesOf } from '@lazy-ease/testing'
+
+// Both core entry points import on the server: the controller module does nothing until attach.
+const candidates = candidateSet({ src: '/strip.jpg', widths: [256, 384, 640], srcWidth: 2000, srcHeight: 300, aspectRatio: 1, quality: 75, format: 'webp', loader: createLoader() })
+const decode = thumbhashDecoder({ thumbHashToAverageRGBA: () => ({ r: 0, g: 0.5, b: 1, a: 1 }), thumbHashToDataURL: () => '' })
+const thumbhashColor = decode('1QcSHQRnh493V4dIh4eXh1h4kJUI').style.backgroundColor
 
 const reference = createLoader({ baseUrl: '/_img' })
 
@@ -102,6 +109,7 @@ export default function Page() {
   return (
     <main>
       <p id="reference-url">{url}</p>
+      <p id="core-entries">{\`controller: \${typeof createLazyEase}; candidates: \${candidates.srcset}; thumbhash: \${thumbhashColor}\`}</p>
       <p id="fixture-urls">{[\`fixture URLs: \${fixtureUrls.length - fixtureMismatches.length} of \${fixtureUrls.length} match\`, ...fixtureMismatches].join(' ')}</p>
       <div style={{ position: 'relative', width: '100%', height: 400 }}>
         <Image
@@ -158,6 +166,10 @@ const expectations = [
   ['the focal-point object-position', 'object-position:clamp('],
   ['a URL from the provider loader', '/custom-loader/banner.jpg?w='],
   ['the createLoader() URL', '/_img/a.jpg?fmt=webp&amp;q=75&amp;w='],
+  [
+    'both core entry points',
+    'controller: function; candidates: /_img/strip.jpg?ar=1&amp;fmt=webp&amp;q=75&amp;w=256 256w, /_img/strip.jpg?ar=1&amp;fmt=webp&amp;q=75&amp;w=384 300w; thumbhash: #0080ff',
+  ],
 ]
 // Every non-pending URL record of @lazy-ease/testing, reproduced inside the Next build.
 const testingDir = join(root, 'packages', 'testing')

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { formatNumber } from '../src/numbers.js'
-import { DEFAULT_RATIOS, snapRatio } from '../src/ratios.js'
+import { DEFAULT_RATIOS, defaultRatios, snapRatio } from '../src/ratios.js'
 import { DEFAULT_WIDTHS, classicCandidates, fullLadder, measuredCandidates, snapWidth } from '../src/widths.js'
 
 // The contract the backend (step 2) must match value for value.
@@ -68,6 +68,11 @@ describe('DEFAULT_RATIOS', () => {
 
   it('is already in canonical form', () => {
     for (const r of DEFAULT_RATIOS) expect(String(r)).toBe(formatNumber(r))
+  })
+
+  it('equals the ladder core builds lazily for its own defaults', () => {
+    expect(defaultRatios()).toEqual(DEFAULT_RATIOS)
+    expect(defaultRatios()).toBe(defaultRatios())
   })
 })
 

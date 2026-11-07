@@ -26,7 +26,13 @@ const testing = {
 
 const packages = [
   // Files that must start with 'use client', so Server Components can import them.
-  { dir: 'packages/core', clientFiles: [], ...built },
+  {
+    dir: 'packages/core',
+    clientFiles: [],
+    ...built,
+    required: [...built.required, 'dist/thumbhash.js', 'dist/thumbhash.d.ts', 'dist/dom/controller.js'],
+    smoke: smokeCore,
+  },
   { dir: 'packages/react', clientFiles: ['dist/Image.js', 'dist/context.js'], ...built },
   { dir: 'packages/server', clientFiles: [], ...built },
   { dir: 'packages/testing', clientFiles: [], ...testing, smoke: smokeTesting },
@@ -81,13 +87,8 @@ function readTarball(file) {
  * its own export path, and every file checked against the manifest.
  */
 function smokeTesting(entries) {
-  const dir = mkdtempSync(join(tmpdir(), 'lazy-ease-testing-'))
+  const dir = install(entries, '@lazy-ease/testing')
   try {
-    for (const [path, data] of entries) {
-      const file = join(dir, 'node_modules', '@lazy-ease', 'testing', path)
-      mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(file, data)
-    }
     writeFileSync(
       join(dir, 'smoke.mjs'),
       `import { createHash } from 'node:crypto'
@@ -113,6 +114,52 @@ console.log('imported @lazy-ease/testing: ' + manifest.files.length + ' files, '
     console.log('$ node smoke.mjs (packed @lazy-ease/testing)')
     const result = spawnSync(process.execPath, ['smoke.mjs'], { cwd: dir, stdio: 'inherit' })
     return result.status === 0
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/** Writes a tarball's entries into a temporary node_modules under `name`. */
+function install(entries, name) {
+  const dir = mkdtempSync(join(tmpdir(), 'lazy-ease-smoke-'))
+  for (const [path, data] of entries) {
+    const file = join(dir, 'node_modules', ...name.split('/'), path)
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, data)
+  }
+  return dir
+}
+
+/**
+ * Imports the packed @lazy-ease/core in plain Node the way a browser bundle
+ * would see it: no process global, and every browser global a trap. Importing
+ * both entry points and creating an instance must touch none of them and
+ * build no ladder.
+ */
+function smokeCore(entries) {
+  const dir = install(entries, '@lazy-ease/core')
+  try {
+    writeFileSync(
+      join(dir, 'smoke.mjs'),
+      `const touched = []
+for (const name of ['process', 'document', 'window', 'navigator', 'IntersectionObserver', 'ResizeObserver', 'matchMedia', 'Image', 'requestAnimationFrame', 'getComputedStyle', 'devicePixelRatio', 'HTMLElement']) {
+  Object.defineProperty(globalThis, name, { configurable: true, get: () => (touched.push(name), undefined) })
+}
+const toFixed = Number.prototype.toFixed
+let computed = 0
+Number.prototype.toFixed = function (digits) { computed++; return toFixed.call(this, digits) }
+const core = await import('@lazy-ease/core')
+const { thumbhashDecoder } = await import('@lazy-ease/core/thumbhash')
+core.createLazyEase({ rootMargin: '200px' })
+const loaded = Object.keys(core).length
+Number.prototype.toFixed = toFixed
+if (touched.length || computed) throw new Error('import touched ' + touched.join(', ') + ', toFixed calls: ' + computed)
+if (typeof thumbhashDecoder !== 'function' || core.DEFAULT_RATIOS.length !== 73) throw new Error('exports')
+console.log('imported @lazy-ease/core without process or browser globals: ' + loaded + ' exports')
+`,
+    )
+    console.log('$ node smoke.mjs (packed @lazy-ease/core)')
+    return spawnSync(process.execPath, ['smoke.mjs'], { cwd: dir, stdio: 'inherit' }).status === 0
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
