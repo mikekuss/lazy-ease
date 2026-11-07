@@ -6,8 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `@lazy-ease/core` holds the framework-free logic: width and ratio ladders, canonical URL numbers, focal crop geometry, the reference loader and candidate selection. It imports nothing from React, the DOM or Node. `outputSize()` gives the pixel size the reference backend encodes for a request, apart from the width in the URL.
+
 ### Changed
 
+- `@lazy-ease/react` and `@lazy-ease/server` depend on `@lazy-ease/core`. The React public exports, their signatures and the server-rendered markup are unchanged. The server takes its ladders, number formatting and crop window from core instead of keeping its own copy.
 - The READMEs no longer link to `@lazy-ease/server` on npm, where it isn't published yet. They point to the repository instead.
 - `@lazy-ease/react` is published from GitHub Actions with npm Trusted Publishing, so new versions carry a provenance attestation.
 

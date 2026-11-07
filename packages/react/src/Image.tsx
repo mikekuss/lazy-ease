@@ -14,24 +14,32 @@ import {
 } from 'react'
 import { preload } from 'react-dom'
 import { useLazyEaseConfig, type LoadingStrategy } from './context.js'
-import { DEV, warnOnce } from './dev.js'
-import { coverPosition, cropWindow, focusInWindow, normalizeFocalPoint, percentPosition, type FocalPoint } from './focal.js'
-import { detectFormat, resolvedFormat } from './format.js'
-import { invalidCombination, resolveLayout } from './layout.js'
 import {
+  buildSrcSet,
+  classicCandidates,
+  coverPosition,
+  cropWindow,
+  focusInWindow,
+  fullLadder,
+  measuredCandidates,
+  normalizeFocalPoint,
   normalizeLoader,
+  percentPosition,
   snapQuality,
+  snapRatio,
+  snapWidth,
+  type FocalPoint,
   type ImageFormat,
   type ImageLoader,
   type ImageLoaderFunction,
   type ResolvedLoader,
-} from './loader.js'
+} from '@lazy-ease/core'
+import { DEV, warnOnce } from './dev.js'
+import { detectFormat, resolvedFormat } from './format.js'
+import { invalidCombination, resolveLayout } from './layout.js'
 import { observeResize, whenVisible } from './observer.js'
 import { isOwned } from './owned.js'
 import { parsePlaceholder, thumbhashImageStyle, type Placeholder, type PlaceholderStyle } from './placeholder.js'
-import { snapRatio } from './ratios.js'
-import { buildSrcSet } from './srcset.js'
-import { classicCandidates, fullLadder, measuredCandidates, snapWidth } from './widths.js'
 
 export interface ImageProps
   extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'srcSet' | 'sizes' | 'width' | 'height' | 'loading' | 'placeholder'> {

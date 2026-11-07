@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server'
 import { rgbaToThumbHash, thumbHashToApproximateAspectRatio } from 'thumbhash'
 import { describe, expect, it, vi } from 'vitest'
 import { LazyEaseProvider } from '../src/context.js'
-import { coverPosition, cropWindow, focusInWindow } from '../src/focal.js'
+import { coverPosition, cropWindow, focusInWindow } from '@lazy-ease/core'
 import { Image, type ImageProps } from '../src/Image.js'
 import { advance, intersect, setRect } from './dom.js'
 

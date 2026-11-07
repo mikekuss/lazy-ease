@@ -31,7 +31,7 @@ export interface CropWindow {
  * The part of a `width × height` source that a crop to `ratio` keeps (spec
  * 12.1): the largest window of that ratio, placed so the focal point is as
  * close to its center as the source edges allow. Whole pixels. The server
- * computes the same window.
+ * crops with this same function.
  */
 export function cropWindow(width: number, height: number, ratio: number, focus: FocalPoint): CropWindow {
   if (width / height > ratio) {

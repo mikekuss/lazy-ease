@@ -6,17 +6,21 @@ export {
   type LazyEaseProviderProps,
   type LoadingStrategy,
 } from './context.js'
+// The 0.2 public helpers, now implemented in @lazy-ease/core.
 export {
   createLoader,
+  DEFAULT_RATIOS,
+  DEFAULT_WIDTHS,
   encodePath,
+  formatNumber,
+  fullLadder,
+  snapRatio,
+  type FocalPoint,
+  type FullLadderOptions,
   type ImageFormat,
   type ImageLoader,
   type ImageLoaderFunction,
   type ImageRequest,
   type LoaderOptions,
   type ResolvedLoader,
-} from './loader.js'
-export { type FocalPoint } from './focal.js'
-export { formatNumber } from './numbers.js'
-export { DEFAULT_RATIOS, snapRatio } from './ratios.js'
-export { DEFAULT_WIDTHS, fullLadder, type FullLadderOptions } from './widths.js'
+} from '@lazy-ease/core'

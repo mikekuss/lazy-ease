@@ -1,50 +1,14 @@
+import { formatNumber, type FocalPoint } from '@lazy-ease/core'
 import { HTTPException } from 'hono/http-exception'
 
-/**
- * Widths the backend renders (spec 3). Must match `DEFAULT_WIDTHS` in the
- * `@lazy-ease/react` package; the server does not import it.
- */
-export const DEFAULT_WIDTHS: readonly number[] = [
-  64, 128, 256, 384, 640, 750, 828, 1080, 1200, 1440, 1920, 2560, 3840,
-]
+// The ladders, number spelling and crop geometry are shared with the client
+// through @lazy-ease/core, so both ends agree by construction (spec 3).
+export { cropWindow, DEFAULT_RATIOS, DEFAULT_WIDTHS, formatNumber, type CropWindow, type FocalPoint } from '@lazy-ease/core'
 
 export const DEFAULT_QUALITIES: readonly number[] = [75]
 
 export type OutputFormat = 'avif' | 'webp' | 'jpeg'
 export const OUTPUT_FORMATS: readonly OutputFormat[] = ['avif', 'webp', 'jpeg']
-
-/**
- * Canonical form for every number in an image URL (spec 6.1): at most 3
- * decimals, no trailing zeros, no exponent. Same rule as the client.
- */
-export function formatNumber(n: number): string {
-  if (!Number.isFinite(n)) throw new RangeError(`Cannot format ${n} for a URL`)
-  if (Math.abs(n) >= 1e21) return BigInt(n).toString()
-  return String(Number(n.toFixed(3)))
-}
-
-const round = (x: number) => Number(x.toFixed(3))
-
-function buildRatios(): number[] {
-  const ratios = new Set<number>()
-  // 2^(k/16) for k = -32 … 32: 65 log-spaced values from 0.25 to 4.
-  for (let k = -32; k <= 32; k++) ratios.add(round(2 ** (k / 16)))
-  // 4:3, 3:2, 16:9, 21:9 and their inverses.
-  for (const r of [4 / 3, 3 / 2, 16 / 9, 21 / 9]) {
-    ratios.add(round(r))
-    ratios.add(round(1 / r))
-  }
-  return [...ratios].sort((a, b) => a - b)
-}
-
-/** Crop ratios the backend renders (spec 6.1), 73 values from 0.25 to 4. */
-export const DEFAULT_RATIOS: readonly number[] = buildRatios()
-
-/** A point in the source, in whole percent of its width and height. */
-export interface FocalPoint {
-  x: number
-  y: number
-}
 
 export interface ImageParams {
   width: number
@@ -55,32 +19,6 @@ export interface ImageParams {
   quality: number
   format: OutputFormat
   version?: string
-}
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
-
-export interface CropWindow {
-  left: number
-  top: number
-  width: number
-  height: number
-}
-
-/**
- * The part of a `width × height` source that a crop to `ratio` keeps (spec
- * 12.1): the largest window of that ratio, placed so the focal point is as
- * close to its center as the source edges allow. Whole pixels. Must match
- * `cropWindow` in `@lazy-ease/react`.
- */
-export function cropWindow(width: number, height: number, ratio: number, focus: FocalPoint): CropWindow {
-  if (width / height > ratio) {
-    const w = clamp(Math.round(height * ratio), 1, width)
-    const left = clamp(Math.round((focus.x / 100) * width - w / 2), 0, width - w)
-    return { left, top: 0, width: w, height }
-  }
-  const h = clamp(Math.round(width / ratio), 1, height)
-  const top = clamp(Math.round((focus.y / 100) * height - h / 2), 0, height - h)
-  return { left: 0, top, width, height: h }
 }
 
 export interface Ladders {

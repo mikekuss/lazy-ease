@@ -6,7 +6,7 @@ import { rgbaToThumbHash } from 'thumbhash'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LazyEaseProvider } from '../src/context.js'
 import { Image, type ImageProps } from '../src/Image.js'
-import { createLoader } from '../src/loader.js'
+import { createLoader } from '@lazy-ease/core'
 import { MockIntersectionObserver, MockResizeObserver, advance, defaultRect, detectionImage, intersect } from './dom.js'
 
 function solidThumbHash(r: number, g: number, b: number): string {

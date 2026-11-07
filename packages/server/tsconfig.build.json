@@ -3,7 +3,9 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "sourceMap": false
+    "sourceMap": false,
+    // Build against the built declarations of workspace packages, not their sources.
+    "customConditions": []
   },
   "include": [
     "src"
