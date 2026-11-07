@@ -2,6 +2,8 @@
 
 Lazy-loaded, right-sized images for React 19, with an inline placeholder and a crossfade.
 
+Planning for 0.3.0: [design specification](docs/design-spec.md), [image recipes](docs/image-recipes.md), [backend guide](docs/backend.md) and [migration from 0.2](docs/migrating-from-0.2.md). The API below describes 0.2.
+
 **[Live demo](https://mikekuss.github.io/lazy-ease/)**. The hosted demo serves pre-rendered variants through a static loader, so arbitrary measured fill ratios aren't available there; run it locally (see [Development](#development)) for the full behavior.
 
 ```tsx
