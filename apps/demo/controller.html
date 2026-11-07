@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lazy-ease controller cases</title>
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>Controller cases</h1>
+        <p>Every case attaches <code>@lazy-ease/core</code> to real markup and checks what it does.</p>
+      </div>
+      <div class="toolbar">
+        <label>
+          Network
+          <select id="throttle">
+            <option value="off">Off</option>
+            <option value="fast-4g">Fast 4G</option>
+            <option value="slow-4g" selected>Slow 4G</option>
+            <option value="3g">3G</option>
+          </select>
+        </label>
+        <button id="run-all" type="button">Run all</button>
+        <a href="/">React demo</a>
+      </div>
+    </header>
+    <div id="summary" class="summary" aria-live="polite"></div>
+    <nav id="toc" class="toc"></nav>
+    <main id="cases"></main>
+    <script type="module" src="/src/controller/main.ts"></script>
+  </body>
+</html>

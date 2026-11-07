@@ -103,6 +103,8 @@ export function App() {
         <div className="brand">
           <strong>lazy-ease</strong>
           <span>images at the size they are rendered at, behind an inline placeholder</span>
+          {/* The controller cases need the demo server, so the static build has none. */}
+          {!STATIC && <a href="/controller.html">Controller cases</a>}
         </div>
         <Controls settings={settings} onChange={changeSettings} onReload={reload} />
       </header>
