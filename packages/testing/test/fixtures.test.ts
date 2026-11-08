@@ -37,7 +37,7 @@ describe('fixture files', () => {
       const ids = doc.cases.map((c) => c.id)
       expect(new Set(ids).size, name).toBe(ids.length)
       for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-      for (const c of doc.cases) for (const topic of c.topics ?? []) expect(['nfc', 'strict-q', 'token', 'url-parsing']).toContain(topic)
+      for (const c of doc.cases) for (const topic of c.topics ?? []) expect(['nfc', 'safe-paths', 'strict-q', 'token', 'url-parsing']).toContain(topic)
     }
   })
 

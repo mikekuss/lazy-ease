@@ -6,7 +6,7 @@ export declare const FIXTURE_VERSION: 1
 
 export type ImageFormat = 'avif' | 'webp' | 'jpeg'
 /** A capability a case exercises beyond the base contract. */
-export type Topic = 'nfc' | 'strict-q' | 'token' | 'url-parsing'
+export type Topic = 'nfc' | 'safe-paths' | 'strict-q' | 'token' | 'url-parsing'
 
 export interface FocalPoint {
   x: number
@@ -133,8 +133,8 @@ export interface UrlRequest {
 }
 
 export type UrlsCase =
-  | Case<'encodePath', { src: string }, { path: string }>
-  | Case<'url', { baseUrl?: string; request: UrlRequest }, { url: string }>
+  | Case<'encodePath', { src: string }, { path: string } | { error: 'invalid-input' }>
+  | Case<'url', { baseUrl?: string; request: UrlRequest }, { url: string } | { error: 'invalid-input' }>
 
 export interface BackendParams {
   width: number

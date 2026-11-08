@@ -176,14 +176,16 @@ function nearest(pixel: number[]): number {
 
 describe('loader URLs and source paths over HTTP', () => {
   let app: Hono
+  // URL records the loader writes a URL for, against the default mount.
+  const urlCases = casesOf('urls', 'url', { skipTopics }).flatMap((c) =>
+    'url' in c.expected && c.input.baseUrl === undefined ? [{ ...c, expected: c.expected }] : [],
+  )
 
   // Every source path the URL and path records name, as a file under the root.
   beforeAll(async () => {
     const root = path.join(dir, 'root')
     const files = new Set<string>()
-    for (const c of casesOf('urls', 'url', { skipTopics })) {
-      if (c.input.baseUrl === undefined) files.add(decodeURIComponent(new URL(c.expected.url, 'http://x').pathname.slice('/_img/'.length)))
-    }
+    for (const c of urlCases) files.add(decodeURIComponent(new URL(c.expected.url, 'http://x').pathname.slice('/_img/'.length)))
     for (const c of casesOf('backend', 'path')) if (c.expected.status === 200) files.add(c.expected.file)
     for (const name of files) {
       const file = path.join(root, ...name.normalize('NFC').split('/'))
@@ -196,7 +198,7 @@ describe('loader URLs and source paths over HTTP', () => {
     app.route('/_img', createImageApp({ root }))
   })
 
-  it.each(casesOf('urls', 'url', { skipTopics }).filter((c) => c.input.baseUrl === undefined))('$id', async ({ input, expected }) => {
+  it.each(urlCases)('$id', async ({ input, expected }) => {
     const { pathname, search } = new URL(expected.url, 'http://x')
     // The loader's query parses back to the request it was written from, with
     // the ratio in its canonical spelling.
