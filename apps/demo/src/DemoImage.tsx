@@ -32,20 +32,22 @@ interface DemoImageProps extends ImageProps {
 
 // No demo params, so these requests are neither throttled nor cache-busted.
 const plainLoader = STATIC ? createStaticLoader({ baseUrl: `${BASE}_img` }) : createLoader()
-const headSizes = new Map<string, Promise<number | undefined>>()
+const heads = new Map<string, { size: Promise<number | undefined>; wanted: Set<() => boolean> }>()
 let headQueue = Promise.resolve()
 
 /**
  * Body size of a variant from a HEAD request, once per URL. The server renders
  * the variant to answer, so HEADs run one at a time and only while no image is
- * loading; otherwise they would skew the load times the demo shows.
+ * loading; otherwise they would skew the load times the demo shows. A HEAD that
+ * no image wants any more by its turn is skipped.
  */
 function contentLength(url: string, wanted: () => boolean): Promise<number | undefined> {
-  let size = headSizes.get(url)
-  if (!size) {
-    size = headQueue.then(whenIdle).then(() => {
-      if (!wanted()) {
-        headSizes.delete(url)
+  let head = heads.get(url)
+  if (!head) {
+    const callers = new Set<() => boolean>()
+    const size = headQueue.then(whenIdle).then(() => {
+      if (![...callers].some((caller) => caller())) {
+        heads.delete(url)
         return undefined
       }
       return fetch(url, { method: 'HEAD' })
@@ -53,9 +55,11 @@ function contentLength(url: string, wanted: () => boolean): Promise<number | und
         .catch(() => undefined)
     })
     headQueue = size.then(() => undefined)
-    headSizes.set(url, size)
+    head = { size, wanted: callers }
+    heads.set(url, head)
   }
-  return size
+  head.wanted.add(wanted)
+  return head.size
 }
 
 function resourceEntry(url: string): PerformanceResourceTiming | undefined {
