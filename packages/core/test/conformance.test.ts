@@ -26,6 +26,7 @@ import {
 // below, so implementing one makes that test fail until it moves here.
 const PENDING: Topic[] = [
   'nfc', // encodePath does not NFC-normalize input; the fix costs more than the React Image budget allows
+  'safe-paths', // stray %, non-UTF-8 escapes and other schemes: step 06, once React Image is off the 7557 B ceiling
   'token', // ImageRequest has no token field until step 07
 ]
 
@@ -134,7 +135,8 @@ describe('urls', () => {
   const skipTopics = PENDING
 
   it.each(casesOf('urls', 'encodePath', { skipTopics }))('encodePath $id', ({ input, expected }) => {
-    expect(encodePath(input.src)).toBe(expected.path)
+    if ('error' in expected) expect(() => encodePath(input.src)).toThrow(RangeError)
+    else expect(encodePath(input.src)).toBe(expected.path)
   })
 
   it.each(casesOf('urls', 'url', { skipTopics }))('url $id', ({ input, expected }) => {
@@ -142,15 +144,39 @@ describe('urls', () => {
     const { focalPoint, ...request } = input.request
     // The loader receives a focal point that is already normalized.
     expect(normalizeFocalPoint(focalPoint)).toEqual(focalPoint)
-    expect(loader.url({ ...request, focalPoint: focalPoint as FocalPoint | undefined })).toBe(expected.url)
+    const url = () => loader.url({ ...request, focalPoint: focalPoint as FocalPoint | undefined })
+    if ('error' in expected) expect(url).toThrow(RangeError)
+    else expect(url()).toBe(expected.url)
   })
 
   it('still fails the pending topics', () => {
     const pending = [...skippedCases('urls', 'encodePath', { skipTopics }), ...skippedCases('urls', 'url', { skipTopics })]
-    expect(pending.map((c) => c.id).sort()).toEqual(['nfd-source', 'path-nfd-normalized', 'path-pre-encoded-nfd', 'token'])
+    expect(pending.map((c) => c.id).sort()).toEqual([
+      'nfd-source',
+      'non-http-source',
+      'path-data-url',
+      'path-drive-letter',
+      'path-ftp-url',
+      'path-invalid-utf8',
+      'path-invalid-utf8-keeps-escapes',
+      'path-invalid-utf8-own-segment',
+      'path-invalid-utf8-stray-percent',
+      'path-nfd-normalized',
+      'path-overlong-utf8',
+      'path-pre-encoded-nfd',
+      'path-scheme-absolute-path',
+      'path-scheme-relative-name',
+      'path-stray-percent-escaped',
+      'path-stray-percent-non-ascii',
+      'path-stray-percent-space',
+      'stray-percent-source',
+      'token',
+    ])
     for (const c of pending) {
+      // Core returns a different path or URL, also where the record expects an error.
       const actual = c.op === 'encodePath' ? encodePath(c.input.src) : createLoader().url(c.input.request)
-      expect(actual, c.id).not.toBe(c.op === 'encodePath' ? c.expected.path : c.expected.url)
+      const wanted = 'path' in c.expected ? c.expected.path : 'url' in c.expected ? c.expected.url : undefined
+      expect(actual, c.id).not.toBe(wanted)
     }
   })
 })

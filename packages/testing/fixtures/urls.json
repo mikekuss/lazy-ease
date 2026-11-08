@@ -122,6 +122,115 @@
       }
     },
     {
+      "id": "path-stray-percent-non-ascii",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "note": "A stray % is a literal %; the rest of the segment still decodes",
+      "input": {
+        "src": "/\u00e9%.jpg"
+      },
+      "expected": {
+        "path": "/%C3%A9%25.jpg"
+      }
+    },
+    {
+      "id": "path-stray-percent-space",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "input": {
+        "src": "/a b%.jpg"
+      },
+      "expected": {
+        "path": "/a%20b%25.jpg"
+      }
+    },
+    {
+      "id": "path-stray-percent-escaped",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "input": {
+        "src": "/caf%C3%A9 100%.jpg"
+      },
+      "expected": {
+        "path": "/caf%C3%A9%20100%25.jpg"
+      }
+    },
+    {
+      "id": "path-invalid-utf8",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "note": "An escape that is not UTF-8 stays escaped; the backend rejects the path",
+      "input": {
+        "src": "/%C3.jpg"
+      },
+      "expected": {
+        "path": "/%C3.jpg"
+      }
+    },
+    {
+      "id": "path-invalid-utf8-keeps-escapes",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "note": "A segment that is not UTF-8 is not decoded: escapes keep their bytes in uppercase hex, other characters are encoded",
+      "input": {
+        "src": "/a b+%41%c3.jpg"
+      },
+      "expected": {
+        "path": "/a%20b%2B%41%C3.jpg"
+      }
+    },
+    {
+      "id": "path-invalid-utf8-stray-percent",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "input": {
+        "src": "/%C3%.jpg"
+      },
+      "expected": {
+        "path": "/%C3%25.jpg"
+      }
+    },
+    {
+      "id": "path-overlong-utf8",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "note": "An overlong encoding of / is not UTF-8 and never becomes a slash",
+      "input": {
+        "src": "/a%C0%AFb.jpg"
+      },
+      "expected": {
+        "path": "/a%C0%AFb.jpg"
+      }
+    },
+    {
+      "id": "path-invalid-utf8-own-segment",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "note": "Each segment is decoded on its own",
+      "input": {
+        "src": "/caf%C3%A9/%FF.jpg"
+      },
+      "expected": {
+        "path": "/caf%C3%A9/%FF.jpg"
+      }
+    },
+    {
       "id": "path-non-bmp",
       "op": "encodePath",
       "input": {
@@ -263,6 +372,72 @@
       },
       "expected": {
         "path": "/lead.jpg"
+      }
+    },
+    {
+      "id": "path-scheme-relative-name",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "note": "Only http and https URLs are resolved; any other scheme never names a file under the mount",
+      "input": {
+        "src": "a:b.jpg"
+      },
+      "expected": {
+        "error": "invalid-input"
+      }
+    },
+    {
+      "id": "path-scheme-absolute-path",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "input": {
+        "src": "x:/hero.jpg"
+      },
+      "expected": {
+        "error": "invalid-input"
+      }
+    },
+    {
+      "id": "path-drive-letter",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "input": {
+        "src": "C:\\photos\\lake.jpg"
+      },
+      "expected": {
+        "error": "invalid-input"
+      }
+    },
+    {
+      "id": "path-data-url",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "input": {
+        "src": "data:image/png;base64,iVBORw0KGgo="
+      },
+      "expected": {
+        "error": "invalid-input"
+      }
+    },
+    {
+      "id": "path-ftp-url",
+      "op": "encodePath",
+      "topics": [
+        "safe-paths"
+      ],
+      "input": {
+        "src": "ftp://cdn.example/x.jpg"
+      },
+      "expected": {
+        "error": "invalid-input"
       }
     },
     {
@@ -487,6 +662,24 @@
       }
     },
     {
+      "id": "stray-percent-source",
+      "op": "url",
+      "topics": [
+        "safe-paths"
+      ],
+      "input": {
+        "request": {
+          "src": "/\u00e9 100%.jpg",
+          "width": 640,
+          "quality": 75,
+          "format": "webp"
+        }
+      },
+      "expected": {
+        "url": "/_img/%C3%A9%20100%25.jpg?fmt=webp&q=75&w=640"
+      }
+    },
+    {
       "id": "absolute-source",
       "op": "url",
       "topics": [
@@ -521,6 +714,25 @@
       },
       "expected": {
         "url": "/_img/photos/lake.jpg?fmt=webp&q=75&w=640"
+      }
+    },
+    {
+      "id": "non-http-source",
+      "op": "url",
+      "topics": [
+        "safe-paths"
+      ],
+      "note": "The loader writes no URL for a source with another scheme",
+      "input": {
+        "request": {
+          "src": "x:/hero.jpg",
+          "width": 640,
+          "quality": 75,
+          "format": "webp"
+        }
+      },
+      "expected": {
+        "error": "invalid-input"
       }
     },
     {

@@ -209,12 +209,10 @@ def decode_segment(segment: str) -> str | None:
         return None
 
 
-SPECIAL_SCHEMES = {"http", "https", "ws", "wss", "ftp"}
+URL_SCHEMES = {"http", "https"}
 SCHEME = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*):")
 SINGLE_DOT = {".", "%2e"}
 DOUBLE_DOT = {"..", ".%2e", "%2e.", "%2e%2e"}
-# The WHATWG path percent-encode set: C0 controls, space, " # < > ? ` { } and non-ASCII.
-PATH_ENCODE = set(range(0x21)) | {0x22, 0x23, 0x3C, 0x3E, 0x3F, 0x60, 0x7B, 0x7D} | set(range(0x7F, 0x100))
 
 
 def url_path_segments(src: str) -> list[str]:
@@ -223,12 +221,13 @@ def url_path_segments(src: str) -> list[str]:
     trailing C0 controls and spaces trimmed, ASCII tab, LF and CR removed,
     scheme and authority dropped, a backslash read as a slash, query and
     fragment dropped, and `.`/`..` segments (also as `%2e`) resolved. Only
-    special schemes are handled; other schemes raise ValueError."""
+    http and https are handled; any other scheme raises ValueError, since it
+    never names a file under the mount."""
     text = re.sub(r"[\t\n\r]", "", src.strip("".join(map(chr, range(0x21)))))
     scheme = SCHEME.match(text)
     if scheme:
         name = scheme.group(1).lower()
-        if name not in SPECIAL_SCHEMES:
+        if name not in URL_SCHEMES:
             raise ValueError(f"unsupported scheme {name}")
         rest = text[scheme.end():]
         if name == "http" and not rest[:1] in ("/", "\\"):
@@ -258,21 +257,19 @@ def url_path_segments(src: str) -> list[str]:
     return out or [""]
 
 
-def url_parser_encode(segment: str) -> str:
-    """The URL parser's percent-encoding of a path segment: UTF-8, the path
-    percent-encode set escaped, existing escapes left alone."""
-    return "".join(chr(b) if b not in PATH_ENCODE else f"%{b:02X}" for b in segment.encode("utf-8"))
-
-
 def encode_path(src: str) -> str:
     """Canonical encoded path: the URL path of `src` (url_path_segments), each
-    segment decoded, NFC-normalized and encoded again. A segment that does not
-    decode is encoded as the URL parser left it, so `%` becomes `%25`."""
+    segment with a stray `%` read as a literal `%`, decoded, NFC-normalized and
+    encoded again. A segment whose escapes are not valid UTF-8 is not decoded:
+    its escapes stay as written in uppercase hex, and every other character
+    is encoded."""
     encoded = []
     for segment in url_path_segments(src):
+        segment = STRAY_PERCENT.sub("%25", segment)
         decoded = decode_segment(segment)
         if decoded is None:
-            encoded.append(encode_segment(url_parser_encode(segment)))
+            parts = re.findall(r"%[0-9A-Fa-f]{2}|[^%]+", segment)
+            encoded.append("".join(p.upper() if p[0] == "%" else encode_segment(p) for p in parts))
         else:
             encoded.append(encode_segment(unicodedata.normalize("NFC", decoded)))
     return "/" + "/".join(encoded)
@@ -541,12 +538,17 @@ def check_candidates(doc):
 def check_urls(doc):
     for case in doc["cases"]:
         where, i, e = f"urls/{case['id']}", case["input"], case["expected"]
-        if case["op"] == "encodePath":
-            equal({"path": encode_path(i["src"])}, e, where)
-        elif case["op"] == "url":
-            equal({"url": build_url(i.get("baseUrl", "/_img"), i["request"])}, e, where)
-        else:
-            check(False, where, f"unknown op {case['op']}")
+        try:
+            if case["op"] == "encodePath":
+                actual = {"path": encode_path(i["src"])}
+            elif case["op"] == "url":
+                actual = {"url": build_url(i.get("baseUrl", "/_img"), i["request"])}
+            else:
+                check(False, where, f"unknown op {case['op']}")
+                continue
+        except ValueError:
+            actual = {"error": "invalid-input"}
+        equal(actual, e, where)
 
 
 SOURCE_TYPES = {"jpg", "jpeg", "png", "webp", "avif", "gif"}
