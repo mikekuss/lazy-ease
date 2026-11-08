@@ -4,6 +4,7 @@ import {
   DEFAULT_RATIOS,
   DEFAULT_WIDTHS,
   buildSrcSet,
+  candidateSet,
   classicCandidates,
   createLoader,
   cropWindow,
@@ -101,37 +102,31 @@ describe('candidates', () => {
     expect(distinct.length === 1 ? distinct[0] : null).toEqual(expected.single)
   })
 
-  // The srcset labels above are checked against the fixture rule only. Core's
-  // buildSrcSet still labels each request with its request width and does not
-  // merge equal outputs, so it matches the records only where every request
-  // encodes its own width. The controller/React step of 0.3 that emits
-  // actual-width descriptors and a single src must make the pending records
-  // pass; then this list is empty and the check covers every record.
-  const PENDING_SRCSET = [
-    'custom-ladder-tiny-source',
-    'fixed-avatar-tiny-source',
-    'full-crop-dedupe',
-    'full-extreme-crop',
-    'full-focal-dedupe',
-  ]
-
-  it('labels srcset candidates with their encoded width (pending in buildSrcSet)', () => {
+  // candidateSet is what the controller installs: the srcset labeled with
+  // encoded widths and deduplicated, a single URL when one output remains,
+  // and the largest request alone when the source size is unknown.
+  it.each(casesOf('candidates'))('candidateSet $id', ({ input, expected }) => {
     const loader = createLoader()
-    const request = { src: '/x.jpg', quality: 75, format: 'webp' as const }
-    const pending: string[] = []
-    let matched = 0
-    for (const { id, input, expected } of casesOf('candidates')) {
-      if (expected.outputs === null) continue
-      const { aspectRatio, focalPoint } = input
-      const descriptor = (o: OutputSize) =>
-        `${loader.url({ ...request, width: o.requestWidth, aspectRatio, focalPoint })} ${o.width}w`
-      const wanted = (expected.srcset ?? [expected.single as OutputSize]).map(descriptor).join(', ')
-      const actual = buildSrcSet({ ...request, widths: expected.requestWidths, aspectRatio, focalPoint, loader })
-      if (actual === wanted) matched++
-      else pending.push(id)
-    }
-    expect(pending.sort()).toEqual(PENDING_SRCSET)
-    expect(matched).toBeGreaterThan(0)
+    const request = { src: '/x.jpg', quality: 75, format: 'webp' as const, aspectRatio: input.aspectRatio, focalPoint: input.focalPoint }
+    const url = (width: number) => loader.url({ ...request, width })
+    const set = candidateSet({ ...request, widths: expected.requestWidths, srcWidth: input.srcWidth, srcHeight: input.srcHeight, loader })
+    expect(set.srcset ?? null).toBe(expected.srcset?.map((o) => `${url(o.requestWidth)} ${o.width}w`).join(', ') ?? null)
+    if (expected.single) expect(set.src).toBe(url(expected.single.requestWidth))
+    else expect(set.src).toBe(url(expected.srcset!.at(-1)!.requestWidth))
+  })
+
+  it('covers the unknown-metadata rule', () => {
+    const unknown = casesOf('candidates').filter((c) => c.expected.outputs === null)
+    expect(unknown.length).toBeGreaterThan(0)
+    for (const { expected } of unknown) expect(expected.single).toMatchObject({ width: null, height: null })
+  })
+
+  // React still builds its srcset with buildSrcSet (request-width labels, no
+  // merging) until it moves to the controller in step 06.
+  it('keeps the 0.2 buildSrcSet labels for React', () => {
+    const loader = createLoader()
+    const srcset = buildSrcSet({ src: '/x.jpg', widths: [640, 64], quality: 75, format: 'webp', loader })
+    expect(srcset).toBe('/_img/x.jpg?fmt=webp&q=75&w=64 64w, /_img/x.jpg?fmt=webp&q=75&w=640 640w')
   })
 })
 

@@ -96,7 +96,7 @@ outH     = th ? max(1, round(th * scale)) : max(1, round(sh * outW / sw))
 
 **Candidates** (`candidates.json`). `requestWidths` depends on `mode`: `measured` takes the ladder up to `min(snapWidth(2 * slotWidth), cap)`; `fixed` takes `snapWidth(slotWidth)` and `snapWidth(2 * slotWidth)`, each limited to the cap, duplicates removed; `full` takes the ladder up to the cap. When both source dimensions are known, `outputs` is the encoded size of each request. `srcset` keeps the first request for each distinct encoded size and is labeled with the encoded `width` (`640w` for `requestWidth` 1080 that encodes 640 px). When only one distinct size remains, `srcset` is `null` and `single` names that request. When either source dimension is unknown, the encoded sizes are unknown: `outputs` and `srcset` are `null` and `single` is the largest request width with `width` and `height` `null`.
 
-The JS packages do not emit these labels yet: `buildSrcSet` in `@lazy-ease/core` still labels each request with its request width and does not merge equal outputs. Its test pins the candidate records that differ (`full-crop-dedupe` and four more); the 0.3 controller and React step that emits actual-width descriptors and a single `src` must make them pass.
+In `@lazy-ease/core`, `candidateSet` implements this rule and passes every record; the DOM controller installs its result. `@lazy-ease/react` still uses `buildSrcSet`, which labels each request with its request width, until it moves to the controller.
 
 **Source paths** (`urls.json`, op `encodePath`). The source is resolved as a URL path relative to an `http` base, as the WHATWG URL parser does (`new URL(src, 'http://host').pathname`):
 

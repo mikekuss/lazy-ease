@@ -81,7 +81,7 @@ describe('createLoader', () => {
 
   it('declares the default ladders, quality and formats', () => {
     expect(loader.widths).toBe(DEFAULT_WIDTHS)
-    expect(loader.ratios).toBe(DEFAULT_RATIOS)
+    expect(loader.ratios).toEqual(DEFAULT_RATIOS)
     expect(loader.qualities).toEqual([75])
     expect(loader.formats).toEqual(['avif', 'webp', 'jpeg'])
   })
@@ -100,7 +100,7 @@ describe('normalizeLoader', () => {
     const loader = normalizeLoader(url)
     expect(loader.url(base)).toBe('https://cdn.test/photos/lake.jpg?w=640')
     expect(loader.widths).toBe(DEFAULT_WIDTHS)
-    expect(loader.ratios).toBe(DEFAULT_RATIOS)
+    expect(loader.ratios).toEqual(DEFAULT_RATIOS)
     expect(loader.qualities).toEqual([75])
     expect(loader.formats).toEqual(['avif', 'webp', 'jpeg'])
   })
@@ -115,7 +115,7 @@ describe('normalizeLoader', () => {
   it('fills in the ratio ladder and keeps the rest of an object', () => {
     const object = { url: () => 'x', widths: [100], qualities: [60], formats: 'auto' as const }
     const loader = normalizeLoader(object)
-    expect(loader.ratios).toBe(DEFAULT_RATIOS)
+    expect(loader.ratios).toEqual(DEFAULT_RATIOS)
     expect(loader.widths).toEqual([100])
     expect(loader.qualities).toEqual([60])
     expect(loader.formats).toBe('auto')

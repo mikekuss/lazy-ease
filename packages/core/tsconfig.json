@@ -1,8 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    // No DOM and no Node types: core runs in browsers, workers and Node alike.
-    "lib": ["es2023"],
+    // No Node types: core runs in browsers, workers and Node alike. The DOM
+    // types are for src/dom (the controller) and the tests only;
+    // tsconfig.pure.json checks every other module without them.
+    "lib": ["es2023", "dom", "dom.iterable"],
     "types": []
   },
   "include": ["src", "test"]
