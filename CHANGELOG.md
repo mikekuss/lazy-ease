@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - `@lazy-ease/core` holds the framework-free logic: width and ratio ladders, canonical URL numbers, focal crop geometry, the reference loader and candidate selection. It imports nothing from React, the DOM or Node. `outputSize()` gives the pixel size the reference backend encodes for a request, apart from the width in the URL.
+- `@lazy-ease/testing` publishes portable conformance fixtures as versioned JSON: default ladders, canonical numbers, focal points, crop windows, encoded sizes, candidate lists, source paths and loader URLs, backend admission, and the byte format and test vectors of the optional crop token. The README documents the schema and rules for implementers in other languages. Core and server run the same records in their tests, and `pnpm check:fixtures` recomputes them in Python. Cases that core or the server do not pass yet are tagged by topic: NFC normalization of NFD input in the loader (`nfc`), rejecting a missing `q` (`strict-q`), and crop tokens (`token`). The `url-parsing` topic marks sources that are resolved as URLs (encoded dot segments, backslashes, absolute and protocol-relative URLs, tabs and surrounding spaces); core and the server already pass them. Crop token vectors include requests that spell the signed path non-canonically, since the MAC always covers the canonical path. Core does not yet label srcset candidates with their encoded width; its test pins the candidate records that still differ.
 
 ### Changed
 

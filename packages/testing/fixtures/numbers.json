@@ -1,0 +1,309 @@
+{
+  "format": "lazy-ease-fixtures",
+  "fixtureVersion": 1,
+  "contract": "0.3",
+  "file": "numbers",
+  "description": "Canonical spelling of every number in a URL or token: at most three decimals, no exponent, no trailing zeros.",
+  "cases": [
+    {
+      "id": "zero",
+      "op": "formatNumber",
+      "input": {
+        "value": 0
+      },
+      "expected": {
+        "text": "0"
+      }
+    },
+    {
+      "id": "integer",
+      "op": "formatNumber",
+      "input": {
+        "value": 640
+      },
+      "expected": {
+        "text": "640"
+      }
+    },
+    {
+      "id": "one-decimal",
+      "op": "formatNumber",
+      "input": {
+        "value": 1.5
+      },
+      "expected": {
+        "text": "1.5"
+      }
+    },
+    {
+      "id": "three-decimals",
+      "op": "formatNumber",
+      "input": {
+        "value": 2.333
+      },
+      "expected": {
+        "text": "2.333"
+      }
+    },
+    {
+      "id": "long-fraction",
+      "op": "formatNumber",
+      "input": {
+        "value": 1.3333333
+      },
+      "expected": {
+        "text": "1.333"
+      }
+    },
+    {
+      "id": "four-thirds",
+      "op": "formatNumber",
+      "input": {
+        "value": 1.3333333333333333
+      },
+      "expected": {
+        "text": "1.333"
+      }
+    },
+    {
+      "id": "sixteen-ninths",
+      "op": "formatNumber",
+      "input": {
+        "value": 1.7777777777777777
+      },
+      "expected": {
+        "text": "1.778"
+      }
+    },
+    {
+      "id": "exact-tie-rounds-up",
+      "op": "formatNumber",
+      "input": {
+        "value": 0.5625
+      },
+      "expected": {
+        "text": "0.563"
+      }
+    },
+    {
+      "id": "exact-tie-four-decimals",
+      "op": "formatNumber",
+      "input": {
+        "value": 1.0625
+      },
+      "expected": {
+        "text": "1.063"
+      }
+    },
+    {
+      "id": "negative-exact-tie-rounds-away",
+      "op": "formatNumber",
+      "input": {
+        "value": -1.0625
+      },
+      "expected": {
+        "text": "-1.063"
+      }
+    },
+    {
+      "id": "binary-below-half",
+      "op": "formatNumber",
+      "input": {
+        "value": 1.0005
+      },
+      "expected": {
+        "text": "1"
+      }
+    },
+    {
+      "id": "binary-above-half",
+      "op": "formatNumber",
+      "input": {
+        "value": 2.0005
+      },
+      "expected": {
+        "text": "2.001"
+      }
+    },
+    {
+      "id": "binary-above-half-small",
+      "op": "formatNumber",
+      "input": {
+        "value": 0.0005
+      },
+      "expected": {
+        "text": "0.001"
+      }
+    },
+    {
+      "id": "rounds-to-zero",
+      "op": "formatNumber",
+      "input": {
+        "value": 0.0004
+      },
+      "expected": {
+        "text": "0"
+      }
+    },
+    {
+      "id": "negative-rounds-to-zero",
+      "op": "formatNumber",
+      "input": {
+        "value": -0.0004
+      },
+      "expected": {
+        "text": "0"
+      }
+    },
+    {
+      "id": "negative-zero",
+      "op": "formatNumber",
+      "input": {
+        "value": -0.0
+      },
+      "expected": {
+        "text": "0"
+      }
+    },
+    {
+      "id": "tiny",
+      "op": "formatNumber",
+      "input": {
+        "value": 1e-07
+      },
+      "expected": {
+        "text": "0"
+      }
+    },
+    {
+      "id": "float-sum",
+      "op": "formatNumber",
+      "input": {
+        "value": 0.30000000000000004
+      },
+      "expected": {
+        "text": "0.3"
+      }
+    },
+    {
+      "id": "float-sum-larger",
+      "op": "formatNumber",
+      "input": {
+        "value": 3.3000000000000003
+      },
+      "expected": {
+        "text": "3.3"
+      }
+    },
+    {
+      "id": "carry-to-integer",
+      "op": "formatNumber",
+      "input": {
+        "value": 999.9995
+      },
+      "expected": {
+        "text": "1000"
+      }
+    },
+    {
+      "id": "carry-above-half",
+      "op": "formatNumber",
+      "input": {
+        "value": 999.9996
+      },
+      "expected": {
+        "text": "1000"
+      }
+    },
+    {
+      "id": "negative",
+      "op": "formatNumber",
+      "input": {
+        "value": -1.5
+      },
+      "expected": {
+        "text": "-1.5"
+      }
+    },
+    {
+      "id": "large-fraction",
+      "op": "formatNumber",
+      "input": {
+        "value": 123456789012.3456
+      },
+      "expected": {
+        "text": "123456789012.346"
+      }
+    },
+    {
+      "id": "below-exponent-threshold",
+      "op": "formatNumber",
+      "input": {
+        "value": 100000000000000000000
+      },
+      "expected": {
+        "text": "100000000000000000000"
+      }
+    },
+    {
+      "id": "exponent-threshold",
+      "op": "formatNumber",
+      "input": {
+        "value": 1e+21
+      },
+      "expected": {
+        "text": "1000000000000000000000"
+      }
+    },
+    {
+      "id": "negative-exponent-threshold",
+      "op": "formatNumber",
+      "input": {
+        "value": -1e+21
+      },
+      "expected": {
+        "text": "-1000000000000000000000"
+      }
+    },
+    {
+      "id": "two-to-seventy",
+      "op": "formatNumber",
+      "input": {
+        "value": 1.1805916207174113e+21
+      },
+      "expected": {
+        "text": "1180591620717411303424"
+      }
+    },
+    {
+      "id": "nan",
+      "op": "formatNumber",
+      "input": {
+        "special": "NaN"
+      },
+      "expected": {
+        "error": "range"
+      }
+    },
+    {
+      "id": "infinity",
+      "op": "formatNumber",
+      "input": {
+        "special": "Infinity"
+      },
+      "expected": {
+        "error": "range"
+      }
+    },
+    {
+      "id": "negative-infinity",
+      "op": "formatNumber",
+      "input": {
+        "special": "-Infinity"
+      },
+      "expected": {
+        "error": "range"
+      }
+    }
+  ]
+}

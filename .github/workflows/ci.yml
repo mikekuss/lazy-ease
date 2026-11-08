@@ -18,6 +18,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      # The conformance fixtures, read and recomputed by Python (preinstalled on the runner).
+      - run: pnpm check:fixtures
       - run: pnpm build
 
   # The published shape: what npm installs, not the workspace sources.

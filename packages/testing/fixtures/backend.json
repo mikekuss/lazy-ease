@@ -1,0 +1,674 @@
+{
+  "format": "lazy-ease-fixtures",
+  "fixtureVersion": 1,
+  "contract": "0.3",
+  "file": "backend",
+  "description": "What the reference backend admits: the canonical query and source path, and what it rejects.",
+  "cases": [
+    {
+      "id": "query-uncropped",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&w=640"
+      },
+      "expected": {
+        "status": 200,
+        "params": {
+          "width": 640,
+          "aspectRatio": null,
+          "focalPoint": null,
+          "quality": 75,
+          "format": "webp",
+          "version": null,
+          "token": null
+        }
+      }
+    },
+    {
+      "id": "query-crop-and-version",
+      "op": "query",
+      "input": {
+        "query": "ar=1.333&fmt=webp&q=75&v=AbC123&w=640"
+      },
+      "expected": {
+        "status": 200,
+        "params": {
+          "width": 640,
+          "aspectRatio": 1.333,
+          "focalPoint": null,
+          "quality": 75,
+          "format": "webp",
+          "version": "AbC123",
+          "token": null
+        }
+      }
+    },
+    {
+      "id": "query-focal",
+      "op": "query",
+      "input": {
+        "query": "ar=1&fmt=jpeg&fx=30&fy=45&q=75&w=750"
+      },
+      "expected": {
+        "status": 200,
+        "params": {
+          "width": 750,
+          "aspectRatio": 1,
+          "focalPoint": {
+            "x": 30,
+            "y": 45
+          },
+          "quality": 75,
+          "format": "jpeg",
+          "version": null,
+          "token": null
+        }
+      }
+    },
+    {
+      "id": "query-focal-edges",
+      "op": "query",
+      "input": {
+        "query": "ar=0.25&fmt=avif&fx=0&fy=100&q=75&w=3840"
+      },
+      "expected": {
+        "status": 200,
+        "params": {
+          "width": 3840,
+          "aspectRatio": 0.25,
+          "focalPoint": {
+            "x": 0,
+            "y": 100
+          },
+          "quality": 75,
+          "format": "avif",
+          "version": null,
+          "token": null
+        }
+      }
+    },
+    {
+      "id": "query-ratio-maximum",
+      "op": "query",
+      "input": {
+        "query": "ar=4&fmt=webp&q=75&w=64"
+      },
+      "expected": {
+        "status": 200,
+        "params": {
+          "width": 64,
+          "aspectRatio": 4,
+          "focalPoint": null,
+          "quality": 75,
+          "format": "webp",
+          "version": null,
+          "token": null
+        }
+      }
+    },
+    {
+      "id": "query-version-opaque-case",
+      "op": "query",
+      "input": {
+        "query": "fmt=jpeg&q=75&v=Rev_2.1~x-Y&w=64"
+      },
+      "expected": {
+        "status": 200,
+        "params": {
+          "width": 64,
+          "aspectRatio": null,
+          "focalPoint": null,
+          "quality": 75,
+          "format": "jpeg",
+          "version": "Rev_2.1~x-Y",
+          "token": null
+        }
+      }
+    },
+    {
+      "id": "reject-empty",
+      "op": "query",
+      "input": {
+        "query": ""
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-missing-q",
+      "op": "query",
+      "topics": [
+        "strict-q"
+      ],
+      "input": {
+        "query": "fmt=webp&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-missing-fmt",
+      "op": "query",
+      "input": {
+        "query": "q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-missing-w",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-order",
+      "op": "query",
+      "input": {
+        "query": "q=75&fmt=webp&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-duplicate",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&fmt=webp&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-unknown",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&w=640&x=1"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-uppercase-name",
+      "op": "query",
+      "input": {
+        "query": "Fmt=webp&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-trailing-separator",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&w=640&"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-missing-value",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&w"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-width-off-ladder",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&w=641"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-width-trailing-zero",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&w=640.0"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-width-leading-zero",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&w=0640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-width-exponent",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&w=6.4e2"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-format-case",
+      "op": "query",
+      "input": {
+        "query": "fmt=WEBP&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-format-unknown",
+      "op": "query",
+      "input": {
+        "query": "fmt=png&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-quality-off-list",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=80&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-quality-spelling",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75.0&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-ratio-spelling",
+      "op": "query",
+      "input": {
+        "query": "ar=1.3330&fmt=webp&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-ratio-off-ladder",
+      "op": "query",
+      "input": {
+        "query": "ar=1.3&fmt=webp&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-ratio-above-ladder",
+      "op": "query",
+      "input": {
+        "query": "ar=5&fmt=webp&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-focal-without-ratio",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&fx=30&fy=45&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-fx-alone",
+      "op": "query",
+      "input": {
+        "query": "ar=1&fmt=webp&fx=30&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-fy-alone",
+      "op": "query",
+      "input": {
+        "query": "ar=1&fmt=webp&fy=45&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-center",
+      "op": "query",
+      "input": {
+        "query": "ar=1&fmt=webp&fx=50&fy=50&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-focal-leading-zero",
+      "op": "query",
+      "input": {
+        "query": "ar=1&fmt=webp&fx=05&fy=45&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-focal-above",
+      "op": "query",
+      "input": {
+        "query": "ar=1&fmt=webp&fx=101&fy=45&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-focal-negative",
+      "op": "query",
+      "input": {
+        "query": "ar=1&fmt=webp&fx=-1&fy=45&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-focal-fraction",
+      "op": "query",
+      "input": {
+        "query": "ar=1&fmt=webp&fx=30.5&fy=45&q=75&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-version-encoded-space",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&v=a%20b&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-version-empty",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&v=&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-version-too-long",
+      "op": "query",
+      "input": {
+        "query": "fmt=webp&q=75&v=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-token-shape",
+      "op": "query",
+      "topics": [
+        "token"
+      ],
+      "input": {
+        "query": "ar=1&fmt=webp&q=75&token=abc&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "reject-token-padding",
+      "op": "query",
+      "topics": [
+        "token"
+      ],
+      "input": {
+        "query": "ar=1&fmt=webp&q=75&token=1.k1.AAAAAAAAAAAAAAAAAAAAAA%3D%3D&w=640"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "query-token",
+      "op": "query",
+      "topics": [
+        "token"
+      ],
+      "input": {
+        "query": "ar=1&fmt=webp&fx=30&fy=45&q=75&token=1.k1.WisYCsz8Vtmygcbr01tTuA&v=r7&w=750"
+      },
+      "expected": {
+        "status": 200,
+        "params": {
+          "width": 750,
+          "aspectRatio": 1,
+          "focalPoint": {
+            "x": 30,
+            "y": 45
+          },
+          "quality": 75,
+          "format": "webp",
+          "version": "r7",
+          "token": "1.k1.WisYCsz8Vtmygcbr01tTuA"
+        }
+      }
+    },
+    {
+      "id": "path-ascii",
+      "op": "path",
+      "input": {
+        "rawPath": "/lake.jpg"
+      },
+      "expected": {
+        "status": 200,
+        "file": "lake.jpg",
+        "canonicalPath": "/lake.jpg",
+        "canonical": true
+      }
+    },
+    {
+      "id": "path-nfc",
+      "op": "path",
+      "input": {
+        "rawPath": "/my%20photos/caf%C3%A9.jpg"
+      },
+      "expected": {
+        "status": 200,
+        "file": "my photos/caf\u00e9.jpg",
+        "canonicalPath": "/my%20photos/caf%C3%A9.jpg",
+        "canonical": true
+      }
+    },
+    {
+      "id": "path-nfd",
+      "op": "path",
+      "input": {
+        "rawPath": "/my%20photos/cafe%CC%81.jpg"
+      },
+      "expected": {
+        "status": 200,
+        "file": "my photos/caf\u00e9.jpg",
+        "canonicalPath": "/my%20photos/caf%C3%A9.jpg",
+        "canonical": false
+      }
+    },
+    {
+      "id": "path-lowercase-hex",
+      "op": "path",
+      "input": {
+        "rawPath": "/my%20photos/caf%c3%a9.jpg"
+      },
+      "expected": {
+        "status": 200,
+        "file": "my photos/caf\u00e9.jpg",
+        "canonicalPath": "/my%20photos/caf%C3%A9.jpg",
+        "canonical": false
+      }
+    },
+    {
+      "id": "path-unreserved-marks",
+      "op": "path",
+      "input": {
+        "rawPath": "/(1)!'~.jpg"
+      },
+      "expected": {
+        "status": 200,
+        "file": "(1)!'~.jpg",
+        "canonicalPath": "/(1)!'~.jpg",
+        "canonical": true
+      }
+    },
+    {
+      "id": "path-overencoded-marks",
+      "op": "path",
+      "input": {
+        "rawPath": "/%281%29%21%27%7E.jpg"
+      },
+      "expected": {
+        "status": 200,
+        "file": "(1)!'~.jpg",
+        "canonicalPath": "/(1)!'~.jpg",
+        "canonical": false
+      }
+    },
+    {
+      "id": "path-unicode-folders",
+      "op": "path",
+      "input": {
+        "rawPath": "/Gr%C3%BC%C3%9Fe/%F0%9F%8C%B2.jpg"
+      },
+      "expected": {
+        "status": 200,
+        "file": "Gr\u00fc\u00dfe/\ud83c\udf32.jpg",
+        "canonicalPath": "/Gr%C3%BC%C3%9Fe/%F0%9F%8C%B2.jpg",
+        "canonical": true
+      }
+    },
+    {
+      "id": "path-encoded-dot-segment",
+      "op": "path",
+      "input": {
+        "rawPath": "/x/%2E%2E%2Flake.jpg"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "path-backslash",
+      "op": "path",
+      "input": {
+        "rawPath": "/a%5Clake.jpg"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "path-colon",
+      "op": "path",
+      "input": {
+        "rawPath": "/C%3A/lake.jpg"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "path-nul",
+      "op": "path",
+      "input": {
+        "rawPath": "/lake%00.jpg"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "path-protocol-relative",
+      "op": "path",
+      "input": {
+        "rawPath": "/%2F%2Fhost/lake.jpg"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "path-unsupported-type",
+      "op": "path",
+      "input": {
+        "rawPath": "/notes.txt"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "path-svg-not-a-source",
+      "op": "path",
+      "input": {
+        "rawPath": "/icon.svg"
+      },
+      "expected": {
+        "status": 400
+      }
+    },
+    {
+      "id": "path-missing",
+      "op": "path",
+      "input": {
+        "rawPath": "/missing.jpg"
+      },
+      "expected": {
+        "status": 404
+      }
+    }
+  ]
+}

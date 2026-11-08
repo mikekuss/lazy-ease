@@ -1,0 +1,46 @@
+{
+  "name": "@lazy-ease/testing",
+  "version": "0.2.0",
+  "description": "Portable conformance fixtures for lazy-ease loaders and backends: JSON data for ladders, URLs, crops, encoded sizes and crop tokens",
+  "license": "MIT",
+  "author": "Mike Kuss",
+  "homepage": "https://mikekuss.github.io/lazy-ease/",
+  "bugs": {
+    "url": "https://github.com/mikekuss/lazy-ease/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikekuss/lazy-ease.git",
+    "directory": "packages/testing"
+  },
+  "keywords": [
+    "lazy-ease",
+    "image",
+    "conformance",
+    "fixtures",
+    "test-vectors",
+    "srcset",
+    "loader"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./fixtures/*.json": "./fixtures/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "fixtures"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

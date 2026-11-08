@@ -1,0 +1,552 @@
+{
+  "format": "lazy-ease-fixtures",
+  "fixtureVersion": 1,
+  "contract": "0.3",
+  "file": "urls",
+  "description": "Canonical source paths and reference loader URLs.",
+  "cases": [
+    {
+      "id": "path-ascii",
+      "op": "encodePath",
+      "input": {
+        "src": "/lake.jpg"
+      },
+      "expected": {
+        "path": "/lake.jpg"
+      }
+    },
+    {
+      "id": "path-bare-name",
+      "op": "encodePath",
+      "input": {
+        "src": "lake.jpg"
+      },
+      "expected": {
+        "path": "/lake.jpg"
+      }
+    },
+    {
+      "id": "path-space-and-nfc",
+      "op": "encodePath",
+      "input": {
+        "src": "/my photos/caf\u00e9.jpg"
+      },
+      "expected": {
+        "path": "/my%20photos/caf%C3%A9.jpg"
+      }
+    },
+    {
+      "id": "path-nfd-normalized",
+      "op": "encodePath",
+      "topics": [
+        "nfc"
+      ],
+      "input": {
+        "src": "/my photos/cafe\u0301.jpg"
+      },
+      "expected": {
+        "path": "/my%20photos/caf%C3%A9.jpg"
+      }
+    },
+    {
+      "id": "path-pre-encoded",
+      "op": "encodePath",
+      "input": {
+        "src": "/my%20photos/caf%C3%A9.jpg"
+      },
+      "expected": {
+        "path": "/my%20photos/caf%C3%A9.jpg"
+      }
+    },
+    {
+      "id": "path-pre-encoded-nfd",
+      "op": "encodePath",
+      "topics": [
+        "nfc"
+      ],
+      "input": {
+        "src": "/my%20photos/cafe%CC%81.jpg"
+      },
+      "expected": {
+        "path": "/my%20photos/caf%C3%A9.jpg"
+      }
+    },
+    {
+      "id": "path-lowercase-hex",
+      "op": "encodePath",
+      "input": {
+        "src": "/caf%c3%a9.jpg"
+      },
+      "expected": {
+        "path": "/caf%C3%A9.jpg"
+      }
+    },
+    {
+      "id": "path-sub-delims",
+      "op": "encodePath",
+      "input": {
+        "src": "/a+b&c=d,e;f$g@h.jpg"
+      },
+      "expected": {
+        "path": "/a%2Bb%26c%3Dd%2Ce%3Bf%24g%40h.jpg"
+      }
+    },
+    {
+      "id": "path-unreserved-marks",
+      "op": "encodePath",
+      "input": {
+        "src": "/(1)!*'~.jpg"
+      },
+      "expected": {
+        "path": "/(1)!*'~.jpg"
+      }
+    },
+    {
+      "id": "path-encoded-slash",
+      "op": "encodePath",
+      "input": {
+        "src": "/a%2Fb.jpg"
+      },
+      "expected": {
+        "path": "/a%2Fb.jpg"
+      }
+    },
+    {
+      "id": "path-stray-percent",
+      "op": "encodePath",
+      "input": {
+        "src": "/100%.jpg"
+      },
+      "expected": {
+        "path": "/100%25.jpg"
+      }
+    },
+    {
+      "id": "path-non-bmp",
+      "op": "encodePath",
+      "input": {
+        "src": "/\ud83c\udf32.jpg"
+      },
+      "expected": {
+        "path": "/%F0%9F%8C%B2.jpg"
+      }
+    },
+    {
+      "id": "path-german",
+      "op": "encodePath",
+      "input": {
+        "src": "/Gr\u00fc\u00dfe/\u00c4pfel.jpg"
+      },
+      "expected": {
+        "path": "/Gr%C3%BC%C3%9Fe/%C3%84pfel.jpg"
+      }
+    },
+    {
+      "id": "path-query-and-hash",
+      "op": "encodePath",
+      "input": {
+        "src": "/lake.jpg?x=1#top"
+      },
+      "expected": {
+        "path": "/lake.jpg"
+      }
+    },
+    {
+      "id": "path-dot-segments",
+      "op": "encodePath",
+      "input": {
+        "src": "/a/./b/../c.jpg"
+      },
+      "expected": {
+        "path": "/a/c.jpg"
+      }
+    },
+    {
+      "id": "path-encoded-dot-segment",
+      "op": "encodePath",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "src": "/a/%2e%2e/b.jpg"
+      },
+      "expected": {
+        "path": "/b.jpg"
+      }
+    },
+    {
+      "id": "path-mixed-case-encoded-dot-segment",
+      "op": "encodePath",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "src": "/a/%2E./b.jpg"
+      },
+      "expected": {
+        "path": "/b.jpg"
+      }
+    },
+    {
+      "id": "path-backslash",
+      "op": "encodePath",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "src": "a\\b.jpg"
+      },
+      "expected": {
+        "path": "/a/b.jpg"
+      }
+    },
+    {
+      "id": "path-protocol-relative",
+      "op": "encodePath",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "src": "//cdn.example/x.jpg"
+      },
+      "expected": {
+        "path": "/x.jpg"
+      }
+    },
+    {
+      "id": "path-absolute-url",
+      "op": "encodePath",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "src": "https://cdn.example/p/x.jpg"
+      },
+      "expected": {
+        "path": "/p/x.jpg"
+      }
+    },
+    {
+      "id": "path-tab-removed",
+      "op": "encodePath",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "src": "/a\tb.jpg"
+      },
+      "expected": {
+        "path": "/ab.jpg"
+      }
+    },
+    {
+      "id": "path-leading-space-trimmed",
+      "op": "encodePath",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "src": " /lead.jpg"
+      },
+      "expected": {
+        "path": "/lead.jpg"
+      }
+    },
+    {
+      "id": "path-trailing-control-trimmed",
+      "op": "encodePath",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "src": "/lead.jpg \u0001"
+      },
+      "expected": {
+        "path": "/lead.jpg"
+      }
+    },
+    {
+      "id": "uncropped",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/lake.jpg",
+          "width": 640,
+          "quality": 75,
+          "format": "webp"
+        }
+      },
+      "expected": {
+        "url": "/_img/lake.jpg?fmt=webp&q=75&w=640"
+      }
+    },
+    {
+      "id": "all-plain-fields",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/my photos/caf\u00e9.jpg",
+          "width": 640,
+          "aspectRatio": 1.333,
+          "quality": 75,
+          "format": "webp",
+          "version": "AbC123"
+        }
+      },
+      "expected": {
+        "url": "/_img/my%20photos/caf%C3%A9.jpg?ar=1.333&fmt=webp&q=75&v=AbC123&w=640"
+      }
+    },
+    {
+      "id": "nfd-source",
+      "op": "url",
+      "topics": [
+        "nfc"
+      ],
+      "input": {
+        "request": {
+          "src": "/my photos/cafe\u0301.jpg",
+          "width": 640,
+          "aspectRatio": 1.333,
+          "quality": 75,
+          "format": "webp",
+          "version": "AbC123"
+        }
+      },
+      "expected": {
+        "url": "/_img/my%20photos/caf%C3%A9.jpg?ar=1.333&fmt=webp&q=75&v=AbC123&w=640"
+      }
+    },
+    {
+      "id": "pre-encoded-source",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/my%20photos/caf%C3%A9.jpg",
+          "width": 640,
+          "aspectRatio": 1.333,
+          "quality": 75,
+          "format": "webp",
+          "version": "AbC123"
+        }
+      },
+      "expected": {
+        "url": "/_img/my%20photos/caf%C3%A9.jpg?ar=1.333&fmt=webp&q=75&v=AbC123&w=640"
+      }
+    },
+    {
+      "id": "focal",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/cliff.jpg",
+          "width": 750,
+          "aspectRatio": 1,
+          "quality": 75,
+          "format": "webp",
+          "focalPoint": {
+            "x": 30,
+            "y": 45
+          }
+        }
+      },
+      "expected": {
+        "url": "/_img/cliff.jpg?ar=1&fmt=webp&fx=30&fy=45&q=75&w=750"
+      }
+    },
+    {
+      "id": "focal-edges",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/coast.jpg",
+          "width": 3840,
+          "aspectRatio": 0.25,
+          "quality": 75,
+          "format": "avif",
+          "focalPoint": {
+            "x": 0,
+            "y": 100
+          }
+        }
+      },
+      "expected": {
+        "url": "/_img/coast.jpg?ar=0.25&fmt=avif&fx=0&fy=100&q=75&w=3840"
+      }
+    },
+    {
+      "id": "ratio-spelling",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/big.jpg",
+          "width": 256,
+          "aspectRatio": 0.563,
+          "quality": 75,
+          "format": "jpeg",
+          "version": "1730000000000"
+        }
+      },
+      "expected": {
+        "url": "/_img/big.jpg?ar=0.563&fmt=jpeg&q=75&v=1730000000000&w=256"
+      }
+    },
+    {
+      "id": "ratio-from-double",
+      "op": "url",
+      "note": "A ratio is written in canonical form even when the caller passes the full double",
+      "input": {
+        "request": {
+          "src": "/big.jpg",
+          "width": 256,
+          "aspectRatio": 1.7777777777777777,
+          "quality": 75,
+          "format": "jpeg"
+        }
+      },
+      "expected": {
+        "url": "/_img/big.jpg?ar=1.778&fmt=jpeg&q=75&w=256"
+      }
+    },
+    {
+      "id": "opaque-version-case",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/lake.jpg",
+          "width": 64,
+          "quality": 75,
+          "format": "jpeg",
+          "version": "Rev_2.1~x-Y"
+        }
+      },
+      "expected": {
+        "url": "/_img/lake.jpg?fmt=jpeg&q=75&v=Rev_2.1~x-Y&w=64"
+      }
+    },
+    {
+      "id": "absolute-base",
+      "op": "url",
+      "input": {
+        "baseUrl": "https://img.example.com/media/",
+        "request": {
+          "src": "/lake.jpg",
+          "width": 1080,
+          "quality": 75,
+          "format": "avif"
+        }
+      },
+      "expected": {
+        "url": "https://img.example.com/media/lake.jpg?fmt=avif&q=75&w=1080"
+      }
+    },
+    {
+      "id": "root-base",
+      "op": "url",
+      "input": {
+        "baseUrl": "/",
+        "request": {
+          "src": "/lake.jpg",
+          "width": 1080,
+          "quality": 75,
+          "format": "avif"
+        }
+      },
+      "expected": {
+        "url": "/lake.jpg?fmt=avif&q=75&w=1080"
+      }
+    },
+    {
+      "id": "reserved-characters",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/a+b&c=d,e;f$g@h.jpg",
+          "width": 128,
+          "quality": 75,
+          "format": "webp"
+        }
+      },
+      "expected": {
+        "url": "/_img/a%2Bb%26c%3Dd%2Ce%3Bf%24g%40h.jpg?fmt=webp&q=75&w=128"
+      }
+    },
+    {
+      "id": "non-bmp-source",
+      "op": "url",
+      "input": {
+        "request": {
+          "src": "/\ud83c\udf32.jpg",
+          "width": 128,
+          "quality": 75,
+          "format": "webp"
+        }
+      },
+      "expected": {
+        "url": "/_img/%F0%9F%8C%B2.jpg?fmt=webp&q=75&w=128"
+      }
+    },
+    {
+      "id": "absolute-source",
+      "op": "url",
+      "topics": [
+        "url-parsing"
+      ],
+      "note": "The scheme and authority are dropped; only the path reaches the backend",
+      "input": {
+        "request": {
+          "src": "https://cdn.example/p/x.jpg",
+          "width": 640,
+          "quality": 75,
+          "format": "webp"
+        }
+      },
+      "expected": {
+        "url": "/_img/p/x.jpg?fmt=webp&q=75&w=640"
+      }
+    },
+    {
+      "id": "backslash-source",
+      "op": "url",
+      "topics": [
+        "url-parsing"
+      ],
+      "input": {
+        "request": {
+          "src": "photos\\lake.jpg",
+          "width": 640,
+          "quality": 75,
+          "format": "webp"
+        }
+      },
+      "expected": {
+        "url": "/_img/photos/lake.jpg?fmt=webp&q=75&w=640"
+      }
+    },
+    {
+      "id": "token",
+      "op": "url",
+      "topics": [
+        "token"
+      ],
+      "input": {
+        "request": {
+          "src": "/cliff.jpg",
+          "width": 750,
+          "aspectRatio": 1,
+          "quality": 75,
+          "format": "webp",
+          "focalPoint": {
+            "x": 30,
+            "y": 45
+          },
+          "version": "r7",
+          "token": "1.k1.WisYCsz8Vtmygcbr01tTuA"
+        }
+      },
+      "expected": {
+        "url": "/_img/cliff.jpg?ar=1&fmt=webp&fx=30&fy=45&q=75&token=1.k1.WisYCsz8Vtmygcbr01tTuA&v=r7&w=750"
+      }
+    }
+  ]
+}

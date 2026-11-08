@@ -11,6 +11,9 @@ importers:
       '@arethetypeswrong/cli':
         specifier: 0.18.5
         version: 0.18.5
+      '@lazy-ease/testing':
+        specifier: workspace:*
+        version: link:packages/testing
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -154,6 +157,8 @@ importers:
       thumbhash:
         specifier: 0.1.1
         version: 0.1.1
+
+  packages/testing: {}
 
 packages:
 
