@@ -4,6 +4,18 @@ Pushing a version tag runs [`.github/workflows/release.yml`](.github/workflows/r
 
 Only `@lazy-ease/react` is published. `@lazy-ease/server` stays off npm until it is added to `PACKAGES` in the workflow (see [Publishing @lazy-ease/server](#publishing-lazy-easeserver)).
 
+## Before every release: the frame test
+
+Run the pixel frame test on the commit you are about to release:
+
+```bash
+pnpm test:frames
+```
+
+It starts the demo dev servers (Vite on 5173, the image server on 3001), or reuses them if `pnpm dev` is already running, opens `apps/demo/controller.html` in Chromium and checks that every controller case passes. Then it reruns the fade, placeholder, lazy scroll-root, priority, resize, failed-upgrade and `update()` cases while recording the real screen frames, and fails if any frame shows alt text, a broken-image icon or a blank box between the placeholder and the image. A failing test attaches a contact sheet of the frames to the report (`apps/e2e/playwright-report/frames`, open it with `pnpm --filter e2e exec playwright show-report playwright-report/frames`). How frames are judged is described at the top of `apps/e2e/frames/controller-frames.spec.ts`.
+
+The test is not part of `pnpm test`, `pnpm e2e` or CI: it needs the demo servers, takes about a minute and depends on real frame timing. Don't tag a release while it fails. It needs Chromium for Playwright (`pnpm --filter e2e exec playwright install chromium`).
+
 ## Steps
 
 1. Bump `version` in `packages/react/package.json` and `packages/server/package.json`. Both packages are versioned together.

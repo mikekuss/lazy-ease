@@ -9,6 +9,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "e2e": "pnpm --filter e2e e2e",
+    "test:frames": "pnpm --filter e2e test:frames",
     "check:packages": "node scripts/check-packages.mjs",
     "check:next": "node scripts/next-smoke.mjs",
     "check:fixtures": "python3 scripts/check-fixtures.py"
