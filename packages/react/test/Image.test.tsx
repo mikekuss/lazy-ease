@@ -5,7 +5,7 @@ import { rgbaToThumbHash } from 'thumbhash'
 import { describe, expect, it, vi } from 'vitest'
 import { LazyEaseProvider, type LazyEaseProviderProps } from '../src/context.js'
 import { Image, type ImageProps } from '../src/Image.js'
-import { createLoader } from '../src/loader.js'
+import { createLoader } from '@lazy-ease/core'
 import { parsePlaceholder } from '../src/placeholder.js'
 import {
   MockIntersectionObserver,

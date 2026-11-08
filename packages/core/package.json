@@ -1,0 +1,49 @@
+{
+  "name": "@lazy-ease/core",
+  "version": "0.2.0",
+  "description": "Framework-free lazy-ease logic: width and ratio ladders, canonical URLs, crop geometry and loaders",
+  "license": "MIT",
+  "author": "Mike Kuss",
+  "homepage": "https://mikekuss.github.io/lazy-ease/",
+  "bugs": {
+    "url": "https://github.com/mikekuss/lazy-ease/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikekuss/lazy-ease.git",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "lazy-ease",
+    "image",
+    "responsive-images",
+    "srcset",
+    "loader",
+    "crop"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

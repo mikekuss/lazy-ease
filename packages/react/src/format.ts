@@ -1,4 +1,4 @@
-import type { ImageFormat } from './loader.js'
+import type { ImageFormat } from '@lazy-ease/core'
 
 // 1×1 white pixels, encoded with sharp.
 const AVIF =

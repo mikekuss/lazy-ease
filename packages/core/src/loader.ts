@@ -95,6 +95,10 @@ export interface LoaderOptions {
   params?: Record<string, string | number>
 }
 
+// Core compiles against es2023 only, without DOM or Node types. Every runtime
+// it targets has a WHATWG `URL`; this declares the one part `encodePath` uses.
+declare const URL: new (url: string, base: string) => { readonly pathname: string }
+
 // Any absolute URL resolves against this unchanged; a path resolves onto it.
 const DUMMY_BASE = 'http://lazy-ease.invalid'
 

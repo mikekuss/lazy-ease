@@ -1,8 +1,8 @@
 // Builds a minimal Next.js App Router app against the packed @lazy-ease/react
-// tarball, installed with npm in a temporary folder, and checks the
+// and @lazy-ease/core tarballs, installed with npm in a temporary folder, and checks the
 // prerendered HTML. Catches a lost 'use client' directive, a broken export and
 // server-rendered styles that don't reach the HTML.
-// Run `pnpm build && pnpm check:packages` first; it leaves the tarball in .cache/packs.
+// Run `pnpm build && pnpm check:packages` first; it leaves the tarballs in .cache/packs.
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -15,11 +15,14 @@ const REACT = '19.3.1'
 
 const root = resolve(import.meta.dirname, '..')
 const packDir = join(root, '.cache', 'packs')
-const tarball = existsSync(packDir) && readdirSync(packDir).find((file) => /^lazy-ease-react-.*\.tgz$/.test(file))
-if (!tarball) {
-  console.error('No @lazy-ease/react tarball in .cache/packs. Run `pnpm build && pnpm check:packages` first.')
+const packed = (name) => existsSync(packDir) && readdirSync(packDir).find((file) => file.startsWith(`lazy-ease-${name}-`) && file.endsWith('.tgz'))
+const tarball = packed('react')
+const coreTarball = packed('core')
+if (!tarball || !coreTarball) {
+  console.error('No @lazy-ease/react or @lazy-ease/core tarball in .cache/packs. Run `pnpm build && pnpm check:packages` first.')
   process.exit(1)
 }
+const fileSpec = (file) => `file:${join(packDir, file).replaceAll('\\', '/')}`
 
 // NEXT_SMOKE_DIR keeps the app between runs (CI caches it); otherwise a fresh temp folder.
 const keep = Boolean(process.env.NEXT_SMOKE_DIR)
@@ -32,11 +35,14 @@ const files = {
       name: 'lazy-ease-next-smoke',
       private: true,
       dependencies: {
-        '@lazy-ease/react': `file:${join(packDir, tarball).replaceAll('\\', '/')}`,
+        '@lazy-ease/core': fileSpec(coreTarball),
+        '@lazy-ease/react': fileSpec(tarball),
         next: NEXT,
         react: REACT,
         'react-dom': REACT,
       },
+      // @lazy-ease/react depends on the core version it was packed with; use the local tarball.
+      overrides: { '@lazy-ease/core': '$@lazy-ease/core' },
     },
     null,
     2,

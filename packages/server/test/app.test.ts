@@ -24,7 +24,7 @@ function mounted(options: Partial<Parameters<typeof createImageApp>[0]> = {}) {
 const get = (url: string, init?: RequestInit) => app.request(url, init)
 
 describe('client-format URLs', () => {
-  // Built by hand exactly as `createLoader()` in packages/react/src/loader.ts writes them.
+  // Built by hand exactly as `createLoader()` in packages/core/src/loader.ts writes them.
   it.each([
     ['/my%20photos/caf%C3%A9.jpg?ar=1.333&fmt=webp&q=75&v=AbC123&w=640', 640, 480, 'webp'],
     ['/my%20photos/caf%C3%A9.jpg?fmt=avif&q=75&w=1080', 1080, 810, 'heif'],

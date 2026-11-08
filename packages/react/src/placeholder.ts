@@ -1,5 +1,5 @@
 import { thumbHashToApproximateAspectRatio, thumbHashToAverageRGBA, thumbHashToDataURL } from 'thumbhash'
-import { formatNumber } from './numbers.js'
+import { formatNumber } from '@lazy-ease/core'
 
 /** Inline style for the box. Assignable to React's `CSSProperties`. */
 export interface PlaceholderStyle {

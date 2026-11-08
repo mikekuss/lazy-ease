@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises'
+import { cropWindow } from '@lazy-ease/core'
 import { HTTPException } from 'hono/http-exception'
 import sharp, { type Metadata, type SharpOptions } from 'sharp'
-import { cropWindow, type ImageParams } from './contract.js'
+import type { ImageParams } from './contract.js'
 
 export const DEFAULT_MAX_INPUT_PIXELS = 50_000_000
 export const DEFAULT_TIMEOUT = 10_000

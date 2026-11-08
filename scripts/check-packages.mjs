@@ -12,6 +12,7 @@ const packDir = join(root, '.cache', 'packs')
 
 const packages = [
   // Files that must start with 'use client', so Server Components can import them.
+  { dir: 'packages/core', clientFiles: [] },
   { dir: 'packages/react', clientFiles: ['dist/Image.js', 'dist/context.js'] },
   { dir: 'packages/server', clientFiles: [] },
 ]

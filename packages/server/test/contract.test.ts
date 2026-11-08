@@ -7,8 +7,8 @@ import {
   parseImageQuery,
 } from '../src/contract.js'
 
-// The same literal as `RATIO_LADDER` in packages/react/test/ladders.test.ts.
-// Client and server must agree, and the server does not import the client.
+// The same literal as `RATIO_LADDER` in packages/core/test/ladders.test.ts.
+// The server takes its ladders from @lazy-ease/core; this pins the values it accepts.
 const RATIO_LADDER = [
   0.25, 0.261, 0.273, 0.285, 0.297, 0.31, 0.324, 0.339, 0.354, 0.369,
   0.386, 0.403, 0.42, 0.429, 0.439, 0.459, 0.479, 0.5, 0.522, 0.545,

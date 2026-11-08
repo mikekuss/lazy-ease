@@ -2,7 +2,7 @@
 
 import { createContext, use, useEffect, useMemo, type ReactNode } from 'react'
 import { startFormatDetection } from './format.js'
-import { createLoader, normalizeLoader, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader } from './loader.js'
+import { createLoader, normalizeLoader, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader } from '@lazy-ease/core'
 
 /**
  * - `lazy`: load when the image comes within `rootMargin` of the viewport (IntersectionObserver)
