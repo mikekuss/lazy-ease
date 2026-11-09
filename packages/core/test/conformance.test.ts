@@ -27,7 +27,6 @@ import {
 const PENDING: Topic[] = [
   'nfc', // encodePath does not NFC-normalize input; the fix costs more than the React Image budget allows
   'safe-paths', // stray %, non-UTF-8 escapes and other schemes: step 06, once React Image is off the 7557 B ceiling
-  'token', // ImageRequest has no token field until step 07
 ]
 
 describe('ladders', () => {
@@ -170,7 +169,6 @@ describe('urls', () => {
       'path-stray-percent-non-ascii',
       'path-stray-percent-space',
       'stray-percent-source',
-      'token',
     ])
     for (const c of pending) {
       // Core returns a different path or URL, also where the record expects an error.

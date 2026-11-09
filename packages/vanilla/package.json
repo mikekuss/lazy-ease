@@ -1,0 +1,72 @@
+{
+  "name": "@lazy-ease/vanilla",
+  "version": "0.2.0",
+  "description": "Declarative HTML integration for lazy-ease: enhances data-le markup, ships the stylesheet and a self-starting script",
+  "license": "MIT",
+  "author": "Mike Kuss",
+  "homepage": "https://mikekuss.github.io/lazy-ease/",
+  "bugs": {
+    "url": "https://github.com/mikekuss/lazy-ease/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikekuss/lazy-ease.git",
+    "directory": "packages/vanilla"
+  },
+  "keywords": [
+    "lazy-ease",
+    "image",
+    "lazy-loading",
+    "responsive-images",
+    "html",
+    "php",
+    "placeholder"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css",
+    "./dist/lazy-ease.min.js"
+  ],
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./css": {
+      "source": "./src/css.ts",
+      "types": "./dist/css.d.ts",
+      "default": "./dist/css.js"
+    },
+    "./lazy-ease.css": "./dist/lazy-ease.css",
+    "./lazy-ease.min.js": "./dist/lazy-ease.min.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./css": {
+        "types": "./dist/css.d.ts",
+        "default": "./dist/css.js"
+      },
+      "./lazy-ease.css": "./dist/lazy-ease.css",
+      "./lazy-ease.min.js": "./dist/lazy-ease.min.js"
+    }
+  },
+  "scripts": {
+    "build": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@lazy-ease/core": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -588,6 +588,13 @@ describe('measured mode', () => {
     expect(img.getAttribute('src')).toBe('/_img/lake.jpg?ar=1&fmt=webp&q=75&w=640')
   })
 
+  it('passes the crop token and revision to the loader', () => {
+    const { img, box, attach } = setup()
+    attach({ src: '/cliff.jpg', aspectRatio: 1, focalPoint: { x: 30, y: 45 }, version: 'r7', token: '1.k1.WisYCsz8Vtmygcbr01tTuA', loading: 'eager' })
+    resize(box, 300, 300)
+    expect(img.getAttribute('src')).toBe('/_img/cliff.jpg?ar=1&fmt=webp&fx=30&fy=45&q=75&token=1.k1.WisYCsz8Vtmygcbr01tTuA&v=r7&w=640')
+  })
+
   it('ignores zero-sized slots until they get a size', () => {
     const { img, box, attach, states } = setup()
     attach({ src: '/lake.jpg', fill: true, srcWidth: 2400, srcHeight: 1600, loading: 'eager' })

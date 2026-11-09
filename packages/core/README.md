@@ -24,7 +24,7 @@ import { candidateSet, measuredCandidates } from '@lazy-ease/core'
 
 candidateSet({ src: '/strip.jpg', widths: [256, 384, 640], srcWidth: 2000, srcHeight: 300,
   aspectRatio: 1, quality: 75, format: 'webp', loader })
-// { srcset: '/_img/strip.jpg?ar=1&fmt=webp&q=75&w=256 256w, /_img/strip.jpg?ar=1&fmt=webp&q=75&w=384 300w', src: … }
+// { srcset: '/_img/strip.jpg?ar=1&fmt=webp&q=75&w=256 256w, /_img/strip.jpg?ar=1&fmt=webp&q=75&w=384 300w', src: â€¦ }
 ```
 
 ## Controller
@@ -51,15 +51,22 @@ handle.destroy() // releases listeners, observers, timers and the claim on the e
 | --- | --- |
 | `src` / `srcset`, `sizes`, `url` / `priority`, `loading: 'native'` | One source mode: measured, prepared, or native. Mixing them throws before the element is touched. A measured `src` needs a `loader` in the config or the options, unless it loads directly. |
 | `width`, `height`, `aspectRatio`, `fill` | Layout, as in the HTML. Fixed and ratio boxes crop on the server at the snapped ratio. |
-| `crop` | `'browser'` or `'server'`. A fill image with both source dimensions defaults to browser crop: the uncropped source at the cover width, max(box width, box height × source ratio). |
-| `srcWidth`, `srcHeight`, `focalPoint`, `version`, `quality` | Source geometry, focus, revision and quality for the loader. |
-| `placeholder` | A color, a data URI, `thumbhash:…` (with a registered decoder) or `'none'`. Default: whatever the HTML paints on the box. |
+| `crop` | `'browser'` or `'server'`. A fill image with both source dimensions defaults to browser crop: the uncropped source at the cover width, max(box width, box height Ã— source ratio). |
+| `srcWidth`, `srcHeight`, `focalPoint`, `version`, `token`, `quality` | Source geometry, focus, revision, crop token and quality for the loader. The reference loader writes the token between `q` and `v`. |
+| `placeholder` | A color, a data URI, `thumbhash:â€¦` (with a registered decoder) or `'none'`. Default: whatever the HTML paints on the box. |
 | `loading: 'eager'`, `root`, `rootMargin`, `dwellTime` | When to activate. Default: within 400px of the viewport, observed through one shared IntersectionObserver per root and margin. |
 | `fadeDuration`, `onStateChange(state, img)`, `onDisplay(img, event?)` | A 400 ms fade after load and decode, skipped for reduced motion. `onDisplay` reports the first display of each source once, with the load event only when one was observed. |
 
 External URLs, SVG and GIF load directly. A loader with one format or `formats: 'auto'` needs no format probe; otherwise an AVIF decode test runs once, on first need, and WebP is the fallback. Measured images grow their candidates after a 200 ms trailing debounce and never shrink them; a failed upgrade keeps the image that is displayed. A failed first load or decode releases the placeholder and reports `error`. An element can be attached once; the claim is shared by every copy of the package on the page.
 
-`whenVisible(element, { root, rootMargin, dwellTime }, callback)` is the visibility primitive on its own, for decorative backgrounds; it returns a function that cancels.
+`whenVisible(element, { root, rootMargin, dwellTime }, callback)` is the visibility primitive on its own, for decorative backgrounds; it returns a function that cancels. `le.config` is the config the instance was created with, so an adapter can watch backgrounds against the same root and margin as the images.
+
+`imageSet({ src, width, loader })` builds the CSS `image-set()` value for a decorative background: 1x and 2x (or the `densities` you pass) for every declared format, best first, with optional `aspectRatio`, `focalPoint`, `srcWidth`, `quality`, `version` and `token`:
+
+```js
+imageSet({ src: '/banner.jpg', width: 700, aspectRatio: 2, loader: createLoader({ formats: ['webp'] }) })
+// 'image-set(url("/_img/banner.jpg?ar=2&fmt=webp&q=75&w=750") 1x type("image/webp"), url("/_img/banner.jpg?ar=2&fmt=webp&q=75&w=1440") 2x type("image/webp"))'
+```
 
 ThumbHash placeholders decode in an explicit entry point, with the `thumbhash` package the application installs:
 
@@ -70,7 +77,7 @@ import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 const le = createLazyEase({ thumbhash: thumbhashDecoder(thumbhash) })
 ```
 
-`@lazy-ease/react` and `@lazy-ease/server` build on this package.
+`@lazy-ease/vanilla`, `@lazy-ease/react` and `@lazy-ease/server` build on this package.
 
 - [Documentation](https://github.com/mikekuss/lazy-ease#readme)
 - [Changelog](https://github.com/mikekuss/lazy-ease/blob/main/CHANGELOG.md)

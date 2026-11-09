@@ -166,6 +166,16 @@ importers:
 
   packages/testing: {}
 
+  packages/vanilla:
+    dependencies:
+      '@lazy-ease/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+
 packages:
 
   '@andrewbranch/untar.js@1.0.4':

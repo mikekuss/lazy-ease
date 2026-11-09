@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "sourceMap": false,
+    // Build against the built declarations of core, not its sources.
+    "customConditions": []
+  },
+  "include": ["src"],
+  // The self-starting script is bundled by scripts/bundle.mjs, not compiled on its own.
+  "exclude": ["src/auto.ts"]
+}

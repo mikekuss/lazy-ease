@@ -69,6 +69,8 @@ export interface AttachOptions extends Pick<LazyEaseConfig, 'loader' | 'quality'
   focalPoint?: FocalPoint
   /** Opaque revision passed to the loader. */
   version?: string
+  /** Crop token passed to the loader, for a backend that signs crops. */
+  token?: string
   /** A CSS color, a data URI, `thumbhash:<base64>` or `'none'`, painted on the box. Default: what the HTML has. */
   placeholder?: string
   /**
@@ -92,6 +94,8 @@ export interface Attachment {
 }
 
 export interface LazyEase {
+  /** The config the instance was created with. Adapters read root, margin and dwell time from it; do not change it. */
+  readonly config: Readonly<LazyEaseConfig>
   /** Takes over one image, `img.closest('[data-le]')` being its box. Throws on invalid or ambiguous options before touching the element. */
   attach(img: HTMLImageElement, options?: AttachOptions): Attachment
 }
@@ -156,6 +160,7 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
   }
 
   return {
+    config,
     attach(img, options = {}) {
       let o = resolve(options)
       // Global, so every copy of the package on the page sees the claim.
@@ -339,6 +344,7 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
               quality,
               format,
               version: o.version,
+              token: o.token,
             })
             if (focus) {
               // A re-measure replaces the previous crop’s styles.

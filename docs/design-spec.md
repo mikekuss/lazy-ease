@@ -25,7 +25,7 @@ A marked image or its nearest marked box owns one logical image, possibly inside
 
 | HTML field | Meaning |
 | --- | --- |
-| data-le | Marker on the box or img. The default IIFE scans only explicitly opted-in areas (data-le-auto on their root). |
+| data-le | Marker on the box or img. The default IIFE scans only explicitly opted-in areas (data-le-auto on their root). data-le-auto="off" keeps a framework-managed subtree out of every scan. |
 | data-le-srcset / data-le-sizes | Precomputed candidate list and slot. Activate sizes before srcset. |
 | data-le-url | Precomputed single target URL. Use when dimensions are unknown or for pass-through. |
 | data-le-src | Logical source for the configured measured loader. |
@@ -33,6 +33,7 @@ A marked image or its nearest marked box owns one logical image, possibly inside
 | data-le-ar / data-le-fill / data-le-crop | Layout ratio, boolean fill and server or browser crop. Native width and height remain meaningful HTML dimensions. |
 | data-le-fx / data-le-fy | Optional focal coordinates in percent, supplied together. |
 | data-le-token / data-le-v / data-le-q | Optional crop token, revision and quality passed to the loader. |
+| data-le-background | Marks a decorative element whose CSS gates its image on data-le-visible. |
 | data-state / data-le-visible | Controller state on the marked owner, or a one-way visibility marker on a decorative background. |
 
 Use one source mode per image. A prepared list may include a prepared fallback URL. Reject ambiguous measured and prepared input before mutating the element. For deferred picture markup put media, type and dimensions on source elements and defer their srcset/sizes as on img. Native picture uses standard attributes throughout. Calls to enhance(le, root) accept a document, element or shadow root. Roots for markup discovery and for intersection are separate options. React and Lit attach within their own lifecycle. Skip their managed subtrees during auto-enhancement. An element-local, cross-copy ownership marker prevents duplicate attachment. Only its owner releases it. Shadow-root users can adopt the exported CSS string.

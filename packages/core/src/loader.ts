@@ -18,6 +18,8 @@ export interface ImageRequest {
   format: ImageFormat | 'auto'
   /** The `version` prop, opaque. */
   version?: string
+  /** Optional crop token from the backend, opaque. It covers source, revision and crop. */
+  token?: string
   /**
    * Where to crop around, in whole percent of the source (spec 6.1). Only
    * with `aspectRatio`, and absent for the center. A loader whose backend
@@ -129,7 +131,7 @@ export function encodePath(src: string): string {
 
 /**
  * Loader for the reference backend. Emits the canonical URL from spec 6.1:
- * `{baseUrl}/{path}?ar=…&fmt=…&fx=…&fy=…&q=…&v=…&w=…`, parameters sorted, absent ones
+ * `{baseUrl}/{path}?ar=…&fmt=…&fx=…&fy=…&q=…&token=…&v=…&w=…`, parameters sorted, absent ones
  * omitted, numbers in canonical form.
  */
 export function createLoader({
@@ -146,7 +148,7 @@ export function createLoader({
     ratios,
     qualities,
     formats,
-    url: ({ src, width, aspectRatio, quality, format, version, focalPoint }) => {
+    url: ({ src, width, aspectRatio, quality, format, version, token, focalPoint }) => {
       const extra = Object.entries(params).map(([key, value]) => [key.toLowerCase(), value])
       const values: Record<string, string | number | undefined> = {
         ...Object.fromEntries(extra),
@@ -156,6 +158,7 @@ export function createLoader({
         fx: focalPoint?.x,
         fy: focalPoint?.y,
         q: quality,
+        token: token || undefined,
         v: version || undefined,
         w: width,
       }
