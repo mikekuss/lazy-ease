@@ -41,6 +41,7 @@ export { outputSize, type OutputRequest, type OutputSize } from './output.js'
 export { candidateSet, type CandidateSet, type CandidateSetOptions } from './candidates.js'
 export { isDirect, isOwned } from './source.js'
 export { focusStyles, parsePlaceholder, type FocusStyleOptions, type FocusStyles, type Placeholder, type StyleRecord, type ThumbHashDecoder } from './styles.js'
+export { imageSet, type ImageSetOptions } from './imageset.js'
 export { whenVisible, type WhenVisibleOptions } from './dom/observe.js'
 export {
   createLazyEase,

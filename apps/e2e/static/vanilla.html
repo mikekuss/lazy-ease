@@ -1,0 +1,101 @@
+<!doctype html>
+<!--
+  What a PHP template emits for @lazy-ease/vanilla: markup, one stylesheet and
+  one script tag, with no client code of its own. Every URL is precomputed
+  except the data-le-src image, which the script's loader builds.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lazy-ease vanilla fixture</title>
+<link rel="stylesheet" href="/assets/lazy-ease.css">
+<script defer src="/assets/lazy-ease.min.js" data-base-url="/_img" data-formats="webp"></script>
+<style>
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; }
+  .card { width: 320px; margin: 16px; }
+  .spacer { height: 1600px; }
+  [data-hero] { --le-ar: 1; aspect-ratio: var(--le-ar); }
+  @media (min-width: 800px) { [data-hero] { --le-ar: 2; } }
+  [data-banner] { aspect-ratio: 4; background: #64756c center / cover no-repeat; }
+  [data-banner][data-le-visible] { background-image: image-set(url("/_img/copy-3.jpg?ar=4&fmt=webp&q=75&w=640") 1x, url("/_img/copy-3.jpg?ar=4&fmt=webp&q=75&w=1080") 2x); }
+</style>
+</head>
+<body>
+<main data-le-auto>
+  <!-- Native: real sources in the HTML, visible without the script. -->
+  <div class="card">
+    <span data-le id="native" style="background-color:#bbc8cf">
+      <img alt="Native photo" width="2400" height="1600" loading="lazy" decoding="async"
+           src="/_img/photo.jpg?fmt=webp&amp;q=75&amp;w=640"
+           srcset="/_img/photo.jpg?fmt=webp&amp;q=75&amp;w=640 640w, /_img/photo.jpg?fmt=webp&amp;q=75&amp;w=1080 1080w"
+           sizes="320px">
+    </span>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- Prepared list: the template wrote every candidate. -->
+  <div class="card">
+    <span data-le id="prepared" style="aspect-ratio:3/2;background-color:#bbc8cf">
+      <img alt="Prepared list" width="320" height="213"
+           src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+           data-le-srcset="/_img/copy-1.jpg?fmt=webp&amp;q=75&amp;w=640 640w, /_img/copy-1.jpg?fmt=webp&amp;q=75&amp;w=1080 1080w"
+           data-le-sizes="320px">
+    </span>
+  </div>
+
+  <!-- Prepared single URL: the smallest working backend. -->
+  <div class="card">
+    <span data-le id="single" style="aspect-ratio:3/2;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3Cpath fill='%23bbc8cf' d='M0 0h1v1H0z'/%3E%3C/svg%3E&quot;)">
+      <img alt="Single URL" width="320" height="213"
+           src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+           data-le-url="/_img/copy-2.jpg?fmt=webp&amp;q=75&amp;w=640">
+    </span>
+  </div>
+
+  <!-- Deferred picture: a wide crop from 800px, a square one below. -->
+  <div class="card">
+    <span data-le data-hero id="picture" style="background-color:#bbc8cf">
+      <picture>
+        <source media="(min-width:800px)" width="1200" height="600"
+                data-le-srcset="/_img/copy-1.jpg?ar=2&amp;fmt=webp&amp;q=75&amp;w=640 640w, /_img/copy-1.jpg?ar=2&amp;fmt=webp&amp;q=75&amp;w=1080 1080w"
+                data-le-sizes="320px">
+        <img alt="Art-directed picture" width="320" height="320"
+             src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+             data-le-srcset="/_img/copy-2.jpg?ar=1&amp;fmt=webp&amp;q=75&amp;w=640 640w"
+             data-le-sizes="320px">
+      </picture>
+    </span>
+  </div>
+
+  <!-- Measured: the script's loader builds the URLs for the measured slot. -->
+  <div class="card">
+    <span data-le id="measured" style="aspect-ratio:3/2;background-color:#bbc8cf">
+      <img alt="Measured photo"
+           src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+           data-le-src="/photo.jpg" data-le-srcw="2400" data-le-srch="1600" data-le-ar="1.5">
+    </span>
+  </div>
+
+  <!-- Decorative: the CSS selects the image once the script marks it visible. -->
+  <div class="card"><div id="banner" data-le-background data-banner aria-hidden="true"></div></div>
+
+  <!-- Managed by a framework: the script stays out. -->
+  <div class="card" data-le-auto="off">
+    <span data-le id="managed" style="aspect-ratio:3/2;background-color:#bbc8cf">
+      <img alt="Managed elsewhere" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+           data-le-url="/_img/small.jpg?fmt=webp&amp;q=75&amp;w=384">
+    </span>
+  </div>
+</main>
+
+<!-- Not opted in: the script never looks here. -->
+<footer class="card">
+  <span data-le id="outside" style="aspect-ratio:5/4;background-color:#bbc8cf">
+    <img alt="Outside the opted-in area" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+         data-le-url="/_img/small.jpg?fmt=webp&amp;q=75&amp;w=256">
+  </span>
+</footer>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { serve } from '@hono/node-server'
@@ -7,6 +7,8 @@ import { build, type BuildOptions } from 'esbuild'
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 import sharp from 'sharp'
+import { cssText } from '../../packages/vanilla/src/css.js'
+import { buildScript } from '../../packages/vanilla/scripts/bundle.mjs'
 import type { FixtureImage, PageData } from './src/pages.js'
 
 const PORT = Number(process.env.PORT) || 3100
@@ -82,6 +84,12 @@ await build({
 })
 const { pages, renderPage } = (await import(pathToFileURL(ssrFile).href)) as typeof import('./src/ssr.js')
 
+// The vanilla assets at the paths the recipes use. The script is the
+// published build from packages/vanilla/scripts/bundle.mjs, from source:
+// CI's e2e job does not build the packages.
+const vanillaJs = (await buildScript({ conditions: ['source'], write: false })).outputFiles[0]!.text
+const vanillaHtml = await readFile(path.join(here, 'static', 'vanilla.html'), 'utf8')
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
@@ -118,6 +126,9 @@ app.use('/_img/*', async (c, next) => {
 app.route('/_img', createImageApp({ root }))
 
 app.get('/health', (c) => c.text('ok'))
+app.get('/assets/lazy-ease.min.js', (c) => c.body(vanillaJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
+app.get('/assets/lazy-ease.css', (c) => c.body(cssText, 200, { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' }))
+app.get('/vanilla', (c) => c.html(vanillaHtml))
 app.get('/client.js', (c) => c.body(clientJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
 app.get('/:page', (c) => {
   const page = c.req.param('page')

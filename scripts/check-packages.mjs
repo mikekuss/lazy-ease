@@ -6,6 +6,8 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 
 const root = resolve(import.meta.dirname, '..')
@@ -33,11 +35,22 @@ const packages = [
     required: [...built.required, 'dist/thumbhash.js', 'dist/thumbhash.d.ts', 'dist/dom/controller.js'],
     smoke: smokeCore,
   },
+  {
+    dir: 'packages/vanilla',
+    clientFiles: [],
+    ...built,
+    required: [...built.required, 'dist/css.js', 'dist/css.d.ts', 'dist/lazy-ease.css', 'dist/lazy-ease.min.js'],
+    smoke: smokeVanilla,
+    // A stylesheet and a classic script: neither has types to resolve.
+    attw: ['--exclude-entrypoints', './lazy-ease.css', './lazy-ease.min.js'],
+  },
   { dir: 'packages/react', clientFiles: ['dist/Image.js', 'dist/context.js'], ...built },
   { dir: 'packages/server', clientFiles: [], ...built },
   { dir: 'packages/testing', clientFiles: [], ...testing, smoke: smokeTesting },
 ]
 
+// Tarball entries by package name, for smoke tests that need a dependency.
+const packed = new Map()
 let failures = 0
 const fail = (name, message) => {
   failures++
@@ -119,15 +132,65 @@ console.log('imported @lazy-ease/testing: ' + manifest.files.length + ' files, '
   }
 }
 
-/** Writes a tarball's entries into a temporary node_modules under `name`. */
-function install(entries, name) {
+/** Writes a tarball's entries into a temporary node_modules under `name`, next to `others` ({ name: entries }). */
+function install(entries, name, others = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'lazy-ease-smoke-'))
-  for (const [path, data] of entries) {
-    const file = join(dir, 'node_modules', ...name.split('/'), path)
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, data)
+  for (const [packageName, files] of Object.entries({ ...others, [name]: entries })) {
+    for (const [path, data] of files) {
+      const file = join(dir, 'node_modules', ...packageName.split('/'), path)
+      mkdirSync(dirname(file), { recursive: true })
+      writeFileSync(file, data)
+    }
   }
   return dir
+}
+
+/**
+ * Installs the packed @lazy-ease/vanilla with the packed core and checks what
+ * a consumer reaches by name: the ESM entries import without touching a
+ * browser global, the CSS export path holds the same text as `cssText`, and
+ * the script at its export path starts itself in a page (jsdom) and enhances
+ * only the opted-in area.
+ */
+function smokeVanilla(entries) {
+  const core = packed.get('@lazy-ease/core')
+  if (!core) return false
+  const dir = install(entries, '@lazy-ease/vanilla', { '@lazy-ease/core': core })
+  const jsdom = createRequire(join(root, 'packages/react/package.json')).resolve('jsdom')
+  try {
+    writeFileSync(
+      join(dir, 'smoke.mjs'),
+      `import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+const touched = []
+const names = ['process', 'document', 'window', 'navigator', 'IntersectionObserver', 'ResizeObserver', 'matchMedia', 'Image', 'HTMLElement']
+const saved = names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)])
+for (const name of names) Object.defineProperty(globalThis, name, { configurable: true, get: () => (touched.push(name), undefined) })
+const vanilla = await import('@lazy-ease/vanilla')
+const { cssText } = await import('@lazy-ease/vanilla/css')
+for (const [name, descriptor] of saved) descriptor ? Object.defineProperty(globalThis, name, descriptor) : delete globalThis[name]
+if (touched.length) throw new Error('import touched ' + touched.join(', '))
+if (typeof vanilla.enhance !== 'function' || typeof vanilla.readOptions !== 'function') throw new Error('exports')
+const file = (path) => readFileSync(fileURLToPath(import.meta.resolve('@lazy-ease/vanilla/' + path)), 'utf8')
+if (file('lazy-ease.css') !== cssText) throw new Error('lazy-ease.css differs from cssText')
+const { JSDOM } = (await import(${JSON.stringify(pathToFileURL(jsdom).href)})).default
+const inert = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
+const page = new JSDOM('<section data-le-auto><span data-le id="in"><img alt="" src="' + inert + '" data-le-srcset="/a.webp 640w" data-le-sizes="50vw"></span></section>' +
+  '<span data-le id="out"><img alt="" src="' + inert + '" data-le-url="/b.webp"></span>', { runScripts: 'outside-only' })
+page.window.eval(file('lazy-ease.min.js'))
+const doc = page.window.document
+// Like a deferred script, it waits until the document is parsed.
+if (doc.readyState === 'loading') await new Promise((resolve) => doc.addEventListener('DOMContentLoaded', resolve))
+if (doc.querySelector('#in img').getAttribute('srcset') !== '/a.webp 640w' || doc.querySelector('#in').dataset.state !== 'loading') throw new Error('the script did not enhance the opted-in area')
+if (doc.querySelector('#out').hasAttribute('data-state')) throw new Error('the script enhanced outside data-le-auto')
+console.log('imported @lazy-ease/vanilla without browser globals; the packed script enhanced its area')
+`,
+    )
+    console.log('$ node smoke.mjs (packed @lazy-ease/vanilla)')
+    return spawnSync(process.execPath, ['smoke.mjs'], { cwd: dir, stdio: 'inherit' }).status === 0
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 /**
@@ -176,7 +239,7 @@ function sourceConditions(value, path = 'exports') {
 rmSync(packDir, { recursive: true, force: true })
 mkdirSync(packDir, { recursive: true })
 
-for (const { dir, clientFiles, allowed, required, smoke } of packages) {
+for (const { dir, clientFiles, allowed, required, smoke, attw = [] } of packages) {
   const before = new Set(readdirSync(packDir))
   if (!pnpm(['pack', '--pack-destination', relative(join(root, dir), packDir)], join(root, dir))) {
     fail(dir, 'pnpm pack failed')
@@ -187,6 +250,7 @@ for (const { dir, clientFiles, allowed, required, smoke } of packages) {
   const entries = readTarball(file)
   const manifest = JSON.parse(entries.get('package.json').toString('utf8'))
   const name = manifest.name
+  packed.set(name, entries)
   console.log(`\n== ${name}: ${relative(root, file)} (${entries.size} files)`)
 
   // Shape of the tarball.
@@ -210,7 +274,7 @@ for (const { dir, clientFiles, allowed, required, smoke } of packages) {
   // profile skips the node10 and node16-from-CJS resolution modes, where an
   // ESM-only package can't resolve by design. node16-from-ESM and bundler
   // must still pass.
-  if (!pnpm(['exec', 'attw', tgz, '--profile', 'esm-only'])) fail(name, 'attw failed')
+  if (!pnpm(['exec', 'attw', tgz, '--profile', 'esm-only', ...attw])) fail(name, 'attw failed')
   if (smoke && !smoke(entries)) fail(name, 'import smoke test failed')
 }
 
