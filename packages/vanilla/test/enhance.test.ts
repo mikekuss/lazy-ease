@@ -171,6 +171,21 @@ describe('enhance', () => {
     enhance(createLazyEase())
     intersect($('#banner'))
     expect($('#banner').hasAttribute('data-le-visible')).toBe(true)
+    // So is the image: no claim, no state and no fade stay behind.
+    expect($('#bad').dataset.state).toBe('idle')
+    intersect($('#bad'))
+    expect(img('bad').getAttribute('src')).toBe('/a.jpg')
+  })
+
+  it('leaves an image that could not be observed as it was', () => {
+    vi.stubGlobal('IntersectionObserver', StrictObserver)
+    html(boxed('data-le-url="/a.jpg"', 'bad'))
+    $('#bad').style.backgroundColor = 'red'
+    enhance(createLazyEase({ rootMargin: '400' }))
+    expect($('#bad').hasAttribute('data-state')).toBe(false)
+    expect($('#bad').style.backgroundColor).toBe('red')
+    expect(img('bad').style.opacity).toBe('')
+    expect(claimed(img('bad'))).toBe(false)
   })
 
   it('measures a signed source through the configured loader', () => {
@@ -367,6 +382,14 @@ describe('the self-starting script', () => {
     expect(MockIntersectionObserver.instances.at(-1)!.options.rootMargin).toBe('400px')
     intersect($('#p'))
     expect(img('p').getAttribute('src')).toBe('/a.jpg')
+  })
+
+  it('takes data-root-margin without IntersectionObserver and loads at once', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined)
+    html(`<main data-le-auto>${boxed('data-le-url="/a.jpg"', 'm')}</main>`)
+    await start({ rootMargin: '50px' })
+    expect(errors).toEqual([])
+    expect(img('m').getAttribute('src')).toBe('/a.jpg')
   })
 
   it.each(['soon', '', ' ', '-0', 'Infinity', '1e3'])('ignores data-dwell-time="%s"', async (dwellTime) => {

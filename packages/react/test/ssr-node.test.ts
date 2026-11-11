@@ -1,6 +1,8 @@
 // Server rendering outside jsdom, with every browser global a trap.
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
+import * as thumbhash from 'thumbhash'
+import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { LazyEaseProvider } from '../src/context.js'
 import { Image, type ImageProps } from '../src/Image.js'
@@ -29,6 +31,9 @@ const CASES: Partial<ImageProps>[] = [
   { fill: true, aspectRatio: 2, sizes: '100vw', priority: true },
   { width: 320, height: 240, placeholder: 'thumbhash:1QcSHQRnh493V4dIh4eXh1h4kJUI' },
   { width: 320, height: 240, priority: true, placeholder: 'thumbhash:1QcSHQRnh493V4dIh4eXh1h4kJUI' },
+  { width: 320, height: 240, noScript: true, token: 't', version: 'v' },
+  { srcWidth: 1600, srcHeight: 1000, loading: 'native', sizes: '100vw' },
+  { aspectRatio: 1, sizes: '100vw', priority: true, sources: [{ media: '(min-width: 800px)', src: '/b.jpg', aspectRatio: 2, srcWidth: 2400, srcHeight: 1600 }] },
 ]
 
 describe('server rendering without a DOM', () => {
@@ -53,7 +58,7 @@ describe('server rendering without a DOM', () => {
   it('reads no browser global in any mode', () => {
     for (const props of CASES) {
       const element = createElement(Image, { src: '/a.jpg', alt: '', ...props })
-      const markup = renderToString(createElement(LazyEaseProvider, { thumbhashSsr: 'image', children: element }))
+      const markup = renderToString(createElement(LazyEaseProvider, { thumbhashSsr: 'image', thumbhash: thumbhashDecoder(thumbhash), children: element }))
       expect(markup, JSON.stringify(props)).toContain('<img')
       expect(renderToString(element)).toContain('<img')
     }

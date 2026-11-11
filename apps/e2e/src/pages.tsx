@@ -1,5 +1,8 @@
 import { Image, LazyEaseProvider } from '@lazy-ease/react'
 import { useEffect, type ReactNode } from 'react'
+import * as thumbhash from 'thumbhash'
+// From source: the app depends on @lazy-ease/react only.
+import { thumbhashDecoder } from '../../../packages/core/src/thumbhash.js'
 import { FOCUS } from './focus.js'
 
 export interface FixtureImage {
@@ -34,13 +37,15 @@ const CSS = `
   body { font: 14px/1.4 system-ui, sans-serif; }
   .spacer { height: 2400px; }
   .hero { position: relative; aspect-ratio: 2; }
-  .row { display: flex; gap: 16px; padding: 16px; }
+  .row { display: flex; align-items: flex-start; gap: 16px; padding: 16px; }
   .fluid { padding: 0; }
   .banner { position: relative; height: 200px; }
   .avatar { position: relative; width: 200px; height: 200px; }
 `
 
 type PageProps = Pick<PageData, 'images'>
+
+const decoder = thumbhashDecoder(thumbhash)
 
 function BelowFold({ images: { copies } }: PageProps) {
   return (
@@ -53,7 +58,7 @@ function BelowFold({ images: { copies } }: PageProps) {
           alt=""
           width={300}
           height={200}
-          srcWidth={image.width}
+          srcWidth={image.width} srcHeight={image.height}
           wrapperClassName={`below-${i + 1}`}
         />
       ))}
@@ -64,8 +69,8 @@ function BelowFold({ images: { copies } }: PageProps) {
 function Dpr({ images: { photo, small } }: PageProps) {
   return (
     <div className="row">
-      <Image src={photo.src} alt="" width={300} height={200} srcWidth={photo.width} wrapperClassName="box-300" />
-      <Image src={small.src} alt="" width={200} height={150} srcWidth={small.width} wrapperClassName="box-200-src-500" />
+      <Image src={photo.src} alt="" width={300} height={200} srcWidth={photo.width} srcHeight={photo.height} wrapperClassName="box-300" />
+      <Image src={small.src} alt="" width={200} height={150} srcWidth={small.width} srcHeight={small.height} wrapperClassName="box-200-src-500" />
     </div>
   )
 }
@@ -73,7 +78,7 @@ function Dpr({ images: { photo, small } }: PageProps) {
 function Resize({ images: { photo } }: PageProps) {
   return (
     <div className="fluid">
-      <Image src={photo.src} alt="" aspectRatio={3} srcWidth={photo.width} wrapperClassName="fluid-box" />
+      <Image src={photo.src} alt="" aspectRatio={3} srcWidth={photo.width} srcHeight={photo.height} wrapperClassName="fluid-box" />
     </div>
   )
 }
@@ -91,7 +96,7 @@ function Placeholders({ images: { photo } }: PageProps) {
 function Fade({ images: { photo } }: PageProps) {
   return (
     <div className="row">
-      <Image src={photo.src} alt="" width={300} height={200} srcWidth={photo.width} fadeDuration={200} wrapperClassName="fade-box" />
+      <Image src={photo.src} alt="" width={300} height={200} srcWidth={photo.width} srcHeight={photo.height} fadeDuration={200} wrapperClassName="fade-box" />
     </div>
   )
 }
@@ -106,7 +111,7 @@ function Priority({ images: { photo } }: PageProps) {
         aspectRatio={2}
         sizes="100vw"
         priority
-        srcWidth={photo.width}
+        srcWidth={photo.width} srcHeight={photo.height}
         placeholder={`thumbhash:${photo.thumbhash}`}
         wrapperClassName="hero-box"
       />
@@ -120,7 +125,7 @@ function FirstViewport({ images: { copies } }: PageProps) {
     <>
       <div className="row">
         <Image src={inView.src} alt="" width={300} height={200} wrapperClassName="in-view" />
-        <Image src={classic.src} alt="" width={300} height={200} sizes="300px" wrapperClassName="classic" />
+        <Image src={classic.src} alt="" width={300} height={200} loading="native" wrapperClassName="classic" />
       </div>
       <div className="spacer" />
       <Image src={below.src} alt="" width={300} height={200} wrapperClassName="below" />
@@ -148,7 +153,7 @@ function Focus({ images: { focus } }: PageProps) {
       </div>
       {/* Measured: the server crops 1:1 around the point. */}
       <div className="avatar">
-        <Image src={focus.src} alt="" fill srcWidth={focus.width} srcHeight={focus.height} focalPoint={FOCUS} wrapperClassName="focus-avatar" />
+        <Image src={focus.src} alt="" fill crop="server" srcWidth={focus.width} srcHeight={focus.height} focalPoint={FOCUS} wrapperClassName="focus-avatar" />
       </div>
       {/* The size container must not change how fixed and ratio boxes size themselves. */}
       <div style={{ width: 300 }}>
@@ -189,7 +194,7 @@ export function Document({ data }: { data: PageData }) {
         <style dangerouslySetInnerHTML={{ __html: CSS }} />
       </head>
       <body>
-        <LazyEaseProvider>
+        <LazyEaseProvider thumbhash={decoder}>
           <Page images={data.images} />
         </LazyEaseProvider>
         <HydrationFlag />

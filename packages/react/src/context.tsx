@@ -1,38 +1,49 @@
 'use client'
 
-import { createContext, use, useEffect, useMemo, type ReactNode } from 'react'
-import { startFormatDetection } from './format.js'
-import { createLoader, normalizeLoader, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader } from '@lazy-ease/core'
+import { createContext, use, useMemo, type ReactNode } from 'react'
+import { createLoader, normalizeLoader, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader, type ThumbHashDecoder } from '@lazy-ease/core'
 
 /**
- * - `lazy`: load when the image comes within `rootMargin` of the viewport (IntersectionObserver)
- * - `native`: leave it to the browser with `loading="lazy"` (classic mode)
- * - `eager`: load right away
+ * - `lazy`: load when the image comes within `rootMargin` of the root, with a fade
+ * - `eager`: load right after hydration, with a fade
+ * - `native`: real sources in the server HTML; the browser loads them with `loading="lazy"`
  */
 export type LoadingStrategy = 'lazy' | 'native' | 'eager'
 
-/** Provider defaults (spec 5.3). */
+/** Provider defaults. */
 export interface LazyEaseConfig {
   /** Carries the width ladder, ratio ladder, qualities and formats. */
   loader: ResolvedLoader
-  /** Extra hosts treated as owned besides relative paths (spec 10). */
+  /** Extra hosts served by the loader besides relative paths. */
   domains: readonly string[]
   quality: number
   loading: LoadingStrategy
-  /** How far outside the viewport to start loading, as a CSS margin. */
+  /** The scrolling element lazy images are observed against. Default: the viewport. */
+  root?: Element | Document | null
+  /** How far outside the root to start loading, as a CSS margin. */
   rootMargin: string
   /** How long a box must stay in the preload zone before it loads, in ms. */
   dwellTime: number
   /** Used when an image has no `placeholder` prop or an invalid one. */
   placeholder: string
-  /** Crossfade duration in ms for measured-mode images. 0 swaps instantly. */
+  /** Crossfade duration in ms. 0 swaps instantly. */
   fadeDuration: number
+  /**
+   * Enables `thumbhash:` placeholders: `thumbhashDecoder(thumbhash)` from
+   * `@lazy-ease/core/thumbhash`, with the `thumbhash` package the app installs.
+   */
+  thumbhash?: ThumbHashDecoder
   /** `'image'` renders decoded ThumbHash images on the server instead of only their average color. */
   thumbhashSsr: 'color' | 'image'
 }
 
+let defaultLoader: ResolvedLoader | undefined
+
 const defaultConfig: LazyEaseConfig = {
-  loader: createLoader(),
+  // Built on first use, so importing the package computes no ladder.
+  get loader() {
+    return (defaultLoader ??= createLoader())
+  },
   domains: [],
   quality: 75,
   loading: 'lazy',
@@ -61,32 +72,30 @@ export function LazyEaseProvider({
   domains,
   quality,
   loading,
+  root,
   rootMargin,
   dwellTime,
   placeholder,
   fadeDuration,
+  thumbhash,
   thumbhashSsr,
 }: LazyEaseProviderProps) {
   const parent = useLazyEaseConfig()
-
-  // Started here so the result is usually in before the first image intersects (spec 6.4).
-  useEffect(() => {
-    void startFormatDetection()
-  }, [])
-
   const value = useMemo<LazyEaseConfig>(
     () => ({
       loader: loader ? normalizeLoader(loader) : parent.loader,
       domains: domains ?? parent.domains,
       quality: quality ?? parent.quality,
       loading: loading ?? parent.loading,
+      root: root === undefined ? parent.root : root,
       rootMargin: rootMargin ?? parent.rootMargin,
       dwellTime: dwellTime ?? parent.dwellTime,
       placeholder: placeholder ?? parent.placeholder,
       fadeDuration: fadeDuration ?? parent.fadeDuration,
+      thumbhash: thumbhash ?? parent.thumbhash,
       thumbhashSsr: thumbhashSsr ?? parent.thumbhashSsr,
     }),
-    [parent, loader, domains, quality, loading, rootMargin, dwellTime, placeholder, fadeDuration, thumbhashSsr],
+    [parent, loader, domains, quality, loading, root, rootMargin, dwellTime, placeholder, fadeDuration, thumbhash, thumbhashSsr],
   )
   return <LazyEaseContext value={value}>{children}</LazyEaseContext>
 }

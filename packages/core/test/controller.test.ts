@@ -563,6 +563,28 @@ describe('visibility', () => {
     attach({ url: '/a.webp' })
     expect(img.getAttribute('src')).toBe('/a.webp')
   })
+
+  it('releases the image when its observer cannot be built', () => {
+    // Like a browser, the constructor rejects a margin without units.
+    class Strict extends MockIntersectionObserver {
+      constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit = {}) {
+        if (options.rootMargin === '400') throw new SyntaxError('rootMargin must be specified in pixels or percent')
+        super(callback, options)
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Strict)
+    const { img, box, attach } = setup()
+    const listeners = vi.spyOn(img, 'removeEventListener')
+    expect(() => attach({ url: '/a.webp', rootMargin: '400', placeholder: '#00f' })).toThrow(SyntaxError)
+    expect(box.hasAttribute('data-state')).toBe(false)
+    expect(box.style.backgroundColor).toBe(PLACEHOLDER)
+    expect(listeners).toHaveBeenCalledWith('load', expect.any(Function))
+    // A later valid attach takes it.
+    attach({ url: '/a.webp' })
+    expect(box.dataset.state).toBe('idle')
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/a.webp')
+  })
 })
 
 describe('measured mode', () => {

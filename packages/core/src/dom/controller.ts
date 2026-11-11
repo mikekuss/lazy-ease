@@ -387,15 +387,7 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           else fail()
         } else report(own ? 'loading' : 'idle')
 
-        if (native) {
-          if (o.priority) {
-            img.setAttribute('fetchpriority', 'high')
-            img.setAttribute('loading', 'eager')
-          }
-        } else if (o.loading === 'eager') activate()
-        else cleanups.push(whenVisible(surface, o, activate))
-
-        return (next) => {
+        const end = (next?: Options) => {
           live = false
           cleanups.forEach((cleanup) => cleanup())
           timers.forEach(clearTimeout)
@@ -412,9 +404,41 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
             activated.forEach((values, source) => restore(values, source))
           }
         }
+
+        if (native) {
+          if (o.priority) {
+            img.setAttribute('fetchpriority', 'high')
+            img.setAttribute('loading', 'eager')
+          }
+        } else if (o.loading === 'eager') activate()
+        else {
+          try {
+            cleanups.push(whenVisible(surface, o, activate))
+          } catch (error) {
+            // No IntersectionObserver for this root margin: the generation ends before it started.
+            end()
+            throw error
+          }
+        }
+        return end
       }
 
-      stop = run()
+      const prior = owner.getAttribute('data-state')
+      /** Starts a generation. If it throws, the element is released as it was, so a later attach can take it. */
+      const start = () => {
+        try {
+          stop = run()
+        } catch (error) {
+          stop = undefined
+          clearStyle(img, FADE)
+          PLACEHOLDER.forEach((property, i) => (styleOf(surface)[property] = painted[i]!))
+          if (prior === null) owner.removeAttribute('data-state')
+          else owner.setAttribute('data-state', prior)
+          if (claims[key] === claim) delete claims[key]
+          throw error
+        }
+      }
+      start()
       return {
         get state() {
           return state!
@@ -426,7 +450,7 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           clearStyle(img, FADE)
           PLACEHOLDER.forEach((property, i) => (styleOf(surface)[property] = painted[i]!))
           o = resolved
-          stop = run()
+          start()
         },
         destroy() {
           stop?.()
