@@ -128,10 +128,11 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
   const { src, srcWidth } = props
 
   useEffect(() => {
-    // The box is the element carrying data-state; onLoad misses images that
-    // finished before hydration, data-state does not.
-    const box = figureRef.current?.querySelector<HTMLElement>('[data-state]')
-    const img = box?.querySelector('img')
+    // The marked box, or the img itself when it needs none, carries
+    // data-state; onLoad misses images that finished before hydration,
+    // data-state does not.
+    const box = figureRef.current?.querySelector<HTMLElement>('[data-le]')
+    const img = box instanceof HTMLImageElement ? box : box?.querySelector('img')
     if (!box || !img) return
     let naiveFor: string | undefined
     let alive = true

@@ -1,45 +1,60 @@
 'use client'
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ImgHTMLAttributes,
-  type Ref,
-  type SyntheticEvent,
-} from 'react'
+import { useCallback, useEffect, useRef, type CSSProperties, type ImgHTMLAttributes, type Ref, type SyntheticEvent } from 'react'
 import { preload } from 'react-dom'
-import { useLazyEaseConfig, type LoadingStrategy } from './context.js'
 import {
-  buildSrcSet,
+  candidateSet,
   classicCandidates,
-  coverPosition,
-  cropWindow,
-  focusInWindow,
+  createLazyEase,
+  focusStyles,
   fullLadder,
-  measuredCandidates,
+  isDirect,
   normalizeFocalPoint,
   normalizeLoader,
+  parsePlaceholder,
   percentPosition,
   snapQuality,
   snapRatio,
-  snapWidth,
+  type AttachOptions,
   type FocalPoint,
-  type ImageFormat,
   type ImageLoader,
   type ImageLoaderFunction,
+  type LoadState,
   type ResolvedLoader,
+  type ThumbHashDecoder,
 } from '@lazy-ease/core'
-import { DEV, warnOnce } from './dev.js'
-import { detectFormat, resolvedFormat } from './format.js'
-import { invalidCombination, resolveLayout } from './layout.js'
-import { observeResize, whenVisible } from './observer.js'
-import { isOwned } from './owned.js'
-import { parsePlaceholder, thumbhashImageStyle, type Placeholder, type PlaceholderStyle } from './placeholder.js'
+import { useLazyEaseConfig, type LoadingStrategy } from './context.js'
+import { warnOnce } from './dev.js'
+import { invalidCombination } from './layout.js'
+
+// The development checks below read `process.env.NODE_ENV` inside a `try`.
+// Bundlers replace the expression, so a production build folds the check to
+// `if (false)` and drops it, and a development build runs it even without a
+// `process` global (Vite). Without a bundler, `process` is missing: that read
+// throws before `dev` is set, so the error is swallowed and the checks are
+// skipped; an error from the checks themselves is rethrown. They are written
+// out where they are used, because esbuild folds neither a helper nor a flag
+// assigned inside a `try`.
+declare const process: { env: { NODE_ENV?: string } }
+
+/** One art-direction source of a `<picture>`. */
+export interface ImageSource {
+  /** The media query it applies under, e.g. `'(min-width: 800px)'`. */
+  media: string
+  src: string
+  /** The ratio the backend crops this source to. */
+  aspectRatio?: number
+  /** Oriented source dimensions. */
+  srcWidth?: number
+  srcHeight?: number
+  /** Kept in view when cropped, in percent of the source. */
+  focalPoint?: FocalPoint
+  /** Slot of this source. Default: the image's `sizes`, else `100vw`. */
+  sizes?: string
+  /** Crop token from the backend for this source. */
+  token?: string
+  version?: string
+}
 
 export interface ImageProps
   extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'srcSet' | 'sizes' | 'width' | 'height' | 'loading' | 'placeholder'> {
@@ -53,223 +68,102 @@ export interface ImageProps
   aspectRatio?: number
   /** The box fills its positioned parent. */
   fill?: boolean
-  /** Classic `sizes`. Turns off measuring (classic mode). */
+  /**
+   * Who crops a cropped image. Default: the browser for a fill image without
+   * `aspectRatio` whose source dimensions are known, otherwise the server.
+   */
+  crop?: 'server' | 'browser'
+  /** Prepared slot: the candidates are built for it and activated with a fade. */
   sizes?: string
-  /** Intrinsic width of the source. Ladder widths above it are not offered. */
+  /** Oriented width of the source. Ladder widths above it are not offered. */
   srcWidth?: number
-  /** Intrinsic height of the source. */
+  /** Oriented height of the source. With `srcWidth`, reserves the intrinsic ratio. */
   srcHeight?: number
-  /** Opaque cache-busting token passed to the loader. */
+  /** Opaque revision passed to the loader. */
   version?: string
+  /** Opaque crop token passed to the loader, for a backend that signs crops. */
+  token?: string
   /**
    * The point to keep in view when the image is cropped, in percent of the
-   * source (0–100). Kept as close to the box center as the image edges
-   * allow, on the server and in the browser. Default: the center.
+   * source (0–100), on the server and in the browser. Default: the center.
    */
   focalPoint?: FocalPoint
   /** Snapped to the nearest quality the loader allows. */
   quality?: number
+  /** `lazy` and `eager` fade in after activation; `native` puts the real sources in the HTML. */
   loading?: LoadingStrategy
   /** Preload distance for `loading="lazy"`. */
   rootMargin?: string
-  /** Eager, `fetchpriority="high"` and a preload link. For the LCP image only. */
+  /** Native, eager, `fetchpriority="high"`, no fade and a preload. For the LCP image only. */
   priority?: boolean
-  /** A CSS color, a data URI, `thumbhash:<base64>` or `'none'`. */
+  /** A CSS color, a data URI, `thumbhash:<base64>` (with the provider's `thumbhash` decoder) or `'none'`. */
   placeholder?: string
-  /** Crossfade in ms for measured-mode images. */
+  /** Crossfade in ms. 0 swaps directly and needs no box. */
   fadeDuration?: number
-  /** Forces external-image behavior: `src` as is, no srcset. */
+  /** Loads `src` as is, without the loader. */
   unoptimized?: boolean
   loader?: ImageLoader | ImageLoaderFunction
+  /** Art-direction sources, in a `<picture>`. Their ratios belong in CSS, through `--le-ar` on the box. */
+  sources?: readonly ImageSource[]
+  /** Adds native markup in `<noscript>` for visitors without JavaScript. Deferred images only. */
+  noScript?: boolean
+  /** Every state change. `loaded` once per source, also for an image that loaded before hydration. */
+  onStateChange?: (state: LoadState, img: HTMLImageElement) => void
+  /** Keeps the box element, and its styles and class. */
   wrapperClassName?: string
   wrapperStyle?: CSSProperties
   /** Forwarded to the `<img>`. */
   ref?: Ref<HTMLImageElement>
 }
 
-type Status = 'loaded' | 'error'
+const INERT = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
 
-/** What the box has measured: `width` is the value written to `sizes`. */
-interface Measure {
-  width: number
-  /** Snapped box ratio, tracked only in fill mode without `aspectRatio`. */
-  ratio?: number
-}
-
-interface MeasureOptions {
-  ladder: readonly number[]
-  ratios: readonly number[]
-  srcWidth?: number
-  trackRatio: boolean
-}
-
-const DECODE_TIMEOUT = 250
-const SIZES_DEBOUNCE = 200
-const THUMBHASH_PREFIX = 'thumbhash:'
-const BROWSER_PREFERENCE: readonly ImageFormat[] = ['avif', 'webp', 'jpeg']
-
-/** The best format both the browser (`best` and anything older) and the loader support. */
-function pickFormat(best: ImageFormat, formats: readonly ImageFormat[]): ImageFormat {
-  const supported = BROWSER_PREFERENCE.slice(BROWSER_PREFERENCE.indexOf(best))
-  return supported.find((format) => formats.includes(format)) ?? formats[0] ?? best
-}
-
-function firstMeasure(box: Pick<DOMRectReadOnly, 'width' | 'height'>, { ratios, trackRatio }: MeasureOptions): Measure {
-  return {
-    width: Math.ceil(box.width),
-    ratio: trackRatio && box.height > 0 ? snapRatio(box.width / box.height, ratios) : undefined,
-  }
-}
-
-/** The candidate a browser at `dpr` takes from the measured srcset for `width`. */
-function selectedWidth(width: number, dpr: number, { ladder, srcWidth }: MeasureOptions): number {
-  const candidates = measuredCandidates({ measuredWidth: width, ladder, srcWidth })
-  return Math.min(snapWidth(width * dpr, ladder), candidates[candidates.length - 1]!)
-}
-
-/**
- * The measure after a resize (spec 6.2 steps 4 and 5). `sizes` only grows,
- * and only when the browser would pick another candidate; the ratio follows
- * the box when it moves to another ladder value.
- */
-function grow(current: Measure, box: Pick<DOMRectReadOnly, 'width' | 'height'>, dpr: number, options: MeasureOptions): Measure {
-  let next = current
-  if (box.width > current.width && selectedWidth(box.width, dpr, options) > selectedWidth(current.width, dpr, options)) {
-    next = { ...next, width: Math.ceil(box.width) }
-  }
-  if (options.trackRatio && box.width > 0 && box.height > 0) {
-    const ratio = snapRatio(box.width / box.height, options.ratios)
-    if (ratio !== current.ratio) next = { ...next, ratio }
-  }
-  return next
-}
-
-/** The format for URLs in the server HTML (spec 6.4): WebP, since nothing can be detected yet. */
-function serverFormat(loader: ResolvedLoader): ImageFormat | 'auto' {
-  return loader.formats === 'auto' ? 'auto' : pickFormat('webp', loader.formats)
-}
-
-interface ClassicSources {
+interface Sources {
   src: string
-  srcSet: string
-  sizes: string
-}
-
-interface ClassicSourcesOptions {
-  src: string
-  loader: ResolvedLoader
-  width?: number
+  srcSet?: string
   sizes?: string
-  srcWidth?: number
-  crop?: number
-  quality: number
-  version?: string
-  focus?: FocalPoint
 }
 
-/**
- * The URLs a classic-mode image carries in the server HTML (spec 6.3). The
- * priority preload is built from the same strings, so React dedupes it with
- * the `<img>` (spec 7.1).
- */
-function classicSources({ src, loader, width, sizes, srcWidth, crop, quality, version, focus }: ClassicSourcesOptions): ClassicSources {
-  const widths =
-    sizes !== undefined || width === undefined
-      ? fullLadder({ ladder: loader.widths, srcWidth })
-      : classicCandidates({ width, ladder: loader.widths, srcWidth })
-  const request = {
+/** The native candidates for a slot: 1× and 2× of a known `width`, else the full ladder. */
+function nativeSources(
+  loader: ResolvedLoader,
+  src: string,
+  direct: boolean,
+  { srcWidth, srcHeight, crop, focus, sizes, width, quality, version, token }: { srcWidth?: number; srcHeight?: number; crop?: number; focus?: FocalPoint; sizes?: string; width?: number; quality: number; version?: string; token?: string },
+): Sources {
+  if (direct) return { src }
+  const { formats, widths: ladder } = loader
+  // Nothing is detected yet, so the server HTML takes WebP.
+  const format = formats === 'auto' ? formats : (['webp', 'jpeg'] as const).find((f) => formats.includes(f)) ?? formats[0]!
+  const set = candidateSet({
+    // A known width caps the slot at 2×, also under `sizes`.
+    widths: width === undefined ? fullLadder({ ladder, srcWidth }) : classicCandidates({ width, ladder, srcWidth }),
+    srcWidth,
+    srcHeight,
+    loader,
     src,
     aspectRatio: crop,
+    focalPoint: crop ? focus : undefined,
     quality,
-    format: serverFormat(loader),
+    format,
     version,
-    focalPoint: crop === undefined ? undefined : focus,
-  }
-  return {
-    src: loader.url({ ...request, width: widths[Math.floor(widths.length / 2)]! }),
-    srcSet: buildSrcSet({ ...request, widths, loader }),
-    // Without either (a development error), the no-JS fallback's sizes.
-    sizes: sizes ?? (width === undefined ? '100vw' : `${width}px`),
-  }
+    token,
+  })
+  return { src: set.src, srcSet: set.srcset, sizes: set.srcset && (sizes ?? (width ? `${width}px` : '100vw')) }
 }
 
-/**
- * The box's content size, the same box ResizeObserver's `contentRect`
- * reports, so padding or a border from `wrapperStyle` doesn't count.
- */
-function contentSize(box: HTMLElement): { width: number; height: number } {
-  const rect = box.getBoundingClientRect()
-  const style = getComputedStyle(box)
-  const px = (...values: string[]) => values.reduce((sum, value) => sum + (parseFloat(value) || 0), 0)
-  return {
-    width: Math.max(0, rect.width - px(style.paddingLeft, style.paddingRight, style.borderLeftWidth, style.borderRightWidth)),
-    height: Math.max(0, rect.height - px(style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth)),
-  }
-}
-
-interface FocusOptions {
-  focus: FocalPoint
-  /** The ratio the backend crops to, if it crops. */
-  crop?: number
-  srcWidth?: number
-  srcHeight?: number
-}
-
-/**
- * The CSS position that puts the focal point as close to the box center as
- * the delivered image allows (spec 5.4). A server-cropped image already has
- * the point near its center, so only the small rest of the crop is left,
- * which needs the source size to place exactly; without it, the center is
- * within about 1 % of the box. An uncropped image needs the source ratio, or
- * falls back to a percentage.
- */
-function focusPosition({ focus, crop, srcWidth, srcHeight }: FocusOptions): string | undefined {
-  if (!srcWidth || !srcHeight) return crop === undefined ? percentPosition(focus) : undefined
-  if (crop === undefined) return coverPosition(srcWidth / srcHeight, focus)
-  const window = cropWindow(srcWidth, srcHeight, crop, focus)
-  return coverPosition(crop, focusInWindow(srcWidth, srcHeight, window, focus))
-}
-
-function prefersReducedMotion(): boolean {
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
-}
-
-function inViewport(rect: DOMRect): boolean {
-  return (
-    rect.width > 0 &&
-    rect.height > 0 &&
-    rect.bottom > 0 &&
-    rect.right > 0 &&
-    rect.top < window.innerHeight &&
-    rect.left < window.innerWidth
-  )
-}
-
-interface ResolvedPlaceholder {
-  placeholder: Placeholder
-  /** The string it was parsed from. */
-  value: string
-  /** Why the `placeholder` prop was rejected, if it was. */
-  invalid?: string
-}
-
-function resolvePlaceholder(value: string, fallback: string): ResolvedPlaceholder {
-  const placeholder = parsePlaceholder(value)
-  if (placeholder.kind !== 'invalid') return { placeholder, value }
-  const fallbackPlaceholder = parsePlaceholder(fallback)
-  return {
-    placeholder: fallbackPlaceholder.kind === 'invalid' ? { kind: 'none', ssrStyle: {} } : fallbackPlaceholder,
-    value: fallback,
-    invalid: placeholder.reason,
-  }
+/** Calls `ref` with `node`, as React does, and returns its cleanup. */
+function setRef(ref: Ref<HTMLImageElement> | undefined, node: HTMLImageElement | null) {
+  if (typeof ref == 'function') return ref(node)
+  if (ref) ref.current = node
 }
 
 /**
  * An image that loads at the size it is rendered at, behind an inline
- * placeholder (spec 5).
+ * placeholder, through the lazy-ease controller of `@lazy-ease/core`.
  */
 export function Image(props: ImageProps) {
-  // A new src starts over from `idle` with the placeholder (spec 5.1).
+  // A new src is a new logical source: it starts over with its placeholder.
   return <ImageBox key={props.src} {...props} />
 }
 
@@ -280,10 +174,12 @@ function ImageBox({
   height,
   aspectRatio,
   fill = false,
+  crop,
   sizes,
   srcWidth,
   srcHeight,
   version,
+  token,
   focalPoint,
   quality,
   loading,
@@ -293,429 +189,288 @@ function ImageBox({
   fadeDuration,
   unoptimized = false,
   loader: loaderProp,
+  sources = [],
+  noScript = false,
+  onStateChange,
   wrapperClassName,
   wrapperStyle,
   className,
   style,
   onLoad,
-  onError,
   decoding = 'async',
   ref,
   ...imgProps
 }: ImageProps) {
   const config = useLazyEaseConfig()
   const strategy = loading ?? config.loading
+  const native = priority || strategy === 'native'
 
-  if (DEV) {
-    const problem = invalidCombination({ fill, width, height, aspectRatio, sizes, priority, loading: strategy })
-    if (problem) throw new Error(`[lazy-ease] ${problem} (src: ${src})`)
+  let dev = false
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      dev = true
+      const problem = invalidCombination({ fill, width, height, aspectRatio, sizes, priority, loading: strategy, crop, srcWidth, srcHeight })
+      if (problem) throw new Error(`[lazy-ease] ${problem} (src: ${src})`)
+    }
+  } catch (error) {
+    if (dev) throw error
   }
 
-  const layout = useMemo(() => resolveLayout({ fill, width, height, aspectRatio }), [fill, width, height, aspectRatio])
-  const owned = !unoptimized && isOwned(src, config.domains)
-  const loader = owned && loaderProp ? normalizeLoader(loaderProp) : config.loader
+  const direct = unoptimized || isDirect(src, config.domains)
+  const loader = loaderProp && !direct ? normalizeLoader(loaderProp) : config.loader
   const q = snapQuality(quality ?? config.quality, loader.qualities)
-  const classic = sizes !== undefined || priority || strategy === 'native'
-  const eager = priority || strategy === 'eager'
-  const margin = rootMargin ?? config.rootMargin
   const fadeMs = fadeDuration ?? config.fadeDuration
-  const trackRatio = layout.mode === 'fill' && aspectRatio === undefined
-  const crop = layout.declaredRatio === undefined ? undefined : snapRatio(layout.declaredRatio, loader.ratios)
-  // Intrinsic images are never cropped, so they have nothing to focus.
-  const fx = layout.mode === 'intrinsic' ? undefined : focalPoint?.x
-  const fy = layout.mode === 'intrinsic' ? undefined : focalPoint?.y
-  const focus = useMemo(
-    () => (fx === undefined || fy === undefined ? undefined : normalizeFocalPoint({ x: fx, y: fy })),
-    [fx, fy],
-  )
+  const measured = !native && !direct && sizes === undefined
+  const mode = fill ? 'fill' : height !== undefined ? 'fixed' : aspectRatio !== undefined ? 'ratio' : 'intrinsic'
+  const declared = mode === 'fixed' ? width! / height! : aspectRatio
+  const sourceRatio = srcWidth && srcHeight ? srcWidth / srcHeight : undefined
+  // Mirrors the controller: the browser crops a fill image without a declared ratio when it knows the source's.
+  const browserCrop = mode !== 'intrinsic' && (crop ? crop === 'browser' : fill && declared === undefined && !!sourceRatio)
+  const serverCrop = mode === 'intrinsic' || browserCrop || declared === undefined || direct ? undefined : snapRatio(declared, loader.ratios)
+  const focus = mode === 'intrinsic' ? undefined : normalizeFocalPoint(focalPoint)
+  const prepared = (slot: string | undefined) =>
+    nativeSources(loader, src, direct, { srcWidth, srcHeight, crop: serverCrop, focus, sizes: slot, width, quality: q, version, token })
+  const real = measured ? undefined : prepared(sizes)
 
-  const resolved = useMemo(
-    () => resolvePlaceholder(placeholder ?? config.placeholder, config.placeholder),
-    [placeholder, config.placeholder],
-  )
+  // The placeholder; an invalid value falls back to the provider's.
+  const decoder = config.thumbhash
+  const requested = parsePlaceholder(placeholder ?? config.placeholder, decoder)
+  const parsed = requested ?? parsePlaceholder(config.placeholder, decoder) ?? { style: {} }
+  // A decoded ThumbHash on the server, or only its color with the image swapped in on activation.
+  const ssrImage = parsed.lazy && (config.thumbhashSsr === 'image' || priority)
+  // A copy: the parsed styles are shared, memoized per hash.
+  const paint: CSSProperties = { ...(ssrImage ? parsed.lazy!() : parsed.style) }
+  if (paint.backgroundImage) paint.backgroundPosition = focus ? percentPosition(focus) : 'center'
 
-  const boxRef = useRef<HTMLSpanElement>(null)
-  const [triggered, setTriggered] = useState(false)
-  const [measure, setMeasure] = useState<Measure>()
-  const [format, setFormat] = useState<ImageFormat | 'auto'>()
-  const [status, setStatus] = useState<Status>()
-  // The fade duration, once the image is revealed.
-  const [fadeIn, setFadeIn] = useState<number>()
-  const [fadeDone, setFadeDone] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const revealed = useRef(false)
-  const alive = useRef(true)
-  const latest = useRef({ fadeMs, onLoad })
+  const focused = focus && !measured ? focusStyles({ focus, crop: serverCrop, srcWidth, srcHeight }) : undefined
+  // A box only where something needs it: fill, a fade, browser focal positioning or wrapper props.
+  const boxed =
+    fill || wrapperClassName !== undefined || wrapperStyle !== undefined || (!native && fadeMs > 0) || (measured ? !!focus : !!focused?.box.containerType)
 
-  useLayoutEffect(() => {
-    latest.current = { fadeMs, onLoad }
+  const ratio = mode === 'fixed' ? `${width} / ${height}` : mode === 'ratio' ? `${aspectRatio}` : sourceRatio && `${srcWidth} / ${srcHeight}`
+  // With breakpoint sources, CSS owns the ratio: `--le-ar` on the box or an ancestor.
+  const ar = ratio && (sources.length ? `var(--le-ar, ${ratio})` : ratio)
+  const slot: CSSProperties = fill
+    ? { position: 'absolute', inset: 0 }
+    : { width: width ?? '100%', maxWidth: mode === 'fixed' ? '100%' : undefined, aspectRatio: ar }
+  const cover = fill || !!ar
+  const imgStyle: CSSProperties = boxed
+    ? { display: 'block', width: '100%', height: cover ? '100%' : 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...style }
+    : { display: 'block', ...slot, height: 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...paint, ...style }
+
+  const imgWidth = fill ? undefined : (width ?? (mode === 'intrinsic' ? srcWidth : undefined))
+  const imgHeight =
+    mode === 'fixed'
+      ? height
+      : imgWidth && (mode === 'ratio' ? Math.round(imgWidth / aspectRatio!) : sourceRatio && Math.round(imgWidth / sourceRatio))
+
+  const pictureSources = sources.map((source) => {
+    const sourceCrop = source.aspectRatio && snapRatio(source.aspectRatio, loader.ratios)
+    const set = nativeSources(loader, source.src, isDirect(source.src, config.domains), {
+      ...source,
+      crop: sourceCrop,
+      focus: normalizeFocalPoint(source.focalPoint),
+      sizes: source.sizes ?? sizes ?? '100vw',
+      quality: q,
+    })
+    return { media: source.media, src: set.src, srcSet: set.srcSet ?? set.src, sizes: set.sizes }
   })
 
-  useEffect(() => {
-    alive.current = true
-    return () => {
-      alive.current = false
-    }
-  }, [])
-
-  // Mount-time development checks.
-  useEffect(() => {
-    if (!DEV) return
-    if (resolved.invalid) {
-      warnOnce(`placeholder:${src}`, `Invalid placeholder for ${src}: ${resolved.invalid}. Using the provider default.`)
-    }
-    if (layout.mode === 'intrinsic') {
-      warnOnce(
-        `intrinsic:${src}`,
-        `${src} has no height to reserve and will shift the layout when it loads. Add \`height\`, \`aspectRatio\` or \`fill\`.`,
-      )
-    }
-    if (focus && !(srcWidth && srcHeight) && (!owned || (classic && crop === undefined))) {
-      warnOnce(
-        `focus:${src}`,
-        `${src} is cropped only by the browser, which needs \`srcWidth\` and \`srcHeight\` to center the focal point. Falling back to object-position.`,
-      )
-    }
-    if (loaderProp && !owned) {
-      warnOnce(`loader:${src}`, `${src} is an external image, so its \`loader\` prop is ignored.`)
-    }
-    const box = boxRef.current
-    if (owned && !classic && box && inViewport(box.getBoundingClientRect())) {
-      warnOnce(
-        `viewport:${src}`,
-        `${src} is in the first viewport but waits for hydration and measuring. Set \`sizes\` or \`priority\` so its URL is in the server HTML.`,
-      )
-    }
-    // Checks the props the image mounted with; later changes are not re-checked.
-  }, [])
-
-  // Measured-mode images decode their ThumbHash once triggered (spec 8);
-  // classic ones, which may load any time, right after hydration.
-  useEffect(() => {
-    if (resolved.placeholder.kind === 'thumbhash' && classic) setMounted(true)
-  }, [resolved.placeholder.kind, classic])
-
-  // Classic-mode URLs are in the HTML, so the browser decides when to load.
-  useEffect(() => {
-    if (triggered || classic) return
-    if (eager) {
-      setTriggered(true)
-      return
-    }
-    const box = boxRef.current
-    if (!box) return
-    return whenVisible(box, { rootMargin: margin, dwellTime: config.dwellTime }, () => setTriggered(true))
-  }, [triggered, classic, eager, margin, config.dwellTime])
-
-  // Measured mode (spec 6.2): measure, pick the format, then keep `sizes` and
-  // the fill ratio current.
-  useEffect(() => {
-    const box = boxRef.current
-    if (!triggered || classic || !owned || !box) return
-    const options: MeasureOptions = { ladder: loader.widths, ratios: loader.ratios, srcWidth, trackRatio }
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    // A hidden box measures 0 and waits for the ResizeObserver.
-    const initial = contentSize(box)
-    if (initial.width > 0) setMeasure((current) => current ?? firstMeasure(initial, options))
-
-    // Once detection has finished, the format lands in the same render as
-    // the measure; only while it is pending does the image wait (spec 6.4).
-    const formats = loader.formats
-    const known = formats === 'auto' ? undefined : resolvedFormat()
-    if (formats === 'auto') setFormat('auto')
-    else if (known) setFormat(pickFormat(known, formats))
-    else {
-      void detectFormat().then((best) => {
-        if (!cancelled) setFormat(pickFormat(best, formats))
-      })
-    }
-
-    // A fixed or ratio box already at its `width` cannot grow, and `sizes`
-    // never shrinks, so there is nothing to observe.
-    const atMaxWidth = (layout.mode === 'fixed' || layout.mode === 'ratio') && width !== undefined && initial.width >= width
-    const stop = atMaxWidth
-      ? undefined
-      : observeResize(box, (rect) => {
-          if (rect.width <= 0) return
-          const dpr = window.devicePixelRatio || 1
-          setMeasure((current) => current ?? firstMeasure(rect, options))
-          // Trailing debounce: a window drag fires every frame, so only the
-          // size it settles on counts.
-          clearTimeout(timer)
-          timer = setTimeout(() => setMeasure((current) => current && grow(current, rect, dpr, options)), SIZES_DEBOUNCE)
-        })
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-      stop?.()
-    }
-  }, [triggered, classic, owned, loader, srcWidth, trackRatio, layout.mode, width])
-
-  const classicUrls = useMemo(
-    () => (classic && owned ? classicSources({ src, loader, width, sizes, srcWidth, crop, quality: q, version, focus }) : undefined),
-    [classic, owned, src, loader, width, sizes, srcWidth, crop, q, version, focus],
-  )
-
-  const ratio = trackRatio ? measure?.ratio : crop
-  const measuredSrcSet = useMemo(() => {
-    if (classic || !owned || !measure || !format) return undefined
-    return buildSrcSet({
-      src,
-      widths: measuredCandidates({ measuredWidth: measure.width, ladder: loader.widths, srcWidth }),
-      aspectRatio: ratio,
-      quality: q,
-      format,
-      version,
-      focalPoint: ratio === undefined ? undefined : focus,
-      loader,
-    })
-  }, [classic, owned, measure, format, src, loader, srcWidth, ratio, q, version, focus])
-  const srcSet = classicUrls?.srcSet ?? measuredSrcSet
-  const imgSizes = classicUrls?.sizes ?? (measuredSrcSet && measure ? `${measure.width}px` : undefined)
-  const externalSrc = !owned && (classic || triggered) ? src : undefined
-  const imgSrc = classicUrls?.src ?? externalSrc
-  const source = srcSet ?? externalSrc
-
-  if (priority && imgSrc !== undefined) {
-    // React dedupes this with the preload it emits for the <img> itself only
-    // when href, imageSrcSet and imageSizes are identical strings (spec 7.1).
-    preload(imgSrc, {
+  if (priority) {
+    // At most one preload: the first source under its media query, else the img itself,
+    // from the same strings as the markup so React dedupes it with its own.
+    const first = pictureSources[0] ?? real!
+    preload(first.src, {
       as: 'image',
-      imageSrcSet: srcSet,
-      imageSizes: srcSet === undefined ? undefined : imgSizes,
+      imageSrcSet: first.srcSet,
+      imageSizes: first.sizes,
+      media: pictureSources[0]?.media,
       fetchPriority: 'high',
       crossOrigin: imgProps.crossOrigin,
       referrerPolicy: imgProps.referrerPolicy,
     })
   }
-  // Classic-mode images are visible from the first paint (spec 9).
-  const fades = !classic
 
-  const reveal = useCallback((img: HTMLImageElement, event?: SyntheticEvent<HTMLImageElement>) => {
-    const expected = img.currentSrc
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, DECODE_TIMEOUT)
-    })
-    // decode() never settles in some WebKit versions, hence the timeout.
-    void Promise.race([img.decode().catch(() => {}), timeout]).then(() => {
-      clearTimeout(timer)
-      // A newer source is on its way; its own load event reveals it.
-      if (!alive.current || revealed.current || img.currentSrc !== expected) return
-      revealed.current = true
-      setFadeIn(prefersReducedMotion() ? 0 : latest.current.fadeMs)
-      setStatus('loaded')
-      if (event) latest.current.onLoad?.(event)
-    })
-  }, [])
-
-  const settle = (img: HTMLImageElement, event?: SyntheticEvent<HTMLImageElement>) => {
-    if (revealed.current) return
-    if (fades) {
-      reveal(img, event)
-      return
-    }
-    revealed.current = true
-    setStatus('loaded')
-    if (event) onLoad?.(event)
-  }
-  const settleRef = useRef(settle)
-  useLayoutEffect(() => {
-    settleRef.current = settle
+  const self = useRef<HTMLImageElement>(null)
+  const imgRef = useCallback((node: HTMLImageElement | null) => {
+    self.current = node
+    return setRef(ref, node)
+  }, [ref])
+  // The latest callbacks, loader and decoder, for an attachment that outlives renders.
+  const latest = useRef({
+    onLoad,
+    onStateChange,
+    loader,
+    decoder,
+    event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
+    // The currentSrc the stored load event was for.
+    eventSrc: '',
+    state: '',
+    shown: false,
+    hidden: false,
   })
+  Object.assign(latest.current, { onLoad, onStateChange, loader, decoder })
 
-  // Runs again for every new source, to catch images that were complete
-  // (cached) before React could see their load event (spec 9 step 3).
-  const imgRef = useCallback(
-    (img: HTMLImageElement | null) => {
-      if (!img) return
-      if (source && !revealed.current && img.complete && img.currentSrc) {
-        if (img.naturalWidth === 0) setStatus('error')
-        else settleRef.current(img)
-      }
-      if (typeof ref === 'function') {
-        const cleanup = ref(img)
-        return () => {
-          if (typeof cleanup === 'function') cleanup()
-          else ref(null)
-        }
-      }
-      if (ref) {
-        ref.current = img
-        return () => {
-          ref.current = null
-        }
-      }
-      return undefined
-    },
-    [ref, source],
-  )
+  let options: AttachOptions = { loading: strategy === 'eager' ? 'eager' : undefined, rootMargin: rootMargin ?? config.rootMargin, dwellTime: config.dwellTime, fadeDuration: fadeMs }
+  if (native) options = { ...options, loading: 'native', priority }
+  else if (measured)
+    options = { ...options, src, quality: q, width, height, aspectRatio, fill, crop, srcWidth, srcHeight, focalPoint: focus, version, token }
+  else options = { ...options, srcset: real!.srcSet, sizes: real!.sizes, url: real!.src }
+  // Only a ThumbHash shown as its color goes to the controller, which swaps in the image on activation.
+  if (!native && parsed.lazy && !ssrImage) options.placeholder = requested ? (placeholder ?? config.placeholder) : config.placeholder
+  // Equivalent config keeps the attachment: the loader and decoder are compared by
+  // what they offer and called through `latest`, so inline ones don't re-attach.
+  // For a measured image, a probe URL tells a changed URL scheme from an inline loader
+  // with the same output. Prepared images carry their URLs in `options`, native ones
+  // in the img's own attributes, and a direct source must never reach the loader.
+  const { widths, ratios, qualities, formats } = loader
+  const probe = measured ? loader.url({ src, width: widths[0]!, quality: qualities[0]!, format: formats === 'auto' ? formats : formats[0]! }) : ''
+  const signature = JSON.stringify([options, pictureSources, config.domains, widths, ratios, qualities, formats, probe, !!decoder])
 
   useEffect(() => {
-    if (!fadeIn) return
-    const timer = setTimeout(() => setFadeDone(true), fadeIn)
-    return () => clearTimeout(timer)
-  }, [fadeIn])
-
-  const handleLoad = (event: SyntheticEvent<HTMLImageElement>) => settle(event.currentTarget, event)
-  const handleError = (event: SyntheticEvent<HTMLImageElement>) => {
-    // A failed upgrade leaves the displayed image alone.
-    if (!revealed.current) setStatus('error')
-    onError?.(event)
-  }
-
-  const state = source === undefined ? 'idle' : (status ?? 'loading')
-  // The background goes once the fade is over, so transparent images don't show it (spec 8).
-  const settled = status === 'loaded' && (!fadeIn || fadeDone)
-
-  let placeholderStyle: PlaceholderStyle | undefined
-  if (!settled) {
-    const { placeholder: parsed, value } = resolved
-    if (parsed.kind !== 'thumbhash') placeholderStyle = parsed.ssrStyle
-    else if (config.thumbhashSsr === 'image' || priority) {
-      placeholderStyle = thumbhashImageStyle(value.trim().slice(THUMBHASH_PREFIX.length))
-    } else placeholderStyle = triggered || mounted ? parsed.clientStyle() : parsed.ssrStyle
-  }
-
-  // The ratio the backend crops the displayed image to, if it crops.
-  const servedCrop = owned ? (classic ? crop : ratio) : undefined
-  const position = focus && focusPosition({ focus, crop: servedCrop, srcWidth, srcHeight })
-  const noscriptPosition = focus && focusPosition({ focus, crop: owned ? crop : undefined, srcWidth, srcHeight })
-
-  // With a focal point, an image placeholder moves to a layer inside the box,
-  // where container units can place it like the image (spec 8).
-  let layerStyle: CSSProperties | undefined
-  if (focus && placeholderStyle?.backgroundImage) {
-    const { backgroundImage, backgroundSize, backgroundPosition: _, ...rest } = placeholderStyle
-    const placeholderRatio =
-      srcWidth && srcHeight
-        ? srcWidth / srcHeight
-        : resolved.placeholder.kind === 'thumbhash'
-          ? resolved.placeholder.ratio
-          : undefined
-    layerStyle = {
-      position: 'absolute',
-      inset: 0,
-      pointerEvents: 'none',
-      backgroundImage,
-      backgroundSize,
-      backgroundPosition: placeholderRatio ? coverPosition(placeholderRatio, focus) : percentPosition(focus),
+    const img = self.current!
+    const state = latest.current
+    // The SSR placeholder sets the background position, which the decoded image keeps.
+    const thumbhash: ThumbHashDecoder | undefined =
+      decoder &&
+      ((hash) => {
+        const decoded = state.decoder?.(hash)
+        const lazy = decoded?.lazy
+        return decoded && { style: decoded.style, lazy: lazy && (() => ({ ...lazy(), backgroundPosition: 'center' })) }
+      })
+    const attachment = createLazyEase({ thumbhash, domains: config.domains }).attach(img, {
+      ...options,
+      loader: { widths, ratios, qualities, formats, url: (params) => state.loader.url(params) },
+      root: config.root,
+      onStateChange(next) {
+        if (state.state === next) return
+        state.state = next
+        state.onStateChange?.(next, img)
+      },
+      onDisplay(_, event) {
+        // A native image calls onLoad from its React handler.
+        if (state.shown || native) {
+          if (!event) state.shown = true
+          return
+        }
+        // Adoption has no event of its own. A load seen for this very source before a
+        // re-attach (one mid-decode) is still its first load; otherwise no onLoad follows.
+        const loaded = state.event && (event ? state.event.nativeEvent === event : state.eventSrc === img.currentSrc)
+        if (event && !loaded) return
+        state.shown = true
+        if (!loaded) return
+        const synthetic = state.event as unknown as { currentTarget: EventTarget | null }
+        // React has reset currentTarget since the event was dispatched.
+        synthetic.currentTarget = img
+        state.onLoad?.(state.event!)
+        synthetic.currentTarget = null
+      },
+    })
+    // A target hidden for its fade before a re-attach (Strict Mode) is hidden again, so it still fades.
+    if (state.hidden && attachment.state === 'loading') img.style.opacity = '0'
+    return () => {
+      state.hidden = img.style.opacity === '0' && attachment.state === 'loading'
+      attachment.destroy()
     }
-    placeholderStyle = rest
-  }
-  // A size container gives the image and the layer the box size in CSS.
-  const focusBoxStyle: CSSProperties | undefined = focus ? { containerType: 'size' } : undefined
-  // Positioned, so it paints above the placeholder layer.
-  const focusImgStyle: CSSProperties | undefined = focus ? { position: 'relative', objectPosition: position } : undefined
+    // `options` is covered by its signature, which leaves out the root.
+  }, [signature, config.root])
 
-  let fadeStyle: CSSProperties | undefined
-  if (fades && source !== undefined) {
-    fadeStyle =
-      fadeIn === undefined
-        ? { opacity: 0 }
-        : { opacity: 1, transition: fadeIn > 0 ? `opacity ${fadeIn}ms ease-out` : undefined }
-  }
+  // Mount-time development checks.
+  useEffect(() => {
+    let dev = false
+    try {
+      if (process.env.NODE_ENV !== 'production') {
+        dev = true
+        if (!requested) warnOnce(`placeholder:${src}`, `Invalid placeholder for ${src}${decoder ? '' : ' (thumbhash: needs the provider’s thumbhash decoder)'}. Using the provider default.`)
+        if (mode === 'intrinsic' && !sourceRatio) {
+          warnOnce(`intrinsic:${src}`, `${src} has no height to reserve and will shift the layout when it loads. Add \`srcWidth\` and \`srcHeight\`, \`aspectRatio\`, \`height\` or \`fill\`.`)
+        }
+        if (loaderProp && direct) warnOnce(`loader:${src}`, `${src} loads as is, so its \`loader\` prop is ignored.`)
+        const rect = self.current!.getBoundingClientRect()
+        if (!native && rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight && rect.left < innerWidth && rect.right > 0) {
+          warnOnce(`viewport:${src}`, `${src} is in the first viewport but waits for hydration. Set \`loading="native"\` or \`priority\` so its URL is in the server HTML.`)
+        }
+      }
+    } catch (error) {
+      if (dev) throw error
+    }
+    // Checks the props the image mounted with; later changes are not re-checked.
+  }, [])
 
-  const imgWidth = layout.imgWidth
-  const imgHeight =
-    layout.imgHeight ??
-    (layout.mode === 'intrinsic' && width !== undefined && srcWidth && srcHeight
-      ? Math.round((width * srcHeight) / srcWidth)
-      : undefined)
-
+  const fallback = !native && noScript && prepared(sizes)
+  const img = (
+    <img
+      {...imgProps}
+      {...(boxed ? null : { 'data-le': '', 'data-le-auto': 'off' })}
+      ref={imgRef}
+      alt={alt}
+      // React sets attributes in prop order, and WebKit selects a candidate as soon
+      // as srcset is set: sizes must already be there.
+      sizes={real && native ? real.sizes : undefined}
+      src={real && native ? real.src : INERT}
+      srcSet={real && native ? real.srcSet : undefined}
+      width={imgWidth}
+      height={imgHeight}
+      loading={native && !priority ? 'lazy' : undefined}
+      decoding={decoding}
+      fetchPriority={priority ? 'high' : imgProps.fetchPriority}
+      className={className}
+      onLoad={(event) => {
+        const state = latest.current
+        state.event = event
+        state.eventSrc = event.currentTarget.currentSrc
+        // A native image calls onLoad here, with currentTarget set, on the first load of its source.
+        if (native && !state.shown && event.currentTarget.currentSrc !== INERT) {
+          state.shown = true
+          state.onLoad?.(event)
+        }
+      }}
+      style={imgStyle}
+    />
+  )
+  const content = (
+    <>
+      {sources.length ? (
+        <picture>
+          {pictureSources.map((source) =>
+            native ? (
+              <source key={source.media} media={source.media} sizes={source.sizes} srcSet={source.srcSet} />
+            ) : (
+              <source key={source.media} media={source.media} data-le-sizes={source.sizes} data-le-srcset={source.srcSet} />
+            ),
+          )}
+          {img}
+        </picture>
+      ) : (
+        img
+      )}
+      {fallback && (
+        <noscript>
+          <img
+            alt={alt}
+            sizes={fallback.sizes}
+            src={fallback.src}
+            srcSet={fallback.srcSet}
+            width={imgWidth}
+            height={imgHeight}
+            loading="lazy"
+            decoding="async"
+            className={className}
+            style={{ ...imgStyle, ...(boxed && cover ? { position: 'absolute', inset: 0 } : null) }}
+          />
+        </noscript>
+      )}
+    </>
+  )
+  if (!boxed) return content
   return (
     <span
-      ref={boxRef}
+      data-le=""
+      data-le-auto="off"
       className={wrapperClassName}
-      data-state={state}
-      style={{ ...layout.boxStyle, ...focusBoxStyle, ...placeholderStyle, ...wrapperStyle }}
+      style={{ display: 'block', position: 'relative', ...slot, ...focused?.box, ...paint, ...wrapperStyle }}
     >
-      {layerStyle && <span aria-hidden="true" style={layerStyle} />}
-      <img
-        {...imgProps}
-        ref={imgRef}
-        alt={alt}
-        // React sets changed attributes in prop order, and WebKit selects a
-        // candidate as soon as srcset is set: sizes must already be there, or
-        // it fetches the 100vw candidate first.
-        sizes={srcSet ? imgSizes : undefined}
-        src={imgSrc}
-        srcSet={srcSet}
-        width={imgWidth}
-        height={imgHeight}
-        loading={classic && !eager ? 'lazy' : undefined}
-        decoding={decoding}
-        fetchPriority={priority ? 'high' : undefined}
-        className={className}
-        onLoad={handleLoad}
-        onError={handleError}
-        style={{ ...layout.imgStyle, ...focusImgStyle, ...fadeStyle, ...style }}
-      />
-      {!classic && (
-        <NoScriptImage
-          src={src}
-          alt={alt}
-          owned={owned}
-          loader={loader}
-          quality={q}
-          crop={crop}
-          srcWidth={srcWidth}
-          version={version}
-          focus={focus}
-          width={imgWidth}
-          height={imgHeight}
-          className={className}
-          style={{
-            ...layout.imgStyle,
-            ...(layout.mode === 'intrinsic' ? null : { position: 'absolute', inset: 0 }),
-            ...(noscriptPosition ? { objectPosition: noscriptPosition } : null),
-            ...style,
-          }}
-        />
-      )}
+      {content}
     </span>
-  )
-}
-
-interface NoScriptImageProps {
-  src: string
-  alt: string
-  owned: boolean
-  loader: ResolvedLoader
-  quality: number
-  crop?: number
-  srcWidth?: number
-  version?: string
-  focus?: FocalPoint
-  width?: number
-  height?: number
-  className?: string
-  style: CSSProperties
-}
-
-/**
- * The image for visitors without JavaScript (spec 7.3): the classic-mode
- * candidates (1× and 2× of `width`, or the full ladder without it), declared
- * crop, WebP, since nothing can be measured.
- */
-function NoScriptImage({ src, owned, loader, quality, crop, srcWidth, version, focus, ...img }: NoScriptImageProps) {
-  const { width } = img
-  const sources = useMemo(
-    () => (owned ? classicSources({ src, loader, width, srcWidth, crop, quality, version, focus }) : undefined),
-    [owned, src, loader, width, srcWidth, crop, quality, version, focus],
-  )
-  if (!sources) {
-    return (
-      <noscript>
-        <img {...img} src={src} loading="lazy" decoding="async" />
-      </noscript>
-    )
-  }
-  return (
-    <noscript>
-      <img {...img} srcSet={sources.srcSet} sizes={sources.sizes} loading="lazy" decoding="async" />
-    </noscript>
   )
 }

@@ -126,9 +126,6 @@ importers:
       '@lazy-ease/core':
         specifier: workspace:*
         version: link:../core
-      thumbhash:
-        specifier: 0.1.1
-        version: 0.1.1
     devDependencies:
       '@testing-library/react':
         specifier: ^16.3.3
@@ -148,6 +145,9 @@ importers:
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
+      thumbhash:
+        specifier: 0.1.1
+        version: 0.1.1
 
   packages/server:
     dependencies:

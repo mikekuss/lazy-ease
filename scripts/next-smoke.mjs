@@ -99,9 +99,16 @@ const thumbhashColor = decode('1QcSHQRnh493V4dIh4eXh1h4kJUI').style.backgroundCo
 const reference = createLoader({ baseUrl: '/_img' })
 
 // The fixture JSON goes through the bundler's JSON modules; core writes each URL.
-const fixtureUrls = casesOf('urls', 'url', { skipTopics: ['nfc', 'safe-paths', 'token'] })
+const fixtureUrls = casesOf('urls', 'url', { skipTopics: ['token'] })
+// A record that expects an error matches when the loader throws.
 const fixtureMismatches = fixtureUrls
-  .filter(({ input, expected }) => createLoader(input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }).url(input.request) !== expected.url)
+  .filter(({ input, expected }) => {
+    try {
+      return createLoader(input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }).url(input.request) !== expected.url
+    } catch {
+      return !('error' in expected)
+    }
+  })
   .map(({ id }) => id)
 
 export default function Page() {
@@ -174,7 +181,7 @@ const expectations = [
 // Every non-pending URL record of @lazy-ease/testing, reproduced inside the Next build.
 const testingDir = join(root, 'packages', 'testing')
 const urlCases = JSON.parse(readFileSync(join(testingDir, 'fixtures', 'urls.json'), 'utf8')).cases.filter(
-  (c) => c.op === 'url' && !(c.topics ?? []).some((t) => t === 'nfc' || t === 'safe-paths' || t === 'token'),
+  (c) => c.op === 'url' && !(c.topics ?? []).includes('token'),
 )
 expectations.push(['every fixture URL from core', `fixture URLs: ${urlCases.length} of ${urlCases.length} match</p>`])
 let failures = 0

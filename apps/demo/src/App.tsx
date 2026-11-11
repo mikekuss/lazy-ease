@@ -1,11 +1,15 @@
 import { createLoader, LazyEaseProvider, type ImageLoader } from '@lazy-ease/react'
+import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { useEffect, useMemo, useState } from 'react'
+import * as thumbhash from 'thumbhash'
 import { Controls } from './Controls'
 import { DemoImage } from './DemoImage'
 import { BASE, STATIC } from './mode'
 import { EXTERNAL_IMAGE, FILL, FIXED_SIZES, GALLERY_SIZE, galleryRatio, HERO_RATIO, heroImage, RATIOS } from './plan'
 import { FORMATS, loadSettings, saveSettings, throttleParams, throttleProfile, type Settings } from './settings'
 import { createStaticLoader, type StaticFormat } from './staticLoader'
+
+const decoder = thumbhashDecoder(thumbhash)
 
 /** One entry of /api/images: `computeMetadata` plus the path. */
 interface SourceImage {
@@ -94,6 +98,7 @@ export function App() {
   return (
     <LazyEaseProvider
       loader={loader}
+      thumbhash={decoder}
       loading={settings.loading}
       rootMargin={`${settings.rootMargin}px`}
       dwellTime={settings.dwellTime}

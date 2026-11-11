@@ -69,7 +69,12 @@ const shared: BuildOptions = {
   define: { 'process.env.NODE_ENV': '"development"' },
   logLevel: 'warning',
 }
-const client = await build({ ...shared, entryPoints: [path.join(here, 'src', 'client.tsx')], write: false, format: 'iife' })
+const client = await build({
+  ...shared,
+  entryPoints: [path.join(here, 'src', 'client.tsx')],
+  write: false,
+  format: 'iife',
+})
 const clientJs = client.outputFiles[0]!.text
 
 const ssrFile = path.join(here, '.cache', 'ssr.mjs')

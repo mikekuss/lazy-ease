@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isOwned as reactIsOwned } from '../../react/src/owned.js'
 import { isDirect, isOwned } from '../src/source.js'
 
 describe('isOwned', () => {
@@ -84,7 +83,7 @@ describe('isOwned', () => {
   })
 })
 
-describe('isOwned parity with @lazy-ease/react', () => {
+describe('isOwned as in @lazy-ease/react 0.2', () => {
   it('rejects other schemes even with an explicit port, and the resolution base as a host', () => {
     expect(isOwned('ftp://img.example.com:21/a.jpg', ['img.example.com'])).toBe(false)
     expect(isOwned('ws://img.example.com:80/a.jpg', ['img.example.com'])).toBe(false)
@@ -99,29 +98,30 @@ describe('isOwned parity with @lazy-ease/react', () => {
     expect(isOwned('http://img.example.com:8080/a.jpg', ['img.example.com:08080'])).toBe(true)
   })
 
-  it.each<[string, string[]]>([
-    ['/a.jpg', []],
-    ['a_b:c.jpg', []],
-    ['C:/photos/a.jpg', []],
-    ['http://lazy-ease.invalid/x', []],
-    ['http://lazy-ease.invalid/x', ['lazy-ease.invalid']],
-    ['ftp://img.example.com:21/a.jpg', ['img.example.com']],
-    ['ftp://img.example.com/a.jpg', ['img.example.com:21']],
-    ['blob:https://img.example.com/1', ['img.example.com']],
-    ['HTTPS://IMG.example.com:443/a.jpg', ['img.example.com:443']],
-    ['http://img.example.com/a.jpg', ['img.example.com:80']],
-    ['http://img.example.com:81/a.jpg', ['img.example.com:80']],
-    ['http://[::1]:8080/a.jpg', ['[::1]:8080']],
-    ['http://img.example.com/a.jpg', ['img.example.com/']],
-    ['http://img.example.com/a.jpg', ['img.example.com#']],
-    ['http://img.example.com/a.jpg', ['img.example.com:']],
-    ['http://img.example.com/a.jpg', ['img.example.com/x']],
-    ['//img.example.com/a.jpg', ['img.example.com']],
-    ['/\\img.example.com/a.jpg', ['img.example.com']],
-    ['  /a.jpg  ', []],
-    ['http://', []],
-  ])('%s with %j', (src, domains) => {
-    expect(isOwned(src, domains)).toBe(reactIsOwned(src, domains))
+  // The answers of the 0.2 React implementation, which core replaces.
+  it.each<[string, string[], boolean]>([
+    ['/a.jpg', [], true],
+    ['a_b:c.jpg', [], true],
+    ['C:/photos/a.jpg', [], false],
+    ['http://lazy-ease.invalid/x', [], false],
+    ['http://lazy-ease.invalid/x', ['lazy-ease.invalid'], true],
+    ['ftp://img.example.com:21/a.jpg', ['img.example.com'], false],
+    ['ftp://img.example.com/a.jpg', ['img.example.com:21'], false],
+    ['blob:https://img.example.com/1', ['img.example.com'], false],
+    ['HTTPS://IMG.example.com:443/a.jpg', ['img.example.com:443'], true],
+    ['http://img.example.com/a.jpg', ['img.example.com:80'], true],
+    ['http://img.example.com:81/a.jpg', ['img.example.com:80'], false],
+    ['http://[::1]:8080/a.jpg', ['[::1]:8080'], true],
+    ['http://img.example.com/a.jpg', ['img.example.com/'], true],
+    ['http://img.example.com/a.jpg', ['img.example.com#'], true],
+    ['http://img.example.com/a.jpg', ['img.example.com:'], true],
+    ['http://img.example.com/a.jpg', ['img.example.com/x'], false],
+    ['//img.example.com/a.jpg', ['img.example.com'], false],
+    ['/\\img.example.com/a.jpg', ['img.example.com'], false],
+    ['  /a.jpg  ', [], true],
+    ['http://', [], false],
+  ])('%s with %j', (src, domains, owned) => {
+    expect(isOwned(src, domains)).toBe(owned)
   })
 })
 

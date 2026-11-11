@@ -1,4 +1,4 @@
-export { Image, type ImageProps } from './Image.js'
+export { Image, type ImageProps, type ImageSource } from './Image.js'
 export {
   LazyEaseProvider,
   useLazyEaseConfig,

@@ -24,10 +24,7 @@ import {
 
 // Topics core does not implement yet. Their cases are checked to still fail
 // below, so implementing one makes that test fail until it moves here.
-const PENDING: Topic[] = [
-  'nfc', // encodePath does not NFC-normalize input; the fix costs more than the React Image budget allows
-  'safe-paths', // stray %, non-UTF-8 escapes and other schemes: step 06, once React Image is off the 7557 B ceiling
-]
+const PENDING: Topic[] = []
 
 describe('ladders', () => {
   it('has the default sets', () => {
@@ -148,33 +145,7 @@ describe('urls', () => {
     else expect(url()).toBe(expected.url)
   })
 
-  it('still fails the pending topics', () => {
-    const pending = [...skippedCases('urls', 'encodePath', { skipTopics }), ...skippedCases('urls', 'url', { skipTopics })]
-    expect(pending.map((c) => c.id).sort()).toEqual([
-      'nfd-source',
-      'non-http-source',
-      'path-data-url',
-      'path-drive-letter',
-      'path-ftp-url',
-      'path-invalid-utf8',
-      'path-invalid-utf8-keeps-escapes',
-      'path-invalid-utf8-own-segment',
-      'path-invalid-utf8-stray-percent',
-      'path-nfd-normalized',
-      'path-overlong-utf8',
-      'path-pre-encoded-nfd',
-      'path-scheme-absolute-path',
-      'path-scheme-relative-name',
-      'path-stray-percent-escaped',
-      'path-stray-percent-non-ascii',
-      'path-stray-percent-space',
-      'stray-percent-source',
-    ])
-    for (const c of pending) {
-      // Core returns a different path or URL, also where the record expects an error.
-      const actual = c.op === 'encodePath' ? encodePath(c.input.src) : createLoader().url(c.input.request)
-      const wanted = 'path' in c.expected ? c.expected.path : 'url' in c.expected ? c.expected.url : undefined
-      expect(actual, c.id).not.toBe(wanted)
-    }
+  it('implements every URL topic', () => {
+    expect([...skippedCases('urls', 'encodePath', { skipTopics }), ...skippedCases('urls', 'url', { skipTopics })]).toEqual([])
   })
 })

@@ -47,7 +47,7 @@ export function pageData(html: string): PageData {
 
 /** The inline style of the box with `className` in server HTML. */
 export function boxStyle(html: string, className: string): string {
-  const style = new RegExp(`<span class="${className}" data-state="[a-z]+" style="([^"]*)"`).exec(html)?.[1]
+  const style = new RegExp(`<span [^>]*class="${className}" style="([^"]*)"`).exec(html)?.[1]
   if (style === undefined) throw new Error(`No box .${className} in the HTML`)
   return style
 }

@@ -18,11 +18,11 @@ async function expectVisibleFromHtml(page: Page, requests: string[]) {
   await expect(preload).toHaveAttribute('imagesrcset', srcset!)
   await expect(preload).toHaveAttribute('imagesizes', '100vw')
   await expect(preload).toHaveAttribute('fetchpriority', 'high')
-  // The component passes the middle candidate as href (spec 7.1), which is
-  // also the img's src. React 19 drops href from a preload with
-  // imageSrcSet, so browsers without imagesrcset support don't fetch it.
+  // The img's src is the largest candidate, the fallback without srcset
+  // support. React 19 drops href from a preload with imageSrcSet, so
+  // browsers without imagesrcset support don't fetch it.
   const candidates = srcset!.split(', ').map((candidate) => candidate.split(' ')[0]!)
-  await expect(img).toHaveAttribute('src', candidates[Math.floor(candidates.length / 2)]!)
+  await expect(img).toHaveAttribute('src', candidates.at(-1)!)
   await expect(preload).not.toHaveAttribute('href', /./)
 
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true)

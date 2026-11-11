@@ -30,8 +30,9 @@ const start = () => {
   const margin = data.rootMargin
   if (margin) {
     // The IntersectionObserver constructor is the parser: it throws for a margin without units.
+    // Without one, every image loads at once and the margin does not matter.
     try {
-      new IntersectionObserver(() => {}, { rootMargin: margin }).disconnect()
+      if (typeof IntersectionObserver == 'function') new IntersectionObserver(() => {}, { rootMargin: margin }).disconnect()
       config.rootMargin = margin
     } catch {
       ignore('root-margin')

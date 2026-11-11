@@ -110,20 +110,24 @@ declare const URL: new (url: string, base: string) => { readonly pathname: strin
 const DUMMY_BASE = 'http://lazy-ease.invalid'
 
 /**
- * The URL path of `src`, each segment `encodeURIComponent`-encoded. An
- * absolute URL loses its origin (spec 10: `domains` serve the same files as
- * the root); query, hash and dot segments are dropped.
+ * The URL path of `src`, each segment NFC-normalized and
+ * `encodeURIComponent`-encoded. An absolute URL loses its origin (spec 10:
+ * `domains` serve the same files as the root); query, hash and dot segments
+ * are dropped. A stray `%` becomes `%25`. A segment whose escapes are not
+ * UTF-8 keeps them as they are, in upper case. Throws a RangeError for any
+ * scheme but http(s), which includes a drive letter.
  */
 export function encodePath(src: string): string {
-  const { pathname } = new URL(src, DUMMY_BASE)
-  return pathname
+  if (/^\s*(?!https?:)[a-z][a-z\d+.-]*:/i.test(src)) throw new RangeError(`[lazy-ease] Not a path or http(s) URL: ${src}`)
+  return new URL(src, DUMMY_BASE).pathname
     .split('/')
     .map((segment) => {
+      segment = segment.replace(/%(?![\da-f]{2})/gi, '%25')
       try {
-        return encodeURIComponent(decodeURIComponent(segment))
+        return encodeURIComponent(decodeURIComponent(segment).normalize('NFC'))
       } catch {
-        // A stray `%` the URL parser left alone.
-        return encodeURIComponent(segment)
+        // Not UTF-8: the escapes stay, everything else is encoded.
+        return encodeURIComponent(segment).replace(/%25([\da-f]{2})/gi, (_, hex: string) => `%${hex.toUpperCase()}`)
       }
     })
     .join('/')
