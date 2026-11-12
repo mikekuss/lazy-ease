@@ -1,26 +1,22 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { casesOf, fixtures, skippedCases, type CropWindow, type StoredSource, type Topic } from '@lazy-ease/testing'
+import { casesOf, fixtures, type CropWindow, type StoredSource, type Topic } from '@lazy-ease/testing'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_QUALITIES, DEFAULT_RATIOS, DEFAULT_WIDTHS, formatNumber, parseImageQuery } from '../src/contract.js'
-import { createImageApp } from '../src/index.js'
+import { createImageApp, cropTokenMessage, signCropToken, verifyCropToken, type CropTokenKeys, type SourcePolicy } from '../src/index.js'
 import { render } from '../src/render.js'
 
 // The portable fixtures from @lazy-ease/testing, run against the reference
 // backend: the same records core runs in packages/core/test/conformance.test.ts.
 // Sizes and crop windows are checked on real encoded images.
 
-// Topics the server does not implement yet. Their cases are checked to still
-// fail below, so implementing one makes that test fail until it moves here.
-const PENDING: Topic[] = [
-  'strict-q', // a missing q still falls back to the first quality; the backend admission step of 0.3 rejects it (breaking against 0.2)
-  'token', // crop tokens arrive in step 07
-]
-const skipTopics = PENDING
+// The server implements every topic of the backend and token records.
+const skipTopics: Topic[] = []
 const ladders = { widths: DEFAULT_WIDTHS, ratios: DEFAULT_RATIOS, qualities: DEFAULT_QUALITIES }
 
 let dir: string
@@ -46,27 +42,41 @@ describe('query admission', () => {
       return
     }
     const { aspectRatio, focalPoint, version, token, ...rest } = expected.params
-    expect(token).toBeNull()
     expect(parseImageQuery(input.query, ladders)).toEqual({
       ...rest,
       ...(aspectRatio === null ? {} : { aspectRatio }),
       ...(focalPoint === null ? {} : { focalPoint }),
       ...(version === null ? {} : { version }),
+      ...(token === null ? {} : { token }),
     })
   })
+})
 
-  it('still fails the pending topics', () => {
-    const pending = skippedCases('backend', 'query', { skipTopics })
-    expect(pending.map((c) => c.id).sort()).toEqual([
-      'query-token',
-      'reject-missing-q',
-      'reject-token-padding',
-      'reject-token-shape',
-    ])
-    // A missing q is admitted and a token is an unknown parameter.
-    expect(status(() => parseImageQuery('fmt=webp&w=640', ladders))).toBe(200)
-    const token = pending.find((c) => c.id === 'query-token')!
-    expect(status(() => parseImageQuery(token.input.query, ladders))).toBe(400)
+// Test keys by tenant and kid, from the fixture data. Public: tests only.
+const testKeys = (tenant: string): CropTokenKeys =>
+  Object.fromEntries(fixtures.tokens.data.keys.filter((k) => k.tenant === tenant).map((k) => [k.kid, Buffer.from(k.keyHex, 'hex')]))
+
+describe('crop token vectors', () => {
+  it.each(casesOf('tokens', 'sign'))('$id', ({ input, expected }) => {
+    const { kid, ...grant } = input.grant
+    const key = testKeys(grant.tenant)[kid]
+    if ('error' in expected) {
+      expect(() => cropTokenMessage(grant, kid)).toThrow(RangeError)
+      if (key) expect(() => signCropToken(grant, kid, key)).toThrow(RangeError)
+      return
+    }
+    expect(cropTokenMessage(grant, kid).toString('hex')).toBe(expected.messageHex)
+    expect(signCropToken(grant, kid, key!)).toBe(expected.token)
+  })
+
+  it.each(casesOf('tokens', 'verify'))('$id', ({ input, expected }) => {
+    expect(verifyCropToken(input.grant, input.token, testKeys(input.grant.tenant))).toBe(expected.valid)
+  })
+
+  it('checks the derivation of the public test keys', () => {
+    for (const { tenant, kid, keyHex } of fixtures.tokens.data.keys) {
+      expect(createHash('sha256').update(`lazy-ease public test key/${tenant}/${kid}`).digest('hex')).toBe(keyHex)
+    }
   })
 })
 
@@ -194,8 +204,23 @@ describe('loader URLs and source paths over HTTP', () => {
     }
     await writeFile(path.join(root, 'notes.txt'), 'hello')
     await writeFile(path.join(root, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>')
+    // The revision and focal point each source's URLs carry, as an upload record would.
+    const records = new Map<string, SourcePolicy>()
+    for (const c of urlCases) {
+      const { pathname, searchParams } = new URL(c.expected.url, 'http://x')
+      const record = records.get(pathname.slice('/_img'.length)) ?? {}
+      record.revision ??= searchParams.get('v') ?? undefined
+      if (searchParams.has('fx')) record.focalPoint = { x: Number(searchParams.get('fx')), y: Number(searchParams.get('fy')) }
+      records.set(pathname.slice('/_img'.length), record)
+    }
+    for (const c of casesOf('tokens', 'verify')) files.add(decodeURIComponent(c.input.grant.source.slice(1)))
+    for (const name of files) {
+      const file = path.join(root, ...name.normalize('NFC').split('/'))
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, await sharp({ create: { width: 800, height: 600, channels: 3, background: '#33aa77' } }).jpeg().toBuffer())
+    }
     app = new Hono()
-    app.route('/_img', createImageApp({ root }))
+    app.route('/_img', createImageApp({ root, tenant: 'demo', keys: testKeys('demo'), policy: ({ path }) => records.get(path) ?? {} }))
   })
 
   it.each(urlCases)('$id', async ({ input, expected }) => {
@@ -223,5 +248,59 @@ describe('loader URLs and source paths over HTTP', () => {
     const canonical = await app.request(`/_img${expected.canonicalPath}${query}`)
     expect(canonical.status).toBe(200)
     expect(response.headers.get('etag')).toBe(canonical.headers.get('etag'))
+  })
+})
+
+describe('crop tokens over HTTP', () => {
+  // A request for the grant of a verify vector, with the raw path when it has one.
+  const urlOf = ({ grant, rawPath }: { grant: { source: string; revision?: string; ar?: string; fx?: string; fy?: string }; rawPath?: string }, token: string) => {
+    const query = [
+      grant.ar && `ar=${grant.ar}`,
+      'fmt=webp',
+      grant.fx && `fx=${grant.fx}`,
+      grant.fy && `fy=${grant.fy}`,
+      'q=75',
+      `token=${token}`,
+      grant.revision && `v=${grant.revision}`,
+      'w=64',
+    ].filter(Boolean)
+    return `/_img${rawPath ?? grant.source}?${query.join('&')}`
+  }
+
+  let root: string
+  beforeAll(async () => {
+    root = path.join(dir, 'token-root')
+    for (const c of casesOf('tokens', 'verify')) {
+      const file = path.join(root, ...decodeURIComponent(c.input.grant.source.slice(1)).split('/'))
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, await sharp({ create: { width: 400, height: 300, channels: 3, background: '#3377aa' } }).jpeg().toBuffer())
+    }
+  })
+
+  // Each vector against a token-only server of its tenant whose source has the
+  // vector's revision: a malformed token is a 400, a wrong one a 403.
+  it.each(casesOf('tokens', 'verify'))('$id', async ({ input, expected }) => {
+    const server = new Hono()
+    server.route(
+      '/_img',
+      createImageApp({ root, tenant: input.grant.tenant, keys: testKeys(input.grant.tenant), policy: () => ({ crops: [], revision: input.grant.revision }) }),
+    )
+    const response = await server.request(urlOf(input, input.token))
+    const wellFormed = new RegExp(fixtures.tokens.data.tokenPattern).test(input.token)
+    // On a case-insensitive file system `/Cliff.jpg` and `/cliff.jpg` are one file,
+    // stored under the first spelling; the other spelling is an alias and a 404.
+    const name = decodeURIComponent(input.grant.source.slice(1))
+    const stored = (await readdir(root)).includes(name) || name.includes('/')
+    expect(response.status).toBe(!wellFormed ? 400 : !stored ? 404 : expected.valid ? 200 : 403)
+  })
+
+  it('serves the URL of sign-focal-crop', async () => {
+    const server = new Hono()
+    server.route('/_img', createImageApp({ root, tenant: 'demo', keys: testKeys('demo'), policy: () => ({ crops: [], revision: 'r7' }) }))
+    const signed = casesOf('tokens', 'sign').find((c) => c.id === 'sign-focal-crop')!
+    if ('error' in signed.expected) throw new Error('sign-focal-crop is a valid record')
+    const response = await server.request(signed.expected.url!)
+    expect(response.status).toBe(200)
+    expect((await sharp(Buffer.from(await response.arrayBuffer())).metadata()).width).toBe(300)
   })
 })

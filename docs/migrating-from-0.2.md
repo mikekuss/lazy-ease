@@ -53,3 +53,11 @@ To retain a measured gallery's server crop, change
 For a gallery with freely changing ratios, pass oriented dimensions and let browser crop use one uncropped source ladder.
 
 When migrating private images, configure user access independently from optional crop tokens. Roll out matching server admission and CDN configuration before shipping clients that send new URL fields. See the [backend guide](backend.md) and [recipes](image-recipes.md).
+
+With the reference server, check existing URLs before switching:
+
+1. Every URL needs `q`. 0.3 loaders always write it; hand-written or cached 0.2 URLs without it are a 400.
+2. A `v` must name the source's current revision, from `computeMetadata().revision` or your own upload record through the server's `policy`. A URL with another `v` is a 404; a URL without `v` keeps working with revalidation instead of immutable caching.
+3. Uncropped and centered ladder crops keep working. A focal crop needs the source's recorded focus in its policy, a listed crop or a crop token.
+4. Add `token` to the CDN cache key, or verify it on the viewer-request path first. Authorize private viewers there too, before any hit.
+5. Then ship templates and clients that write `v`, focal points and tokens.

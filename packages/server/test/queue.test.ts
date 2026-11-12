@@ -13,55 +13,63 @@ function deferred<T>() {
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+const LATER = () => Date.now() + 60_000
+const queueOf = (concurrency: number, maxPending = 100) => createRenderQueue({ concurrency, maxPending })
+
 describe('createRenderQueue', () => {
   it('runs one task per key and shares its result', async () => {
-    const queue = createRenderQueue(4)
+    const queue = queueOf(4)
     const gate = deferred<string>()
     let calls = 0
     const task = () => {
       calls++
       return gate.promise
     }
-    const results = Promise.all([queue.run('a', task), queue.run('a', task), queue.run('a', task)])
+    const results = Promise.all([queue.run('a', task, LATER()), queue.run('a', task, LATER()), queue.run('a', task, LATER())])
     gate.resolve('done')
     expect(await results).toEqual(['done', 'done', 'done'])
     expect(calls).toBe(1)
   })
 
   it('shares a rejection and runs again after it settled', async () => {
-    const queue = createRenderQueue(1)
+    const queue = queueOf(1)
     const failing = Promise.all([
-      queue.run('a', () => Promise.reject(new Error('boom'))),
-      queue.run('a', () => Promise.resolve('unused')),
+      queue.run('a', () => Promise.reject(new Error('boom')), LATER()),
+      queue.run('a', () => Promise.resolve('unused'), LATER()),
     ])
     await expect(failing).rejects.toThrow('boom')
-    expect(await queue.run('a', () => Promise.resolve('second'))).toBe('second')
+    expect(await queue.run('a', () => Promise.resolve('second'), LATER())).toBe('second')
   })
 
   it('keeps distinct keys apart', async () => {
-    const queue = createRenderQueue(4)
-    expect(await Promise.all([queue.run('a', async () => 1), queue.run('b', async () => 2)])).toEqual([1, 2])
+    const queue = queueOf(4)
+    expect(await Promise.all([queue.run('a', async () => 1, LATER()), queue.run('b', async () => 2, LATER())])).toEqual([1, 2])
   })
 
   it('caps the number of running tasks', async () => {
-    const queue = createRenderQueue(2)
+    const queue = queueOf(2)
     const gates = [0, 1, 2, 3, 4].map(() => deferred<number>())
     let running = 0
     let peak = 0
     const runs = gates.map((gate, i) =>
-      queue.run(String(i), async () => {
-        running++
-        peak = Math.max(peak, running)
-        try {
-          return await gate.promise
-        } finally {
-          running--
-        }
-      }),
+      queue.run(
+        String(i),
+        async () => {
+          running++
+          peak = Math.max(peak, running)
+          try {
+            return await gate.promise
+          } finally {
+            running--
+          }
+        },
+        LATER(),
+      ),
     )
     await tick()
     expect(running).toBe(2)
     expect(queue.active).toBe(2)
+    expect(queue.pending).toBe(3)
     gates.forEach((gate, i) => gate.resolve(i))
     expect(await Promise.all(runs)).toEqual([0, 1, 2, 3, 4])
     expect(peak).toBe(2)
@@ -69,13 +77,70 @@ describe('createRenderQueue', () => {
   })
 
   it('frees the slot when a task fails', async () => {
-    const queue = createRenderQueue(1)
-    await expect(queue.run('a', () => Promise.reject(new Error('x')))).rejects.toThrow()
-    expect(await queue.run('b', async () => 'ok')).toBe('ok')
+    const queue = queueOf(1)
+    await expect(queue.run('a', () => Promise.reject(new Error('x')), LATER())).rejects.toThrow()
+    expect(await queue.run('b', async () => 'ok', LATER())).toBe('ok')
   })
 
   it('rejects a concurrency below 1', () => {
-    expect(() => createRenderQueue(0)).toThrow(RangeError)
+    expect(() => queueOf(0)).toThrow(RangeError)
+  })
+
+  it('answers 503 with Retry-After when the pending list is full', async () => {
+    const queue = createRenderQueue({ concurrency: 1, maxPending: 1, retryAfter: 2.5 })
+    const gate = deferred<string>()
+    const running = queue.run('a', () => gate.promise, LATER())
+    const queued = queue.run('b', async () => 'b', LATER())
+    const error = await queue.run('c', async () => 'c', LATER()).catch((e: unknown) => e)
+    expect(error).toMatchObject({ status: 503 })
+    const response = (error as { getResponse(): Response }).getResponse()
+    expect(response.headers.get('retry-after')).toBe('3')
+    // Joining a job that is already queued needs no new entry.
+    const joined = queue.run('b', async () => 'unused', LATER())
+    gate.resolve('a')
+    expect(await Promise.all([running, queued, joined])).toEqual(['a', 'b', 'b'])
+  })
+
+  it('keeps the slot and the key until the work ends, after the response timed out', async () => {
+    const queue = queueOf(1)
+    const native = deferred<string>()
+    let calls = 0
+    const task = () => {
+      calls++
+      return native.promise
+    }
+    await expect(queue.run('a', task, Date.now() + 20)).rejects.toMatchObject({ status: 504 })
+    // The native job still runs: its slot is taken, and the same key joins it.
+    expect(queue.active).toBe(1)
+    const joined = queue.run('a', task, LATER())
+    const other = queue.run('b', async () => 'b', LATER())
+    await tick()
+    expect(queue.pending).toBe(1)
+    expect(calls).toBe(1)
+    native.resolve('a')
+    expect(await Promise.all([joined, other])).toEqual(['a', 'b'])
+    expect(queue.active).toBe(0)
+  })
+
+  it('counts the deadline from admission, waiting included, and drops an abandoned queued job', async () => {
+    const queue = queueOf(1)
+    const gate = deferred<string>()
+    const running = queue.run('a', () => gate.promise, LATER())
+    let started = false
+    const queued = queue.run('b', async () => {
+      started = true
+      return 'b'
+    }, Date.now() + 20)
+    await expect(queued).rejects.toMatchObject({ status: 504 })
+    expect(queue.pending).toBe(0)
+    gate.resolve('a')
+    await running
+    await tick()
+    expect(started).toBe(false)
+  })
+
+  it('rejects a deadline that has already passed', async () => {
+    await expect(queueOf(1).run('a', async () => 1, Date.now() - 1)).rejects.toMatchObject({ status: 504 })
   })
 })
 

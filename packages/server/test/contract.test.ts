@@ -70,15 +70,31 @@ describe('parseImageQuery', () => {
     })
   })
 
-  it('accepts the minimal query and defaults q to the first allowed quality', () => {
-    expect(parse('fmt=jpeg&w=64')).toEqual({ width: 64, quality: 75, format: 'jpeg' })
-    expect(parseImageQuery('fmt=jpeg&w=64', { ...ladders, qualities: [50, 90] }).quality).toBe(50)
+  it('accepts the minimal query', () => {
+    expect(parse('fmt=jpeg&q=75&w=64')).toEqual({ width: 64, quality: 75, format: 'jpeg' })
+    expect(parseImageQuery('fmt=jpeg&q=90&w=64', { ...ladders, qualities: [50, 90] }).quality).toBe(90)
+  })
+
+  it('requires q', () => {
+    expect(() => parse('fmt=jpeg&w=64')).toThrow('Missing q')
+  })
+
+  it('accepts a token between q and v', () => {
+    expect(parse('ar=1&fmt=webp&q=75&token=1.k1.WisYCsz8Vtmygcbr01tTuA&v=r7&w=640').token).toBe('1.k1.WisYCsz8Vtmygcbr01tTuA')
+    expect(() => parse('ar=1&fmt=webp&q=75&v=r7&token=1.k1.WisYCsz8Vtmygcbr01tTuA&w=640')).toThrow('alphabetical')
+    expect(() => parse('fmt=webp&q=75&token=1.k1.short&w=640')).toThrow('Malformed token')
+  })
+
+  it('accepts only the configured formats', () => {
+    const webpOnly = { ...ladders, formats: ['webp', 'jpeg'] as const }
+    expect(parseImageQuery('fmt=webp&q=75&w=64', webpOnly).format).toBe('webp')
+    expect(() => parseImageQuery('fmt=avif&q=75&w=64', webpOnly)).toThrow('fmt must be one of webp, jpeg')
   })
 
   it('accepts every ladder width, ratio and format', () => {
-    for (const w of DEFAULT_WIDTHS) expect(parse(`fmt=avif&w=${w}`).width).toBe(w)
-    for (const ar of DEFAULT_RATIOS) expect(parse(`ar=${ar}&fmt=avif&w=64`).aspectRatio).toBe(ar)
-    for (const fmt of ['avif', 'webp', 'jpeg']) expect(parse(`fmt=${fmt}&w=64`).format).toBe(fmt)
+    for (const w of DEFAULT_WIDTHS) expect(parse(`fmt=avif&q=75&w=${w}`).width).toBe(w)
+    for (const ar of DEFAULT_RATIOS) expect(parse(`ar=${ar}&fmt=avif&q=75&w=64`).aspectRatio).toBe(ar)
+    for (const fmt of ['avif', 'webp', 'jpeg']) expect(parse(`fmt=${fmt}&q=75&w=64`).format).toBe(fmt)
   })
 
   it('accepts custom ladders', () => {
@@ -88,12 +104,12 @@ describe('parseImageQuery', () => {
       aspectRatio: 2.5,
       quality: 80,
     })
-    expect(() => parseImageQuery('fmt=webp&w=640', custom)).toThrow()
+    expect(() => parseImageQuery('fmt=webp&q=75&w=640', custom)).toThrow()
   })
 
   it('keeps the case of v', () => {
-    expect(parse('fmt=webp&v=AbC123&w=640').version).toBe('AbC123')
-    expect(parse(`fmt=webp&v=${'a'.repeat(64)}&w=640`).version).toHaveLength(64)
+    expect(parse('fmt=webp&q=75&v=AbC123&w=640').version).toBe('AbC123')
+    expect(parse(`fmt=webp&q=75&v=${'a'.repeat(64)}&w=640`).version).toHaveLength(64)
   })
 
   const rejects = (query: string) => {
@@ -109,112 +125,112 @@ describe('parseImageQuery', () => {
   it.each([
     // missing or empty
     [''],
-    ['fmt=webp'],
+    ['fmt=webp&q=75'],
     ['w=640'],
-    ['fmt=&w=640'],
-    ['fmt=webp&w='],
-    ['fmt=webp&w'],
-    ['fmt=webp&w=640&'],
-    ['&fmt=webp&w=640'],
-    ['fmt=webp&&w=640'],
+    ['fmt=&q=75&w=640'],
+    ['fmt=webp&q=75&w='],
+    ['fmt=webp&q=75&w'],
+    ['fmt=webp&q=75&w=640&'],
+    ['&fmt=webp&q=75&w=640'],
+    ['fmt=webp&&q=75&w=640'],
   ])('rejects the incomplete query %j', rejects)
 
   it.each([
     ['w=640&fmt=webp'],
-    ['fmt=webp&ar=1&w=640'],
+    ['fmt=webp&ar=1&q=75&w=640'],
     ['ar=1&q=75&fmt=webp&w=640'],
-    ['ar=1&fmt=webp&w=640&v=x'],
+    ['ar=1&fmt=webp&q=75&w=640&v=x'],
   ])('rejects the out-of-order query %j', rejects)
 
   it.each([
-    ['fmt=webp&w=640&w=640'],
-    ['fmt=webp&fmt=webp&w=640'],
-    ['ar=1&ar=1&fmt=webp&w=640'],
+    ['fmt=webp&q=75&w=640&w=640'],
+    ['fmt=webp&fmt=webp&q=75&w=640'],
+    ['ar=1&ar=1&fmt=webp&q=75&w=640'],
   ])('rejects the duplicate in %j', rejects)
 
   it.each([
-    ['fmt=webp&W=640'],
+    ['fmt=webp&W=640&q=75'],
     ['FMT=webp&w=640'],
-    ['fmt=WEBP&w=640'],
-    ['fmt=Webp&w=640'],
+    ['fmt=WEBP&q=75&w=640'],
+    ['fmt=Webp&q=75&w=640'],
   ])('rejects the non-lowercase %j', rejects)
 
   it.each([
-    ['fmt=webp&w=0640'],
-    ['fmt=webp&w=640.0'],
-    ['fmt=webp&w=640.'],
-    ['fmt=webp&w=+640'],
-    ['fmt=webp&w=6.4e2'],
-    ['fmt=webp&w=%36%34%30'],
-    ['fmt=webp&w=640%20'],
-    ['ar=1.50&fmt=webp&w=640'],
-    ['ar=1.500&fmt=webp&w=640'],
-    ['ar=01.5&fmt=webp&w=640'],
-    ['ar=.5&fmt=webp&w=640'],
-    ['ar=1.0&fmt=webp&w=640'],
-    ['ar=1.3333&fmt=webp&w=640'],
+    ['fmt=webp&q=75&w=0640'],
+    ['fmt=webp&q=75&w=640.0'],
+    ['fmt=webp&q=75&w=640.'],
+    ['fmt=webp&q=75&w=+640'],
+    ['fmt=webp&q=75&w=6.4e2'],
+    ['fmt=webp&q=75&w=%36%34%30'],
+    ['fmt=webp&q=75&w=640%20'],
+    ['ar=1.50&fmt=webp&q=75&w=640'],
+    ['ar=1.500&fmt=webp&q=75&w=640'],
+    ['ar=01.5&fmt=webp&q=75&w=640'],
+    ['ar=.5&fmt=webp&q=75&w=640'],
+    ['ar=1.0&fmt=webp&q=75&w=640'],
+    ['ar=1.3333&fmt=webp&q=75&w=640'],
     ['fmt=webp&q=075&w=640'],
     ['fmt=webp&q=75.0&w=640'],
   ])('rejects the non-canonical number in %j', rejects)
 
   it.each([
-    ['fmt=webp&w=500'],
-    ['fmt=webp&w=4000'],
-    ['fmt=webp&w=-64'],
-    ['ar=1.6&fmt=webp&w=640'],
-    ['ar=5&fmt=webp&w=640'],
-    ['ar=0.2&fmt=webp&w=640'],
-    ['ar=0&fmt=webp&w=640'],
+    ['fmt=webp&q=75&w=500'],
+    ['fmt=webp&q=75&w=4000'],
+    ['fmt=webp&q=75&w=-64'],
+    ['ar=1.6&fmt=webp&q=75&w=640'],
+    ['ar=5&fmt=webp&q=75&w=640'],
+    ['ar=0.2&fmt=webp&q=75&w=640'],
+    ['ar=0&fmt=webp&q=75&w=640'],
     ['fmt=webp&q=80&w=640'],
     ['fmt=webp&q=100&w=640'],
   ])('rejects the off-ladder value in %j', rejects)
 
   it.each([
-    ['fmt=auto&w=640'],
-    ['fmt=png&w=640'],
-    ['fmt=gif&w=640'],
-    ['fmt=jpg&w=640'],
+    ['fmt=auto&q=75&w=640'],
+    ['fmt=png&q=75&w=640'],
+    ['fmt=gif&q=75&w=640'],
+    ['fmt=jpg&q=75&w=640'],
   ])('rejects the format in %j', rejects)
 
   it.each([
-    ['fmt=webp&v=&w=640'],
+    ['fmt=webp&q=75&v=&w=640'],
     [`fmt=webp&v=${'a'.repeat(65)}&w=640`],
-    ['fmt=webp&v=a%2Bb&w=640'],
-    ['fmt=webp&v=a+b&w=640'],
-    ['fmt=webp&v=a/b&w=640'],
-    ['fmt=webp&v=abc%3D&w=640'],
+    ['fmt=webp&q=75&v=a%2Bb&w=640'],
+    ['fmt=webp&q=75&v=a+b&w=640'],
+    ['fmt=webp&q=75&v=a/b&w=640'],
+    ['fmt=webp&q=75&v=abc%3D&w=640'],
   ])('rejects the version in %j', rejects)
 
   it.each([
-    ['fmt=webp&h=480&w=640'],
-    ['fmt=webp&src=/a.jpg&w=640'],
-    ['fmt=webp&run=1&w=640'],
+    ['fmt=webp&h=480&q=75&w=640'],
+    ['fmt=webp&src=/a.jpg&q=75&w=640'],
+    ['fmt=webp&run=1&q=75&w=640'],
     ['a=1&fmt=webp&w=640'],
-    ['fmt=webp&w=640&x=1'],
+    ['fmt=webp&q=75&w=640&x=1'],
   ])('rejects the unknown parameter in %j', rejects)
 })
 
 describe('focal point parameters', () => {
   it('accepts fx and fy with ar', () => {
     expect(parse('ar=1.5&fmt=webp&fx=30&fy=70&q=75&w=640').focalPoint).toEqual({ x: 30, y: 70 })
-    expect(parse('ar=1&fmt=webp&fx=0&fy=100&w=640').focalPoint).toEqual({ x: 0, y: 100 })
-    expect(parse('ar=1&fmt=webp&fx=50&fy=10&w=640').focalPoint).toEqual({ x: 50, y: 10 })
+    expect(parse('ar=1&fmt=webp&fx=0&fy=100&q=75&w=640').focalPoint).toEqual({ x: 0, y: 100 })
+    expect(parse('ar=1&fmt=webp&fx=50&fy=10&q=75&w=640').focalPoint).toEqual({ x: 50, y: 10 })
   })
 
   it('has no focal point without them', () => {
-    expect(parse('ar=1.5&fmt=webp&w=640').focalPoint).toBeUndefined()
+    expect(parse('ar=1.5&fmt=webp&q=75&w=640').focalPoint).toBeUndefined()
   })
 
   it.each([
-    ['fmt=webp&fx=30&fy=70&w=640', 'require ar'],
-    ['ar=1&fmt=webp&fx=30&w=640', 'together'],
-    ['ar=1&fmt=webp&fy=30&w=640', 'together'],
-    ['ar=1&fmt=webp&fx=50&fy=50&w=640', 'omit'],
-    ['ar=1&fmt=webp&fx=030&fy=70&w=640', 'whole numbers'],
-    ['ar=1&fmt=webp&fx=30.5&fy=70&w=640', 'whole numbers'],
-    ['ar=1&fmt=webp&fx=101&fy=70&w=640', 'whole numbers'],
-    ['ar=1&fmt=webp&fx=-1&fy=70&w=640', 'whole numbers'],
-    ['ar=1&fmt=webp&fy=70&fx=30&w=640', 'alphabetical'],
+    ['fmt=webp&fx=30&fy=70&q=75&w=640', 'require ar'],
+    ['ar=1&fmt=webp&fx=30&q=75&w=640', 'together'],
+    ['ar=1&fmt=webp&fy=30&q=75&w=640', 'together'],
+    ['ar=1&fmt=webp&fx=50&fy=50&q=75&w=640', 'omit'],
+    ['ar=1&fmt=webp&fx=030&fy=70&q=75&w=640', 'whole numbers'],
+    ['ar=1&fmt=webp&fx=30.5&fy=70&q=75&w=640', 'whole numbers'],
+    ['ar=1&fmt=webp&fx=101&fy=70&q=75&w=640', 'whole numbers'],
+    ['ar=1&fmt=webp&fx=-1&fy=70&q=75&w=640', 'whole numbers'],
+    ['ar=1&fmt=webp&fy=70&fx=30&q=75&w=640', 'alphabetical'],
   ])('rejects %s', (query, message) => {
     expect(() => parse(query)).toThrow(message)
   })
