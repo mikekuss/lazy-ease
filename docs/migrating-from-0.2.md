@@ -8,6 +8,8 @@ This guide describes the planned release boundary. Core extraction preserves 0.2
 | sizes on a normal image | The template can prepare candidates and still fade after activation. | Choose loading="native" when the real source must appear immediately in SSR HTML. Use priority for a visible LCP hero. |
 | Measured image with automatic noscript | No-JS fallback is opt-in. | Set noScript on the image to request fallback markup, or use native HTML for articles that must survive a failed bundle. |
 | Wrapper expected everywhere | Box emitted when layout, fade, focal positioning or wrapper props need it. | Passing wrapperStyle or wrapperClassName preserves the element. Update selectors that assume every img has a span parent. |
+| width with sizes | A known width caps the candidates at its 1× and 2× widths, also under sizes; sizes no longer offers the full ladder. Without both source dimensions the image gets one URL, the largest request for the slot. | Responsive candidate lists now need trusted output dimensions: pass srcWidth and srcHeight from your metadata. Drop width (keep height or aspectRatio for the box) when a free slot should offer the full ladder. |
+| Error placeholder | A failed first load removes the placeholder and shows the alt text or the browser's broken-image presentation in the reserved area, with data-state="error". | Style `[data-state="error"]` if you want a different error look; the reserved geometry stays. |
 | Fill with no ratio | With source dimensions the default is browser crop; the measured server crop remains available explicitly. | Set crop="server" for the former measured behavior and authorize the crop set at the backend. |
 | onLoad as a display signal | Real first-load events retain their React event signature. An already displayed image can be adopted before the listener exists. | Use onStateChange for first display including adoption. Width upgrades keep the loaded state. |
 | ThumbHash string | Decoder is opt-in. | Register the optional decoder in the chosen adapter or provide a server-generated color/data URI. Inspect your bundle after opting in. |
@@ -25,6 +27,25 @@ For example, preserve early native discovery for an article:
 <Image src="/article.jpg" alt="Footpath" loading="native" sizes="100vw"
        srcWidth={1600} srcHeight={1000} />
 ```
+
+A fixed width now caps the candidates, also with `sizes`, and only trusted source dimensions produce a list:
+
+```tsx
+// 0.2: 11 candidates, 64w to 1920w, because sizes lifted the width cap
+<Image src="/a.jpg" alt="Fern" width={320} height={240} sizes="100vw"
+       srcWidth={2400} srcHeight={1800} />
+// 0.3: 2 candidates, 384w and 640w (1× and 2× of width, snapped to the ladder)
+<Image src="/a.jpg" alt="Fern" loading="native" width={320} height={240} sizes="100vw"
+       srcWidth={2400} srcHeight={1800} />
+
+// 0.2: 13 candidates, 64w to 3840w, labeled with request widths
+<Image src="/a.jpg" alt="Fern" width={320} height={240} sizes="100vw" />
+// 0.3: no srcset, one src for the largest request (w=640): without both
+//      source dimensions the encoded widths are unknown
+<Image src="/a.jpg" alt="Fern" loading="native" width={320} height={240} sizes="100vw" />
+```
+
+For a list that follows a free slot, pass `srcWidth` and `srcHeight` from your metadata and leave out `width`.
 
 To retain a measured gallery's server crop, change
 `<Image src="/fern.jpg" alt="Fern" fill />` to

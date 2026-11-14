@@ -70,8 +70,8 @@ export function readOptions(img: HTMLImageElement): AttachOptions {
  * `[data-le-background]`, which gets `data-le-visible` once it comes within
  * the instance's root margin. Skips elements another attachment, instance or
  * copy of the package already owns, so enhancing again, or from a second
- * bundle, is harmless. Skips subtrees whose nearest `data-le-auto` is `"off"`:
- * React and Lit attach their own images. A shadow tree under `root` is not
+ * bundle, is harmless. Skips every subtree under `data-le-auto="off"`, an
+ * inner `data-le-auto` included: React and Lit attach their own images. A shadow tree under `root` is not
  * entered; enhance it on its own. An image whose attributes are invalid is
  * reported on the console and left alone; the others still attach. So is an
  * element marked both `data-le` and `data-le-background`.
@@ -81,7 +81,8 @@ export function enhance(le: LazyEase, root: EnhanceRoot = document): Enhancement
   const elements = [...root.querySelectorAll(SELECTOR)]
   if ('matches' in root && root.matches(SELECTOR)) elements.unshift(root)
   for (const element of elements) {
-    if (element.closest('[data-le-auto]')?.getAttribute('data-le-auto') === 'off') continue
+    // A framework-managed subtree stays out, even where an inner data-le-auto opts in.
+    if (element.closest('[data-le-auto="off"]')) continue
     try {
       const cleanup = take(le, element)
       if (cleanup) cleanups.push(cleanup)

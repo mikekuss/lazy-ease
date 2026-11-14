@@ -29,13 +29,15 @@ export function pickFormat(best: ImageFormat, formats: readonly ImageFormat[]): 
 
 /**
  * The format to request from a loader that declares `formats`. `'auto'` and
- * a single format need no probe. Otherwise the AVIF decode test runs
+ * a single format need no probe, nor do formats without AVIF. Otherwise the AVIF decode test runs
  * once per page, on first need, and an image waits for it at most 200 ms
  * before taking WebP.
  */
 export function chooseFormat(formats: readonly ImageFormat[] | 'auto'): ImageFormat | 'auto' | Promise<ImageFormat> {
   if (formats === 'auto') return formats
   if (formats.length < 2) return formats[0] ?? 'webp'
+  // Only AVIF needs a probe, and only when the loader declares it.
+  if (!formats.includes('avif')) return pickFormat('webp', formats)
   if (detected) return pickFormat(detected, formats)
   detection ??= decodesAvif().then((best) => (detected = best))
   let timer: ReturnType<typeof setTimeout> | undefined

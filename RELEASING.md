@@ -16,6 +16,15 @@ It starts the demo dev servers (Vite on 5173, the image server on 3001), or reus
 
 The test is not part of `pnpm test`, `pnpm e2e` or CI: it needs the demo servers, takes about a minute and depends on real frame timing. Don't tag a release while it fails. It needs Chromium for Playwright (`pnpm --filter e2e exec playwright install chromium`).
 
+## Before every release: the size budgets
+
+```bash
+pnpm build
+pnpm check:sizes
+```
+
+It measures each public entry with the fixtures in `scripts/sizes` and fails if one is over its budget in `docs/design-spec.md`. It is not part of CI. Don't tag a release while it fails.
+
 ## Steps
 
 1. Bump `version` in `packages/react/package.json` and `packages/server/package.json`. Both packages are versioned together.

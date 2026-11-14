@@ -95,6 +95,12 @@ const { pages, renderPage } = (await import(pathToFileURL(ssrFile).href)) as typ
 const vanillaJs = (await buildScript({ conditions: ['source'], write: false })).outputFiles[0]!.text
 const vanillaHtml = await readFile(path.join(here, 'static', 'vanilla.html'), 'utf8')
 
+// Core as an ES module, for specs that drive the controller directly.
+const coreJs = (
+  await build({ ...shared, entryPoints: [path.join(here, '..', '..', 'packages', 'core', 'src', 'index.ts')], write: false, format: 'esm' })
+).outputFiles[0]!.text
+const coreHtml = '<!doctype html><meta charset="utf-8"><title>core</title><script type="module">import * as core from "/assets/core.js"; window.core = core</script>'
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
@@ -134,6 +140,8 @@ app.get('/health', (c) => c.text('ok'))
 app.get('/assets/lazy-ease.min.js', (c) => c.body(vanillaJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
 app.get('/assets/lazy-ease.css', (c) => c.body(cssText, 200, { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' }))
 app.get('/vanilla', (c) => c.html(vanillaHtml))
+app.get('/assets/core.js', (c) => c.body(coreJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
+app.get('/core', (c) => c.html(coreHtml))
 app.get('/client.js', (c) => c.body(clientJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
 app.get('/:page', (c) => {
   const page = c.req.param('page')

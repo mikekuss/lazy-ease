@@ -12,7 +12,8 @@
     "test:frames": "pnpm --filter e2e test:frames",
     "check:packages": "node scripts/check-packages.mjs",
     "check:next": "node scripts/next-smoke.mjs",
-    "check:fixtures": "python3 scripts/check-fixtures.py"
+    "check:fixtures": "python3 scripts/check-fixtures.py",
+    "check:sizes": "node scripts/check-sizes.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

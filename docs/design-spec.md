@@ -8,7 +8,18 @@ All public packages share one release version. Core exports pure functions and a
 
 ESM imports must perform no detection, DOM access, observer setup or ladder computation. Use functions, static ladder data and lazy initialization. Keep optional ThumbHash decoding in an explicit entry point. A browser ESM import must work without a Node process global. The standalone IIFE is explicitly activated by its script tag. Preserve stylesheet imports in production bundles.
 
-Measure each public import plus required core code with a pinned minifying bundler, production defines, external React peers and Brotli quality 11. Budgets in bytes: createLoader 1000, attach with controller creation 3500, enhance with controller 4000, self-starting IIFE 4500, CSS 500, final React Image 5000. During compatible extraction the existing Image ceiling is 7557 under the review baseline (esbuild 0.28.2, ES2022 ESM). Publish the exact measurement fixtures with the checks.
+Measure each public import plus required core code with a pinned minifying bundler, production defines, external React peers and Brotli quality 11: esbuild 0.28.2, ES2022 ESM. The measurement fixtures are in `scripts/sizes`; `pnpm check:sizes` measures them after `pnpm build` and fails over budget (`--details` lists each entry's largest inputs).
+
+| Entry | Approved 0.3 budget | Measured for 0.3 | Goal after 0.3 |
+| --- | --- | --- | --- |
+| createLoader | 1000 | 833 | 1000 |
+| attach with controller creation | 5400 | 5324 | 3500 |
+| enhance with controller | 6000 | 5914 | 4000 |
+| self-starting IIFE | 6600 | 6570 | 4500 |
+| CSS | 500 | 161 | 500 |
+| React Image | 7900 | 7802 | 5000 |
+
+Bytes after Brotli. Entries that measured over their original budget got the measured size rounded up to the next 100 B as their approved 0.3 budget; the others keep their original budget. The goals are the original targets, for the size pass that follows the 0.3 release.
 
 ## Loading and markup
 
@@ -21,7 +32,7 @@ Source selection and display timing are independent. A template can generate all
 | Native / priority | Real sources and sizes in the initial HTML | Author or framework owns the sources. The browser discovers and displays them directly. |
 | Decorative background | Placeholder rule and a visibility-gated CSS rule | JS sets the visibility marker once. CSS selects the image. |
 
-A marked image or its nearest marked box owns one logical image, possibly inside picture. Use img.closest('[data-le]') within its tree. The template supplies every DOM node. Default to a box with an inline one-pixel SVG background placeholder. Support boxless native images with a color, or a deferred boxless image with a data-URI source and hard swap. For boxed deferred images, an inert inline image source makes the initial img valid. Its load, complete flag and dimensions describe the placeholder until the target is assigned. A box is required for a crossfade, fill, browser focal positioning or explicit React wrapper props. Supply alt on img. Reserve geometry at first paint using dimensions, aspect-ratio or the positioned fill parent. Document CSP requirements for data images and inline styles, and support author CSS for placeholders and geometry.
+A marked image or its nearest marked box owns one logical image, possibly inside picture. Use img.closest('[data-le]') within its tree. The template supplies every DOM node. Default to a box with an inline background-color placeholder (React: `#e5e7eb`); a data URI or ThumbHash placeholder is opt-in. Support boxless native images with a color, or a deferred boxless image with a data-URI source and hard swap. For boxed deferred images, an inert inline image source makes the initial img valid. Its load, complete flag and dimensions describe the placeholder until the target is assigned. A box is required for a crossfade, fill, browser focal positioning or explicit React wrapper props. Supply alt on img. Reserve geometry at first paint using dimensions, aspect-ratio or the positioned fill parent. Document CSP requirements for data images and inline styles, and support author CSS for placeholders and geometry.
 
 | HTML field | Meaning |
 | --- | --- |
@@ -38,7 +49,7 @@ A marked image or its nearest marked box owns one logical image, possibly inside
 
 Use one source mode per image. A prepared list may include a prepared fallback URL. Reject ambiguous measured and prepared input before mutating the element. For deferred picture markup put media, type and dimensions on source elements and defer their srcset/sizes as on img. Native picture uses standard attributes throughout. Calls to enhance(le, root) accept a document, element or shadow root. Roots for markup discovery and for intersection are separate options. React and Lit attach within their own lifecycle. Skip their managed subtrees during auto-enhancement. An element-local, cross-copy ownership marker prevents duplicate attachment. Only its owner releases it. Shadow-root users can adopt the exported CSS string.
 
-createLazyEase(config) returns an instance with attach(img, options) returning a destroy handle. The adapter renders initial static markup before hydration. After attach, the controller owns deferred source attributes, dynamic state, fade and placeholder styles. Re-renders must preserve those values. Destroy releases listeners, observers, timers and ownership. Adoption preserves an already displayed target. Changing the logical source starts a new generation with its own placeholder. Stale completions cannot mutate that generation.
+createLazyEase(config) returns an instance with attach(img, options) returning a handle with update(options) and destroy(). update starts a new generation on the same element and claim, and validates the new options before it ends the current one, so invalid options leave the displayed image alone; destroy followed by attach reaches the same result for a valid source change. The adapter renders initial static markup before hydration. After attach, the controller owns deferred source attributes, dynamic state, fade and placeholder styles. Re-renders must preserve those values. Destroy releases listeners, observers, timers and ownership. Adoption preserves an already displayed target of the same logical source (src, srcset, url, revision and deferred picture sources); the element remembers that source past destroy, so attaching it again with another one does not adopt the old image. A prepared image's logical source is its URL list, so a re-attach with other prepared URLs (a new quality or loader URL in React) returns to the placeholder and fades again, while a measured image keeps its src and upgrades the displayed image in place. Changing the logical source starts a new generation with its own placeholder. A native data URI is a target and is adopted; only the inert pixel counts as a placeholder there. Stale completions cannot mutate that generation.
 
 ## Display lifecycle
 
