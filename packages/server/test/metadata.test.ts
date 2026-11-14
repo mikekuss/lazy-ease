@@ -25,7 +25,8 @@ describe('computeMetadata', () => {
   ])('returns size, color and a ThumbHash of the right ratio for %s', async (name, width, height) => {
     const meta = await computeMetadata(path.join(fixtures.root, name))
     expect(meta).toMatchObject({ width, height })
-    expect(Object.keys(meta).sort()).toEqual(['color', 'height', 'thumbhash', 'width'])
+    expect(Object.keys(meta).sort()).toEqual(['color', 'height', 'revision', 'thumbhash', 'width'])
+    expect(meta.revision).toMatch(/^[\w-]{22}$/)
     expect(meta.thumbhash).toMatch(/^[A-Za-z0-9+/]+=*$/)
 
     const hash = hashBytes(meta.thumbhash)

@@ -48,20 +48,20 @@ export interface RenderOptions {
 }
 
 /**
- * Renders one variant (spec 12.1): auto-orient, crop to `w × round(w / ar)`
- * around the focal point (default: the center) when `ar` is given, never
- * upscale, sRGB, no metadata.
+ * Renders one variant (spec 12.1) from a file path or from the source's
+ * bytes: auto-orient, crop to `w × round(w / ar)` around the focal point
+ * (default: the center) when `ar` is given, never upscale, sRGB, no metadata.
  */
 export async function render(
-  file: string,
+  input: string | Uint8Array,
   params: ImageParams,
   { maxInputPixels = DEFAULT_MAX_INPUT_PIXELS, timeout = DEFAULT_TIMEOUT, avifEffort = DEFAULT_AVIF_EFFORT }: RenderOptions = {},
 ): Promise<Encoded> {
   // Decode from memory: libvips caches and holds open files by name, which would
   // serve stale pixels after a source changes and, on Windows, lock it.
-  const input = await readFile(file)
+  const bytes = typeof input === 'string' ? await readFile(input) : input
   // limitInputPixels rejects an oversized source before its pixels are decoded.
-  const image = sharp(input, inputOptions(maxInputPixels)).timeout({ seconds: Math.ceil(timeout / 1000) })
+  const image = sharp(bytes, inputOptions(maxInputPixels)).timeout({ seconds: Math.ceil(timeout / 1000) })
   const oriented = orientedSize(await image.metadata())
 
   const { width, aspectRatio, focalPoint, quality, format } = params
@@ -111,7 +111,7 @@ export async function render(
 export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new HTTPException(504, { message: 'Render timed out' })), ms)
+    timer = setTimeout(() => reject(timedOut()), ms)
   })
   try {
     return await Promise.race([promise, timeout])
@@ -120,57 +120,129 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T
   }
 }
 
-export interface RenderQueue {
-  /**
-   * Runs `task` once a slot is free. While a task for `key` is queued or
-   * running, further calls with that key get the same promise.
-   */
-  run<T>(key: string, task: () => Promise<T>): Promise<T>
-  /** Tasks running right now. */
-  readonly active: number
+const timedOut = () => new HTTPException(504, { message: 'Render timed out' })
+
+/** A 503 with `Retry-After`, for a full queue. */
+export function overloaded(retryAfter: number): HTTPException {
+  const res = new Response('Server busy', {
+    status: 503,
+    headers: { 'Retry-After': String(Math.max(1, Math.ceil(retryAfter))), 'Cache-Control': 'no-store' },
+  })
+  return new HTTPException(503, { res, message: 'Server busy' })
 }
 
-export function createRenderQueue(concurrency: number): RenderQueue {
+export interface RenderQueueOptions {
+  /** Jobs running at once. */
+  concurrency: number
+  /** Jobs waiting for a slot. A new job beyond this is a 503. */
+  maxPending: number
+  /** Seconds sent in `Retry-After` with that 503. Default 1. */
+  retryAfter?: number
+}
+
+export interface RenderQueue {
+  /**
+   * Runs `task` once a slot is free and resolves with its result, or rejects
+   * with a 504 at `deadline` (a `Date.now()` time) and a 503 when the queue is
+   * full. While a job for `key` is queued or running, further calls join it.
+   *
+   * A slot and the key stay taken until `task` settles, even after every
+   * caller has timed out: the native work behind it still runs. A queued job
+   * whose callers have all timed out is dropped without starting.
+   */
+  run<T>(key: string, task: () => Promise<T>, deadline: number): Promise<T>
+  /** Jobs running right now, including those whose callers have gone. */
+  readonly active: number
+  /** Jobs waiting for a slot. */
+  readonly pending: number
+}
+
+interface Job {
+  key: string
+  task: () => Promise<unknown>
+  promise: Promise<unknown>
+  resolve(value: unknown): void
+  reject(error: unknown): void
+  started: boolean
+  waiters: number
+}
+
+export function createRenderQueue({ concurrency, maxPending, retryAfter = 1 }: RenderQueueOptions): RenderQueue {
   if (!(concurrency >= 1)) throw new RangeError('concurrency must be at least 1')
-  const inFlight = new Map<string, Promise<unknown>>()
-  const waiting: (() => void)[] = []
+  if (!(maxPending >= 0)) throw new RangeError('maxPending must be at least 0')
+  const jobs = new Map<string, Job>()
+  const waiting: Job[] = []
   let active = 0
 
-  const acquire = async () => {
-    if (active < concurrency) {
-      active++
-      return
+  const start = (job: Job) => {
+    job.started = true
+    active++
+    let work: Promise<unknown>
+    try {
+      work = Promise.resolve(job.task())
+    } catch (error) {
+      work = Promise.reject(error)
     }
-    // release() hands its slot over directly, so `active` stays the same.
-    await new Promise<void>((resolve) => waiting.push(resolve))
-  }
-  const release = () => {
-    const next = waiting.shift()
-    if (next) next()
-    else active--
+    work.then(job.resolve, job.reject).finally(() => {
+      active--
+      if (jobs.get(job.key) === job) jobs.delete(job.key)
+      while (active < concurrency && waiting.length > 0) start(waiting.shift()!)
+    })
   }
 
-  return {
-    run<T>(key: string, task: () => Promise<T>): Promise<T> {
-      const pending = inFlight.get(key)
-      if (pending) return pending as Promise<T>
-      const promise = (async () => {
-        await acquire()
-        try {
-          return await task()
-        } finally {
-          release()
+  const wait = <T>(job: Job, deadline: number): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      job.waiters++
+      const timer = setTimeout(() => {
+        job.waiters--
+        if (!job.started && job.waiters === 0 && waiting.includes(job)) {
+          // Nobody waits for it any more: drop it before it starts.
+          waiting.splice(waiting.indexOf(job), 1)
+          jobs.delete(job.key)
+          job.reject(timedOut())
         }
-      })()
-      inFlight.set(key, promise)
-      const forget = () => {
-        inFlight.delete(key)
+        reject(timedOut())
+      }, Math.max(0, deadline - Date.now()))
+      job.promise.then(
+        (value) => {
+          clearTimeout(timer)
+          job.waiters--
+          resolve(value as T)
+        },
+        (error: unknown) => {
+          clearTimeout(timer)
+          job.waiters--
+          reject(error)
+        },
+      )
+    })
+
+  return {
+    run<T>(key: string, task: () => Promise<T>, deadline: number): Promise<T> {
+      if (Date.now() >= deadline) return Promise.reject(timedOut())
+      let job = jobs.get(key)
+      if (!job) {
+        if (active >= concurrency && waiting.length >= maxPending) return Promise.reject(overloaded(retryAfter))
+        let resolve!: (value: unknown) => void
+        let reject!: (error: unknown) => void
+        const promise = new Promise<unknown>((res, rej) => {
+          resolve = res
+          reject = rej
+        })
+        // A job can settle with nobody waiting.
+        promise.catch(() => {})
+        job = { key, task, promise, resolve, reject, started: false, waiters: 0 }
+        jobs.set(key, job)
+        if (active < concurrency) start(job)
+        else waiting.push(job)
       }
-      promise.then(forget, forget)
-      return promise
+      return wait<T>(job, deadline)
     },
     get active() {
       return active
+    },
+    get pending() {
+      return waiting.length
     },
   }
 }

@@ -3,22 +3,37 @@ import path from 'node:path'
 import { Hono } from 'hono'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createImageApp } from '../src/index.js'
+import { DEFAULT_RATIOS, createImageApp, type Crop, type SourcePolicy } from '../src/index.js'
 import { createFixtures, decode, solid, split, type Fixtures } from './fixtures.js'
 
 let fixtures: Fixtures
 let app: ReturnType<typeof createImageApp>
 
+// Focal crops the rendering tests use, beyond the default (uncropped and centered ladder ratios).
+const FOCAL_CROPS: Record<string, Crop[]> = {
+  '/split.png': [0, 100, 10, 90].map((x) => ({ aspectRatio: 0.25, focalPoint: { x, y: 50 } })),
+  '/exif.jpg': [0, 100].map((y) => ({ aspectRatio: 1, focalPoint: { x: 50, y } })),
+  '/small.jpg': [{ aspectRatio: 1, focalPoint: { x: 0, y: 50 } }],
+  '/big.jpg': [10, 90].map((x) => ({ aspectRatio: 1, focalPoint: { x, y: 50 } })),
+}
+// Revisions the client-format URLs carry.
+const REVISIONS: Record<string, string> = { '/my%20photos/caf%C3%A9.jpg': 'AbC123', '/big.jpg': '1730000000000' }
+
+const testPolicy = ({ path }: { path: string }): SourcePolicy => ({
+  revision: REVISIONS[path],
+  crops: [{}, ...DEFAULT_RATIOS.map((aspectRatio) => ({ aspectRatio })), ...(FOCAL_CROPS[path] ?? [])],
+})
+
 beforeAll(async () => {
   fixtures = await createFixtures()
-  app = createImageApp({ root: fixtures.root })
+  app = createImageApp({ root: fixtures.root, policy: testPolicy })
 })
 
 afterAll(() => fixtures.cleanup())
 
 /** Mounted the way the docs say, so paths look exactly like the client's URLs. */
 function mounted(options: Partial<Parameters<typeof createImageApp>[0]> = {}) {
-  return createImageApp({ root: fixtures.root, ...options })
+  return createImageApp({ root: fixtures.root, policy: testPolicy, ...options })
 }
 
 const get = (url: string, init?: RequestInit) => app.request(url, init)
@@ -42,11 +57,11 @@ describe('client-format URLs', () => {
     host.route('/_img', mounted())
     const response = await host.request('/_img/my%20photos/caf%C3%A9.jpg?ar=1.333&fmt=webp&q=75&v=AbC123&w=640')
     expect(response.status).toBe(200)
-    expect((await host.request('/my%20photos/caf%C3%A9.jpg?fmt=webp&w=640')).status).toBe(404)
+    expect((await host.request('/my%20photos/caf%C3%A9.jpg?fmt=webp&q=75&w=640')).status).toBe(404)
   })
 
   it('finds an NFC file from an NFD path', async () => {
-    expect((await get('/my%20photos/cafe%CC%81.jpg?fmt=webp&w=64')).status).toBe(200)
+    expect((await get('/my%20photos/cafe%CC%81.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
   })
 })
 
@@ -57,7 +72,7 @@ describe('rendering', () => {
       [1.5, 427],
       [2.333, 274],
     ] as const) {
-      const { meta } = await decode(await get(`/big.jpg?ar=${ar}&fmt=jpeg&w=640`))
+      const { meta } = await decode(await get(`/big.jpg?ar=${ar}&fmt=jpeg&q=75&w=640`))
       expect([meta.width, meta.height], `ar=${ar}`).toEqual([640, height])
     }
   })
@@ -65,7 +80,7 @@ describe('rendering', () => {
   it('crops centered', async () => {
     // A 400×100 crop from the middle of a red|blue split is half red, half blue.
     await writeFile(path.join(fixtures.root, 'split.png'), await (await split(800, 800)).png().toBuffer())
-    const { buffer } = await decode(await get('/split.png?ar=4&fmt=webp&w=384'))
+    const { buffer } = await decode(await get('/split.png?ar=4&fmt=webp&q=75&w=384'))
     const { data, info } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true })
     const pixel = (x: number) => data.subarray((Math.floor(info.height / 2) * info.width + x) * info.channels)
     expect(pixel(10)[0]).toBeGreaterThan(200)
@@ -81,7 +96,7 @@ describe('rendering', () => {
       [10, 0],
       [90, 2],
     ] as const) {
-      const { buffer, meta } = await decode(await get(`/split.png?ar=0.25&fmt=webp&fx=${fx}&fy=50&w=128`))
+      const { buffer, meta } = await decode(await get(`/split.png?ar=0.25&fmt=webp&fx=${fx}&fy=50&q=75&w=128`))
       expect([meta.width, meta.height]).toEqual([128, 512])
       const { data, info } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true })
       for (const x of [5, info.width - 5]) {
@@ -96,7 +111,7 @@ describe('rendering', () => {
       [0, 0],
       [100, 2],
     ] as const) {
-      const { buffer, meta } = await decode(await get(`/exif.jpg?ar=1&fmt=webp&fx=50&fy=${fy}&w=128`))
+      const { buffer, meta } = await decode(await get(`/exif.jpg?ar=1&fmt=webp&fx=50&fy=${fy}&q=75&w=128`))
       expect([meta.width, meta.height]).toEqual([128, 128])
       const { data, info } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true })
       for (const y of [5, info.height - 5]) {
@@ -107,37 +122,37 @@ describe('rendering', () => {
 
   it('never upscales the focal crop window', async () => {
     // small.jpg is 300×200; a 1:1 window is 200×200.
-    const { meta } = await decode(await get('/small.jpg?ar=1&fmt=webp&fx=0&fy=50&w=1080'))
+    const { meta } = await decode(await get('/small.jpg?ar=1&fmt=webp&fx=0&fy=50&q=75&w=1080'))
     expect([meta.width, meta.height]).toEqual([200, 200])
   })
 
   it('renders a different variant per focal point', async () => {
-    const a = await get('/big.jpg?ar=1&fmt=webp&fx=10&fy=50&w=256')
-    const b = await get('/big.jpg?ar=1&fmt=webp&fx=90&fy=50&w=256')
+    const a = await get('/big.jpg?ar=1&fmt=webp&fx=10&fy=50&q=75&w=256')
+    const b = await get('/big.jpg?ar=1&fmt=webp&fx=90&fy=50&q=75&w=256')
     expect(a.headers.get('etag')).not.toBe(b.headers.get('etag'))
   })
 
   it('scales without a crop when ar is absent', async () => {
-    const { meta } = await decode(await get('/big.jpg?fmt=webp&w=640'))
+    const { meta } = await decode(await get('/big.jpg?fmt=webp&q=75&w=640'))
     expect([meta.width, meta.height]).toEqual([640, 320])
   })
 
   it('never upscales, without a crop', async () => {
-    const { meta } = await decode(await get('/small.jpg?fmt=webp&w=1080'))
+    const { meta } = await decode(await get('/small.jpg?fmt=webp&q=75&w=1080'))
     expect([meta.width, meta.height]).toEqual([300, 200])
   })
 
   it('never upscales and keeps the requested ratio', async () => {
     // 1080×1080 does not fit a 300×200 source; the box shrinks to 200×200.
-    const square = await decode(await get('/small.jpg?ar=1&fmt=webp&w=1080'))
+    const square = await decode(await get('/small.jpg?ar=1&fmt=webp&q=75&w=1080'))
     expect([square.meta.width, square.meta.height]).toEqual([200, 200])
     // 640×160 shrinks by width: 300×75.
-    const wide = await decode(await get('/small.jpg?ar=4&fmt=webp&w=640'))
+    const wide = await decode(await get('/small.jpg?ar=4&fmt=webp&q=75&w=640'))
     expect([wide.meta.width, wide.meta.height]).toEqual([300, 75])
   })
 
   it('returns the source size when it equals the target', async () => {
-    const { meta } = await decode(await get('/portrait.png?ar=0.5&fmt=webp&w=640'))
+    const { meta } = await decode(await get('/portrait.png?ar=0.5&fmt=webp&q=75&w=640'))
     expect([meta.width, meta.height]).toEqual([600, 1200])
   })
 
@@ -146,7 +161,7 @@ describe('rendering', () => {
     ['/photo.avif', 'jpeg'],
     ['/UPPER.JPG', 'avif'],
   ])('reads %s and writes %s', async (src, fmt) => {
-    const response = await get(`${src}?fmt=${fmt}&w=64`)
+    const response = await get(`${src}?fmt=${fmt}&q=75&w=64`)
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe(`image/${fmt}`)
   })
@@ -160,7 +175,7 @@ describe('rendering', () => {
     expect(source.icc).toBeDefined()
 
     for (const fmt of ['jpeg', 'webp', 'avif']) {
-      const response = await get(`/exif.jpg?fmt=${fmt}&w=128`)
+      const response = await get(`/exif.jpg?fmt=${fmt}&q=75&w=128`)
       const { buffer, meta } = await decode(response)
       expect([meta.width, meta.height], fmt).toEqual([128, 256])
       expect(meta.orientation, fmt).toBeUndefined()
@@ -183,14 +198,14 @@ describe('rendering', () => {
   })
 
   it('crops after orienting', async () => {
-    const { meta } = await decode(await get('/exif.jpg?ar=0.5&fmt=webp&w=128'))
+    const { meta } = await decode(await get('/exif.jpg?ar=0.5&fmt=webp&q=75&w=128'))
     expect([meta.width, meta.height]).toEqual([128, 256])
   })
 
   it('renders the first frame of a GIF only', async () => {
     const source = await sharp(path.join(fixtures.root, 'animated.gif'), { animated: true }).metadata()
     expect(source.pages).toBe(2)
-    const { buffer, meta } = await decode(await get('/animated.gif?fmt=webp&w=128'))
+    const { buffer, meta } = await decode(await get('/animated.gif?fmt=webp&q=75&w=128'))
     expect(meta.pages ?? 1).toBe(1)
     expect([meta.width, meta.height]).toEqual([128, 64])
     const { data } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true })
@@ -204,14 +219,14 @@ describe('validation through the route', () => {
     '/big.jpg',
     '/big.jpg?w=640',
     '/big.jpg?w=640&fmt=webp',
-    '/big.jpg?fmt=webp&w=640&w=640',
-    '/big.jpg?fmt=webp&w=0640',
-    '/big.jpg?ar=1.50&fmt=webp&w=640',
-    '/big.jpg?fmt=webp&w=500',
-    '/big.jpg?fmt=auto&w=640',
+    '/big.jpg?fmt=webp&q=75&w=640&w=640',
+    '/big.jpg?fmt=webp&q=75&w=0640',
+    '/big.jpg?ar=1.50&fmt=webp&q=75&w=640',
+    '/big.jpg?fmt=webp&q=75&w=500',
+    '/big.jpg?fmt=auto&q=75&w=640',
     '/big.jpg?fmt=webp&q=80&w=640',
-    '/big.jpg?fmt=webp&run=1&w=640',
-    '/big.jpg?fmt=webp&h=480&w=640',
+    '/big.jpg?fmt=webp&run=1&q=75&w=640',
+    '/big.jpg?fmt=webp&h=480&q=75&w=640',
   ])('400 for %s', async (url) => {
     expect((await get(url)).status).toBe(400)
   })
@@ -255,7 +270,7 @@ describe('path safety', () => {
     ['/../secret.jpg', 404],
     ['/%2e%2e/secret.jpg', 404],
   ])('%s → %i', async (src, status) => {
-    expect((await get(`${src}?fmt=webp&w=64`)).status).toBe(status)
+    expect((await get(`${src}?fmt=webp&q=75&w=64`)).status).toBe(status)
   })
 
   it('does not follow symlinks out of the root', async (context) => {
@@ -265,7 +280,7 @@ describe('path safety', () => {
       // Windows needs developer mode or admin rights for symlinks.
       context.skip()
     }
-    expect((await get('/link.jpg?fmt=webp&w=64')).status).toBe(404)
+    expect((await get('/link.jpg?fmt=webp&q=75&w=64')).status).toBe(404)
   })
 
   it('rejects a symlink named like an image that points at an SVG', async (context) => {
@@ -274,15 +289,16 @@ describe('path safety', () => {
     } catch {
       context.skip()
     }
-    expect((await get('/icon-link.jpg?fmt=webp&w=64')).status).toBe(400)
+    expect((await get('/icon-link.jpg?fmt=webp&q=75&w=64')).status).toBe(400)
   })
 })
 
 describe('headers', () => {
   it('sets the caching and content headers', async () => {
-    const response = await get('/big.jpg?fmt=webp&w=640')
+    const response = await get('/big.jpg?fmt=webp&q=75&w=640')
     const body = await response.arrayBuffer()
-    expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    // No v: the bytes may change, so caches revalidate.
+    expect(response.headers.get('cache-control')).toBe('public, no-cache')
     expect(response.headers.get('content-type')).toBe('image/webp')
     expect(response.headers.get('content-length')).toBe(String(body.byteLength))
     expect(response.headers.get('x-content-type-options')).toBe('nosniff')
@@ -291,42 +307,51 @@ describe('headers', () => {
   })
 
   it('ignores Accept', async () => {
-    const response = await get('/big.jpg?fmt=jpeg&w=64', { headers: { accept: 'image/avif,image/webp' } })
+    const response = await get('/big.jpg?fmt=jpeg&q=75&w=64', { headers: { accept: 'image/avif,image/webp' } })
     expect(response.headers.get('content-type')).toBe('image/jpeg')
     expect(response.headers.get('vary')).toBeNull()
   })
 
   it('answers If-None-Match with a 304', async () => {
-    const etag = (await get('/big.jpg?fmt=webp&w=128')).headers.get('etag')!
+    const etag = (await get('/big.jpg?fmt=webp&q=75&w=128')).headers.get('etag')!
     for (const header of [etag, `W/${etag}`, `"other", ${etag}`, '*']) {
-      const response = await get('/big.jpg?fmt=webp&w=128', { headers: { 'if-none-match': header } })
+      const response = await get('/big.jpg?fmt=webp&q=75&w=128', { headers: { 'if-none-match': header } })
       expect(response.status, header).toBe(304)
       expect(response.headers.get('etag')).toBe(etag)
       expect(await response.text()).toBe('')
     }
-    const miss = await get('/big.jpg?fmt=webp&w=128', { headers: { 'if-none-match': '"other"' } })
+    const miss = await get('/big.jpg?fmt=webp&q=75&w=128', { headers: { 'if-none-match': '"other"' } })
     expect(miss.status).toBe(200)
   })
 
-  it('gives every variant its own ETag, independent of v', async () => {
+  it('marks a URL with the current revision immutable', async () => {
+    const response = await get('/big.jpg?fmt=webp&q=75&v=1730000000000&w=640')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+  })
+
+  it('gives every variant its own ETag, the same with and without v', async () => {
     const etag = async (url: string) => (await get(url)).headers.get('etag')
-    const base = await etag('/big.jpg?fmt=webp&w=128')
-    expect(await etag('/big.jpg?fmt=webp&w=256')).not.toBe(base)
-    expect(await etag('/big.jpg?fmt=jpeg&w=128')).not.toBe(base)
-    expect(await etag('/big.jpg?ar=1&fmt=webp&w=128')).not.toBe(base)
-    expect(await etag('/small.jpg?fmt=webp&w=128')).not.toBe(base)
+    const base = await etag('/big.jpg?fmt=webp&q=75&w=128')
+    expect(await etag('/big.jpg?fmt=webp&q=75&w=256')).not.toBe(base)
+    expect(await etag('/big.jpg?fmt=jpeg&q=75&w=128')).not.toBe(base)
+    expect(await etag('/big.jpg?ar=1&fmt=webp&q=75&w=128')).not.toBe(base)
+    expect(await etag('/small.jpg?fmt=webp&q=75&w=128')).not.toBe(base)
     expect(await etag('/big.jpg?fmt=webp&q=75&w=128')).toBe(base)
-    expect(await etag('/big.jpg?fmt=webp&v=abc&w=128')).toBe(base)
+    expect(await etag('/big.jpg?fmt=webp&q=75&v=1730000000000&w=128')).toBe(base)
+    const other = await get('/big.jpg?fmt=webp&q=75&v=abc&w=128')
+    expect(other.status).toBe(404)
+    expect(other.headers.get('cache-control')).toBe('no-store')
   })
 
   it('changes the ETag and the bytes when the source changes', async () => {
     const file = path.join(fixtures.root, 'changing.jpg')
     await writeFile(file, await solid(200, 200, '#000000').jpeg().toBuffer())
     await utimes(file, 1_000_000, 1_000_000)
-    const first = await get('/changing.jpg?fmt=jpeg&w=64')
+    const first = await get('/changing.jpg?fmt=jpeg&q=75&w=64')
     await writeFile(file, await solid(200, 200, '#ffffff').jpeg().toBuffer())
     await utimes(file, 2_000_000, 2_000_000)
-    const second = await get('/changing.jpg?fmt=jpeg&w=64')
+    const second = await get('/changing.jpg?fmt=jpeg&q=75&w=64')
     expect(second.headers.get('etag')).not.toBe(first.headers.get('etag'))
     const pixel = async (response: Response) =>
       (await sharp(Buffer.from(await response.arrayBuffer())).raw().toBuffer())[0]
@@ -335,55 +360,55 @@ describe('headers', () => {
   })
 
   it('supports HEAD with the same headers and no body', async () => {
-    const full = await get('/big.jpg?fmt=avif&w=256')
-    const head = await get('/big.jpg?fmt=avif&w=256', { method: 'HEAD' })
+    const full = await get('/big.jpg?fmt=avif&q=75&w=256')
+    const head = await get('/big.jpg?fmt=avif&q=75&w=256', { method: 'HEAD' })
     expect(head.status).toBe(200)
     expect(await head.text()).toBe('')
     for (const name of ['content-type', 'content-length', 'etag', 'cache-control', 'x-content-type-options']) {
       expect(head.headers.get(name), name).toBe(full.headers.get(name))
     }
-    expect((await get('/big.jpg?fmt=avif&w=500', { method: 'HEAD' })).status).toBe(400)
+    expect((await get('/big.jpg?fmt=avif&q=75&w=500', { method: 'HEAD' })).status).toBe(400)
   })
 })
 
 describe('limits', () => {
   it('413 for a file over the size cap, before decoding', async () => {
     const capped = mounted({ maxFileSize: 100 })
-    expect((await capped.request('/big.jpg?fmt=webp&w=64')).status).toBe(413)
+    expect((await capped.request('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(413)
     // broken.jpg is 12 bytes: under the cap, so it reaches the decoder and fails there instead.
-    expect((await capped.request('/broken.jpg?fmt=webp&w=64')).status).toBe(500)
+    expect((await capped.request('/broken.jpg?fmt=webp&q=75&w=64')).status).toBe(500)
   })
 
   it('defaults the size cap to 32 MB', async () => {
-    expect((await get('/big.jpg?fmt=webp&w=64')).status).toBe(200)
+    expect((await get('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
   })
 
   it('413 for a source over 50 MP', async () => {
     // huge.png claims 10000×6000 = 60 MP in its header.
-    expect((await get('/huge.png?fmt=webp&w=64')).status).toBe(413)
+    expect((await get('/huge.png?fmt=webp&q=75&w=64')).status).toBe(413)
   })
 
   it('honors a custom pixel limit', async () => {
     const capped = mounted({ maxInputPixels: 1_000_000 })
-    expect((await capped.request('/big.jpg?fmt=webp&w=64')).status).toBe(413)
-    expect((await capped.request('/small.jpg?fmt=webp&w=64')).status).toBe(200)
+    expect((await capped.request('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(413)
+    expect((await capped.request('/small.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
   })
 
   it('fails on corrupt input instead of rendering garbage', async () => {
-    expect((await get('/broken.jpg?fmt=webp&w=64')).status).toBe(500)
+    expect((await get('/broken.jpg?fmt=webp&q=75&w=64')).status).toBe(500)
   })
 
   it('504 when a render takes longer than the timeout', async () => {
     const slow = mounted({ timeout: 1, cacheSize: 0 })
-    expect((await slow.request('/big.jpg?ar=0.5&fmt=avif&w=1920')).status).toBe(504)
+    expect((await slow.request('/big.jpg?ar=0.5&fmt=avif&q=75&w=1920')).status).toBe(504)
   })
 
   it('passes the timeout to sharp in whole seconds', async () => {
     const timeout = vi.spyOn(sharp.prototype, 'timeout')
     try {
-      expect((await mounted({ timeout: 1500, cacheSize: 0 }).request('/big.jpg?fmt=webp&w=64')).status).toBe(200)
+      expect((await mounted({ timeout: 1500, cacheSize: 0 }).request('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
       expect(timeout).toHaveBeenCalledWith({ seconds: 2 })
-      expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=webp&w=64')).status).toBe(200)
+      expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
       expect(timeout).toHaveBeenLastCalledWith({ seconds: 10 })
     } finally {
       timeout.mockRestore()
@@ -394,7 +419,7 @@ describe('limits', () => {
     // What sharp rejects with once decode or resize runs past `timeout` seconds.
     const toBuffer = vi.spyOn(sharp.prototype, 'toBuffer').mockRejectedValue(new Error('timeout: 42% complete'))
     try {
-      expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=avif&w=1920')).status).toBe(504)
+      expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=avif&q=75&w=1920')).status).toBe(504)
     } finally {
       toBuffer.mockRestore()
     }
@@ -403,9 +428,9 @@ describe('limits', () => {
   it('passes avifEffort to the AVIF encoder, default 4', async () => {
     const avif = vi.spyOn(sharp.prototype, 'avif')
     try {
-      await mounted({ cacheSize: 0 }).request('/small.jpg?fmt=avif&w=64')
+      await mounted({ cacheSize: 0 }).request('/small.jpg?fmt=avif&q=75&w=64')
       expect(avif).toHaveBeenLastCalledWith({ quality: 75, effort: 4 })
-      await mounted({ cacheSize: 0, avifEffort: 0 }).request('/small.jpg?fmt=avif&w=64')
+      await mounted({ cacheSize: 0, avifEffort: 0 }).request('/small.jpg?fmt=avif&q=75&w=64')
       expect(avif).toHaveBeenLastCalledWith({ quality: 75, effort: 0 })
     } finally {
       avif.mockRestore()
@@ -414,7 +439,7 @@ describe('limits', () => {
 
   it('serves concurrent requests for one variant', async () => {
     const coalescing = mounted({ cacheSize: 0, concurrency: 1 })
-    const url = '/my%20photos/caf%C3%A9.jpg?ar=1&fmt=avif&w=1200'
+    const url = '/my%20photos/caf%C3%A9.jpg?ar=1&fmt=avif&q=75&w=1200'
     const responses = await Promise.all([0, 1, 2, 3, 4].map(() => coalescing.request(url)))
     const bodies = await Promise.all(responses.map(async (r) => Buffer.from(await r.arrayBuffer())))
     for (const response of responses) expect(response.status).toBe(200)
@@ -424,21 +449,21 @@ describe('limits', () => {
   it('renders other keys under a concurrency of 1', async () => {
     const serial = mounted({ cacheSize: 0, concurrency: 1 })
     const responses = await Promise.all(
-      [64, 128, 256].map((w) => serial.request(`/big.jpg?fmt=webp&w=${w}`)),
+      [64, 128, 256].map((w) => serial.request(`/big.jpg?fmt=webp&q=75&w=${w}`)),
     )
     expect(responses.map((r) => r.status)).toEqual([200, 200, 200])
   })
 
   it('serves repeat requests from the LRU', async () => {
     const cached = mounted({ cacheSize: 1 })
-    const a = await (await cached.request('/big.jpg?fmt=webp&w=750')).arrayBuffer()
-    const b = await (await cached.request('/big.jpg?fmt=webp&w=750')).arrayBuffer()
+    const a = await (await cached.request('/big.jpg?fmt=webp&q=75&w=750')).arrayBuffer()
+    const b = await (await cached.request('/big.jpg?fmt=webp&q=75&w=750')).arrayBuffer()
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true)
   })
 
   it('bounds the LRU by bytes, evicting the oldest entries', async () => {
-    const A = '/big.jpg?fmt=webp&w=640'
-    const B = '/big.jpg?fmt=webp&w=1080'
+    const A = '/big.jpg?fmt=webp&q=75&w=640'
+    const B = '/big.jpg?fmt=webp&q=75&w=1080'
     const size = async (url: string) => (await (await get(url)).arrayBuffer()).byteLength
     const [a, b] = [await size(A), await size(B)]
     const toBuffer = vi.spyOn(sharp.prototype, 'toBuffer')

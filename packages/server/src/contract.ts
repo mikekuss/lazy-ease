@@ -1,5 +1,6 @@
 import { formatNumber, type FocalPoint } from '@lazy-ease/core'
 import { HTTPException } from 'hono/http-exception'
+import { TOKEN_PATTERN } from './token.js'
 
 // The ladders, number spelling and crop geometry are shared with the client
 // through @lazy-ease/core, so both ends agree by construction (spec 3).
@@ -18,16 +19,21 @@ export interface ImageParams {
   focalPoint?: FocalPoint
   quality: number
   format: OutputFormat
+  /** The `v` value, opaque. Admitted only when it names the source's current revision. */
   version?: string
+  /** The optional crop token, checked against the source policy's keys. */
+  token?: string
 }
 
 export interface Ladders {
   widths: readonly number[]
   ratios: readonly number[]
   qualities: readonly number[]
+  /** Formats the deployment encodes. Default: all of `OUTPUT_FORMATS`. */
+  formats?: readonly OutputFormat[]
 }
 
-const PARAM_NAMES = new Set(['ar', 'fmt', 'fx', 'fy', 'q', 'v', 'w'])
+const PARAM_NAMES = new Set(['ar', 'fmt', 'fx', 'fy', 'q', 'token', 'v', 'w'])
 // Whole percent, 0 to 100, no leading zeros.
 const PERCENT = /^(?:100|[1-9]?[0-9])$/
 // RFC 3986 unreserved characters, which encodeURIComponent leaves alone.
@@ -42,11 +48,12 @@ function canonical(raw: string, allowed: readonly number[]): number | undefined 
 
 /**
  * Parses the raw query string of an image request (spec 12.1). Only the
- * canonical spelling is accepted: known parameters in alphabetical order, once
- * each, values exactly as the default loader writes them. Anything else is a
+ * canonical spelling is accepted: known parameters in the order ar, fmt, fx,
+ * fy, q, token, v, w, once each, values exactly as the default loader writes
+ * them. `w`, `fmt` and `q` are required. Anything else is a
  * 400, so a CDN keying on the raw query string sees one URL per variant.
  */
-export function parseImageQuery(raw: string, { widths, ratios, qualities }: Ladders): ImageParams {
+export function parseImageQuery(raw: string, { widths, ratios, qualities, formats = OUTPUT_FORMATS }: Ladders): ImageParams {
   const values = new Map<string, string>()
   let previous = ''
   for (const part of raw === '' ? [] : raw.split('&')) {
@@ -67,9 +74,14 @@ export function parseImageQuery(raw: string, { widths, ratios, qualities }: Ladd
 
   const fmt = values.get('fmt')
   if (fmt === undefined) throw invalid('Missing fmt')
-  if (!(OUTPUT_FORMATS as readonly string[]).includes(fmt)) throw invalid('fmt must be avif, webp or jpeg')
+  if (!(formats as readonly string[]).includes(fmt)) throw invalid(`fmt must be one of ${formats.join(', ')}`)
 
-  const params: ImageParams = { width, quality: qualities[0]!, format: fmt as OutputFormat }
+  const q = values.get('q')
+  if (q === undefined) throw invalid('Missing q')
+  const quality = canonical(q, qualities)
+  if (quality === undefined) throw invalid('q must be an allowed quality in canonical form')
+
+  const params: ImageParams = { width, quality, format: fmt as OutputFormat }
 
   const ar = values.get('ar')
   if (ar !== undefined) {
@@ -88,11 +100,10 @@ export function parseImageQuery(raw: string, { widths, ratios, qualities }: Ladd
     params.focalPoint = { x: Number(fx), y: Number(fy) }
   }
 
-  const q = values.get('q')
-  if (q !== undefined) {
-    const quality = canonical(q, qualities)
-    if (quality === undefined) throw invalid('q must be an allowed quality in canonical form')
-    params.quality = quality
+  const token = values.get('token')
+  if (token !== undefined) {
+    if (!TOKEN_PATTERN.test(token)) throw invalid('Malformed token')
+    params.token = token
   }
 
   const v = values.get('v')

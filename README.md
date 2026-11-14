@@ -462,7 +462,7 @@ These assume `src` is a path. If you list `domains`, the loader receives those a
 | `cacheBytes` | 64 MB | Total size of the LRU. The oldest entries go first; `0` turns it off. |
 | `avifEffort` | 4 | AVIF encoder effort, `0` (fastest) to `9` (smallest files). |
 
-The package also exports `DEFAULT_WIDTHS`, `DEFAULT_RATIOS`, `DEFAULT_QUALITIES`, `OUTPUT_FORMATS`, and `render(file, params, options)`, the same pipeline the image route runs, for build scripts.
+The package also exports `DEFAULT_WIDTHS`, `DEFAULT_RATIOS`, `DEFAULT_QUALITIES`, `OUTPUT_FORMATS`, and `render(fileOrBytes, params, options)`, the same pipeline the image route runs, for build scripts.
 
 ### CDN notes
 

@@ -9,6 +9,7 @@ import { getCookie } from 'hono/cookie'
 import sharp from 'sharp'
 import { cssText } from '../../packages/vanilla/src/css.js'
 import { buildScript } from '../../packages/vanilla/scripts/bundle.mjs'
+import { FOCUS } from './src/focus.js'
 import type { FixtureImage, PageData } from './src/pages.js'
 
 const PORT = Number(process.env.PORT) || 3100
@@ -134,7 +135,8 @@ app.use('/_img/*', async (c, next) => {
   await next()
   if (match) c.res = await throttled(c.res, Number(match[1]), Number(match[2]))
 })
-app.route('/_img', createImageApp({ root }))
+// The focus fixture's upload record: its server crops are centered on FOCUS (spec 6.1, backend.md).
+app.route('/_img', createImageApp({ root, policy: ({ path }) => (path === images.focus.src ? { focalPoint: FOCUS } : {}) }))
 
 app.get('/health', (c) => c.text('ok'))
 app.get('/assets/lazy-ease.min.js', (c) => c.body(vanillaJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))

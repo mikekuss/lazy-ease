@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import sharp from 'sharp'
 import { rgbaToThumbHash } from 'thumbhash'
 import { DEFAULT_MAX_INPUT_PIXELS, inputOptions, mapSharpError, orientedSize } from './render.js'
+import { revisionOf } from './policy.js'
 import { realRoot, resolveSource } from './source.js'
 
 export interface ImageMetadata {
@@ -13,13 +14,16 @@ export interface ImageMetadata {
   thumbhash: string
   /** Dominant color as `#rrggbb`, usable as `placeholder` directly. */
   color: string
+  /** Content revision of the bytes, for `v`: the image server's default revision of this file. */
+  revision: string
 }
 
 const hex = (n: number) => n.toString(16).padStart(2, '0')
 
 /**
  * Metadata for upload or build scripts (spec 12.3): oriented size, a ThumbHash
- * from a thumbnail of at most 100 px and the dominant color.
+ * from a thumbnail of at most 100 px, the dominant color and the content
+ * revision.
  */
 export async function computeMetadata(input: string | Buffer): Promise<ImageMetadata> {
   // From memory, so libvips does not cache or lock the file (see render).
@@ -43,6 +47,7 @@ export async function computeMetadata(input: string | Buffer): Promise<ImageMeta
     height,
     thumbhash: Buffer.from(hash).toString('base64'),
     color: `#${hex(r)}${hex(g)}${hex(b)}`,
+    revision: revisionOf(buffer),
   }
 }
 
