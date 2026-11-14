@@ -282,7 +282,7 @@ describe('enhance', () => {
     expect(claimed(img('a')) || claimed(img('b'))).toBe(false)
   })
 
-  it('skips subtrees whose nearest data-le-auto is off', () => {
+  it('skips every subtree under data-le-auto="off", inner opt-ins included', () => {
     html(
       `<div data-le-auto="off">${boxed('data-le-url="/a.jpg"', 'managed')}<div data-le-auto>${boxed('data-le-url="/b.jpg"', 'again')}</div></div>` +
         `<div data-le-auto="off" data-le id="offbox"><img alt="" src="${INERT}" data-le-url="/c.jpg"></div>`,
@@ -290,7 +290,11 @@ describe('enhance', () => {
     enhance(createLazyEase())
     expect($('#managed').hasAttribute('data-state')).toBe(false)
     expect($('#offbox').hasAttribute('data-state')).toBe(false)
-    expect($('#again').dataset.state).toBe('idle')
+    expect($('#again').hasAttribute('data-state')).toBe(false)
+    expect(claimed(img('again'))).toBe(false)
+    // Also when the inner area is enhanced on its own.
+    enhance(createLazyEase(), $('#again').parentElement!)
+    expect(claimed(img('again'))).toBe(false)
   })
 
   it('enhances inside a shadow root only when given that root', () => {

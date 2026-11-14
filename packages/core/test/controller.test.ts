@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLazyEase, createLoader, whenVisible, type AttachOptions, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
-import { resetFormatDetection } from '../src/dom/format.js'
+import { createLazyEase, createLoader, whenVisible, type AttachOptions, type Attachment, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
+import { chooseFormat, resetFormatDetection } from '../src/dom/format.js'
 import { observeResize, resetObservers } from '../src/dom/observe.js'
 import { fail, fakeImage, flush, installDom, intersect, load, media, MockIntersectionObserver, MockResizeObserver, probe, resize } from './dom-mocks.js'
 
@@ -297,6 +297,73 @@ describe('generations', () => {
     expect(handle.state).toBe('loaded')
   })
 
+  it('starts a new generation when a destroyed image is attached again with another source', async () => {
+    const { le, img, box, attach } = setup()
+    const first = attach({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(img, '/a.webp')
+    await vi.advanceTimersByTimeAsync(400)
+    first.destroy()
+    const states: LoadState[] = []
+    const displays: (Event | undefined)[] = []
+    const next = le.attach(img, {
+      url: '/b.webp',
+      placeholder: 'blue',
+      onStateChange: (state) => states.push(state),
+      onDisplay: (_, event) => displays.push(event),
+    })
+    // The old image is neither adopted nor shown under the new placeholder.
+    expect(next.state).toBe('idle')
+    expect(displays).toEqual([])
+    expect(img.getAttribute('src')).toBe(INERT)
+    expect(box.style.backgroundColor).toBe('blue')
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    expect(img.style.opacity).toBe('0')
+    await loadAndDecode(img, '/b.webp')
+    expect(states).toEqual(['idle', 'loading', 'loaded'])
+    expect(displays).toEqual([expect.any(Event)])
+  })
+
+  it('resets the picture sources of an earlier source on a new attach', () => {
+    document.body.innerHTML = `<span data-le><picture>
+      <source media="(min-width:800px)" data-le-sizes="100vw" data-le-srcset="/wide-1440.webp 1440w">
+      <img alt="Cliffs" src="${INERT}"></picture></span>`
+    const box = document.querySelector('span')!
+    const img = document.querySelector('img')!
+    const source = document.querySelector('source')!
+    fakeImage(img)
+    const le = createLazyEase()
+    le.attach(img, { srcset: '/sq-750.webp 750w', sizes: '100vw', loading: 'eager' }).destroy()
+    expect(source.getAttribute('srcset')).toBe('/wide-1440.webp 1440w')
+    // The framework renders new deferred values for the source alone, then attaches again.
+    source.setAttribute('data-le-srcset', '/wide2-1440.webp 1440w')
+    const next = le.attach(img, { srcset: '/sq-750.webp 750w', sizes: '100vw' })
+    expect(next.state).toBe('idle')
+    expect(source.hasAttribute('srcset')).toBe(false)
+    expect(source.hasAttribute('sizes')).toBe(false)
+    expect(img.getAttribute('src')).toBe(INERT)
+    expect(img.hasAttribute('srcset')).toBe(false)
+    intersect(box)
+    expect(source.getAttribute('srcset')).toBe('/wide2-1440.webp 1440w')
+    expect(img.getAttribute('srcset')).toBe('/sq-750.webp 750w')
+  })
+
+  it('adopts the same source again after destroy, also for a measured image', async () => {
+    const { le, img, box, attach } = setup()
+    const first = attach({ src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(box, 100, 100)
+    const url = img.getAttribute('src')!
+    await loadAndDecode(img, url)
+    first.destroy()
+    const next = le.attach(img, { src: '/a.jpg', aspectRatio: 1 })
+    expect(next.state).toBe('loaded')
+    expect(img.getAttribute('src')).toBe(url)
+    next.destroy()
+    // A new revision is another source.
+    expect(le.attach(img, { src: '/a.jpg', aspectRatio: 1, version: '2' }).state).toBe('idle')
+    expect(img.getAttribute('src')).toBe(INERT)
+  })
+
   it('validates new options before ending the current generation', async () => {
     const { img, attach } = setup()
     const handle = attach({ url: '/a.webp', loading: 'eager' })
@@ -408,6 +475,149 @@ describe('generations', () => {
     expect(third.state).toBe('loaded')
     expect(displays).toEqual([undefined])
   })
+
+  const svg = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/%3E'
+
+  it('adopts a data: URI target it installed when the same source is attached again', async () => {
+    const { le, img, attach } = setup()
+    const first = attach({ url: svg, loading: 'eager' })
+    await loadAndDecode(img, svg)
+    await vi.advanceTimersByTimeAsync(400)
+    first.destroy()
+    // A Strict Mode remount, or a new root, after the load.
+    const next = le.attach(img, { url: svg, loading: 'eager' })
+    expect(next.state).toBe('loaded')
+    expect(img.getAttribute('src')).toBe(svg)
+    expect(img.style.opacity).toBe('')
+  })
+
+  it('resets a data: URI target it installed when another source is attached', async () => {
+    const { le, img, box, attach } = setup()
+    const first = attach({ url: svg, loading: 'eager' })
+    await loadAndDecode(img, svg)
+    await vi.advanceTimersByTimeAsync(400)
+    first.destroy()
+    const next = le.attach(img, { url: '/b.webp', placeholder: 'blue' })
+    // The old image is not shown over the new placeholder.
+    expect(next.state).toBe('idle')
+    expect(img.getAttribute('src')).toBe(INERT)
+    expect(box.style.backgroundColor).toBe('blue')
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    await loadAndDecode(img, '/b.webp')
+    expect(next.state).toBe('loaded')
+  })
+
+  const lqip = 'data:image/png;base64,iVBORw0KGgo='
+
+  it('treats a data: placeholder the app wrote back after destroy as the placeholder of the same source', async () => {
+    const { le, img, attach } = setup()
+    const first = attach({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(img, '/a.webp')
+    await vi.advanceTimersByTimeAsync(400)
+    first.destroy()
+    // The app puts its placeholder back, and the browser loads it.
+    img.setAttribute('src', lqip)
+    load(img, lqip)
+    const displays: (Event | undefined)[] = []
+    const next = le.attach(img, { url: '/a.webp', loading: 'eager', onDisplay: (_, event) => displays.push(event) })
+    expect(next.state).toBe('loading')
+    expect(displays).toEqual([])
+    expect(img.getAttribute('src')).toBe('/a.webp')
+    expect(img.style.opacity).toBe('0')
+    await loadAndDecode(img, '/a.webp')
+    expect(next.state).toBe('loaded')
+    expect(displays).toEqual([expect.any(Event)])
+  })
+
+  it('keeps a data: placeholder the app wrote back after destroy when another source is attached', async () => {
+    const { le, img, box, attach } = setup()
+    const first = attach({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(img, '/a.webp')
+    await vi.advanceTimersByTimeAsync(400)
+    first.destroy()
+    img.setAttribute('src', lqip)
+    load(img, lqip)
+    const next = le.attach(img, { url: '/b.webp' })
+    expect(next.state).toBe('idle')
+    expect(img.getAttribute('src')).toBe(lqip)
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    // A source change resets to the app's placeholder, not the inert pixel.
+    next.update({ url: '/c.webp' })
+    expect(img.getAttribute('src')).toBe(lqip)
+  })
+
+  const prepared = (name: string): AttachOptions => ({ srcset: `/${name}-640.webp 640w`, sizes: '100vw' })
+
+  for (const placeholder of [lqip, INERT]) {
+    it(`treats a data: placeholder written back after destroy as the placeholder of the same srcset-only source (${placeholder.slice(0, 14)})`, async () => {
+      const { le, img, attach } = setup()
+      img.setAttribute('src', placeholder)
+      const first = attach({ ...prepared('a'), loading: 'eager' })
+      await loadAndDecode(img)
+      await vi.advanceTimersByTimeAsync(400)
+      first.destroy()
+      img.removeAttribute('srcset')
+      img.removeAttribute('sizes')
+      img.setAttribute('src', placeholder)
+      load(img, placeholder)
+      const displays: (Event | undefined)[] = []
+      const next = le.attach(img, { ...prepared('a'), loading: 'eager', onDisplay: (_, event) => displays.push(event) })
+      expect(next.state).toBe('loading')
+      expect(displays).toEqual([])
+      expect(img.style.opacity).toBe('0')
+      await loadAndDecode(img)
+      expect(next.state).toBe('loaded')
+      expect(displays).toEqual([expect.any(Event)])
+    })
+  }
+
+  it('keeps the data: placeholder under a srcset-only target when another source is attached', async () => {
+    const { le, img, attach } = setup()
+    img.setAttribute('src', lqip)
+    const first = attach({ ...prepared('a'), loading: 'eager' })
+    await loadAndDecode(img)
+    await vi.advanceTimersByTimeAsync(400)
+    first.destroy()
+    const next = le.attach(img, prepared('b'))
+    expect(next.state).toBe('idle')
+    expect(img.getAttribute('src')).toBe(lqip)
+    expect(img.hasAttribute('srcset')).toBe(false)
+  })
+
+  for (const boxedImage of [true, false]) {
+    for (const [kind, options] of [
+      ['url', { url: '/a.webp', loading: 'eager' }],
+      ['measured', { src: '/a.jpg', aspectRatio: 1, loading: 'eager' }],
+    ] as [string, AttachOptions][]) {
+      it(`goes back to the data: placeholder for another source after destroy, as update does (${boxedImage ? 'boxed' : 'boxless'}, ${kind})`, async () => {
+        const result = async (change: 'update' | 'destroy') => {
+          document.body.innerHTML = boxedImage
+            ? `<span data-le style="display:block"><img alt="Fern" src="${lqip}"></span>`
+            : `<img data-le alt="Fern" src="${lqip}">`
+          const img = document.querySelector('img')!
+          fakeImage(img)
+          const le = createLazyEase({ loader: webpLoader })
+          const first = le.attach(img, options)
+          resize(img.closest('[data-le]')!, 100, 100)
+          expect(img.getAttribute('src')).not.toBe(lqip)
+          await loadAndDecode(img)
+          await vi.advanceTimersByTimeAsync(400)
+          let next: Attachment
+          if (change === 'update') (next = first).update({ url: '/b.webp' })
+          else {
+            first.destroy()
+            next = le.attach(img, { url: '/b.webp' })
+          }
+          return { state: next.state, src: img.getAttribute('src'), srcset: img.getAttribute('srcset') }
+        }
+        const destroyed = await result('destroy')
+        expect(destroyed).toEqual({ state: 'idle', src: lqip, srcset: null })
+        expect(destroyed).toEqual(await result('update'))
+      })
+    }
+  }
 })
 
 describe('validation', () => {
@@ -585,6 +795,32 @@ describe('visibility', () => {
     intersect(box)
     expect(img.getAttribute('src')).toBe('/a.webp')
   })
+
+  it('leaves the target of an earlier source in place when a new attach cannot build its observer', async () => {
+    class Strict extends MockIntersectionObserver {
+      constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit = {}) {
+        if (options.rootMargin === 'bogus') throw new SyntaxError('rootMargin must be specified in pixels or percent')
+        super(callback, options)
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Strict)
+    document.body.innerHTML = `<span data-le><picture>
+      <source media="(min-width:800px)" data-le-sizes="100vw" data-le-srcset="/wide-1440.webp 1440w">
+      <img alt="Cliffs" src="${INERT}"></picture></span>`
+    const img = document.querySelector('img')!
+    const source = document.querySelector('source')!
+    fakeImage(img)
+    const le = createLazyEase()
+    const first = le.attach(img, { url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(img, '/a.webp')
+    first.destroy()
+    expect(() => le.attach(img, { url: '/b.webp', rootMargin: 'bogus' })).toThrow(SyntaxError)
+    expect(img.getAttribute('src')).toBe('/a.webp')
+    expect(source.getAttribute('srcset')).toBe('/wide-1440.webp 1440w')
+    expect(source.getAttribute('sizes')).toBe('100vw')
+    // The element still knows its target, so the same source adopts it.
+    expect(le.attach(img, { url: '/a.webp' }).state).toBe('loaded')
+  })
 })
 
 describe('measured mode', () => {
@@ -759,6 +995,17 @@ describe('formats', () => {
     expect(probe.created).toBe(1)
   })
 
+  it('decides without a probe when AVIF is not declared', () => {
+    expect(chooseFormat(['webp', 'jpeg'])).toBe('webp')
+    expect(chooseFormat(['jpeg', 'webp'])).toBe('webp')
+    const { img, box } = boxed()
+    createLazyEase({ loader: createLoader({ formats: ['webp', 'jpeg'] }) }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    // Synchronous: the first size installs at once.
+    resize(box, 100, 100)
+    expect(img.getAttribute('src')).toContain('fmt=webp')
+    expect(probe.created).toBe(0)
+  })
+
   it('falls back to WebP when detection takes longer than 200 ms', async () => {
     probe.hang = true
     const { img, box } = boxed()
@@ -837,6 +1084,29 @@ describe('native and priority images', () => {
     expect(img.getAttribute('srcset')).toBe('/a-640.webp 640w')
     expect(handle.state).toBe('loaded')
     expect(displays).toEqual([expect.any(Event), undefined])
+  })
+
+  it('adopts a loaded native data: URI image as its target', () => {
+    const uri = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/%3E'
+    document.body.innerHTML = `<img data-le alt="Dot" src='${uri}'>`
+    const img = document.querySelector('img')!
+    fakeImage(img)
+    Object.assign(img, { complete: true, naturalWidth: 10, currentSrc: uri })
+    const displays: (Event | undefined)[] = []
+    const handle = createLazyEase().attach(img, { loading: 'native', onDisplay: (_, event) => displays.push(event) })
+    expect(handle.state).toBe('loaded')
+    expect(displays).toEqual([undefined])
+  })
+
+  it('reports the load of a native data: URI image', () => {
+    const uri = 'data:image/png;base64,AAAA'
+    document.body.innerHTML = `<img data-le alt="Dot" src="${uri}">`
+    const img = document.querySelector('img')!
+    fakeImage(img)
+    const handle = createLazyEase().attach(img, { loading: 'native' })
+    expect(handle.state).toBe('loading')
+    load(img, uri)
+    expect(handle.state).toBe('loaded')
   })
 
   it('gives a priority image eager loading and high fetch priority', () => {

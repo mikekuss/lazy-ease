@@ -121,6 +121,9 @@ const assign = (element: HTMLElement, styles: StyleRecord) => {
   return () => Object.assign(element.style, before)
 }
 const isNative = (o: Options) => o.priority || o.loading === 'native'
+/** The logical source of deferred options and picture sources: what an image displayed under them shows. */
+const identity = (o: Options, sources: Iterable<Element>) =>
+  JSON.stringify([o.src, o.srcset, o.url, o.version, ...[...sources].map((source) => source.getAttribute('data-le-srcset'))])
 
 /**
  * A controller instance. Creating it does nothing: observers and format
@@ -168,13 +171,23 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
       const claims = img as unknown as Record<symbol, object | undefined>
       if (claims[key]) throw new Error('[lazy-ease] The image is already attached')
       const claim = (claims[key] = {})
+      // The logical source whose target the element has, with the src it wrote and the
+      // placeholder src it replaced, recorded when it is installed or adopted, kept past
+      // destroy and removed when the element goes back to its placeholder.
+      const targetKey = Symbol.for('lazy-ease.target')
+      const targets = img as unknown as Record<symbol, [string, string | null | undefined, string] | undefined>
 
       const owner = img.closest<HTMLElement>('[data-le]') ?? img
       const box = owner === img ? undefined : owner
       const surface = box ?? img
       const attribute = (name: string) => img.getAttribute(name)
       const initialSrc = attribute('src')
-      const inert = initialSrc?.startsWith('data:') ? initialSrc : INERT
+      // A data: src is the placeholder, unless an earlier attachment set it as the target;
+      // then the placeholder is the one that target replaced.
+      const inert =
+        initialSrc?.startsWith('data:') && initialSrc !== targets[targetKey]?.[1] ? initialSrc : (targets[targetKey]?.[2] ?? INERT)
+      const deferredSources = () =>
+        img.parentElement?.tagName === 'PICTURE' ? [...img.parentElement.querySelectorAll(':scope>source[data-le-srcset]')] : []
       const painted = PLACEHOLDER.map((property) => styleOf(surface)[property]!)
       const snapshot = (element: Element = img) => ATTRIBUTES.map((name) => element.getAttribute(name))
       // In this order: sizes before srcset, or the browser selects for 100vw first.
@@ -197,7 +210,26 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
       /** One generation: everything that belongs to one logical source. Returns its cleanup. */
       const run = (): ((next?: Options) => void) => {
         const native = isNative(o)
-        const own = img.hasAttribute('srcset') || !(attribute('src') ?? 'data:').startsWith('data:')
+        // A native data: URI is the target; only the inert pixel is a placeholder there.
+        const placeholderSrc = native ? INERT : inert
+        const src = attribute('src')
+        const recorded = targets[targetKey]
+        let own = img.hasAttribute('srcset') || (native ? (src ?? INERT) !== INERT : src != null && (src === recorded?.[1] || !src.startsWith('data:')))
+        const deferred = deferredSources()
+        const target = native ? undefined : identity(o, deferred)
+        // The element still has the target of an earlier attachment for another source:
+        // back to the placeholder, so the old image is neither adopted nor shown.
+        if (own && target && recorded && recorded[0] !== target) {
+          restore([null, null, inert])
+          for (const source of deferred) {
+            source.removeAttribute('srcset')
+            if (source.hasAttribute('data-le-sizes')) source.removeAttribute('sizes')
+          }
+          own = false
+        }
+        // An adopted target is this source's; a native one is nobody's.
+        // A data: src next to an adopted srcset is the placeholder, unless the target set it.
+        targets[targetKey] = own && target ? [target, src?.startsWith('data:') && src !== recorded?.[1] ? undefined : src, inert] : undefined
         let live = true
         // A native source is the element's own, whenever it is set.
         let assigned = native || own
@@ -255,7 +287,7 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
 
         on('load', (event) => {
           // The inert placeholder's own load says nothing about the target.
-          if (!assigned || img.currentSrc === inert) return
+          if (!assigned || img.currentSrc === placeholderSrc) return
           if (shown) good = snapshot()
           else if (native) display(event)
           else {
@@ -283,9 +315,10 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
 
         const install = (srcset?: string, sizes?: string, src?: string) => {
           const values = [srcset && sizes, srcset, src ?? attribute('src')]
+          // Only a src the target writes is its own: a srcset alone leaves the placeholder src.
+          targets[targetKey] = [target!, src, inert]
           // An adopted error of this very source stays one: writing nothing brings no new event.
-          const picture = img.parentElement
-          if (state === 'error' && picture?.tagName !== 'PICTURE' && snapshot().every((value, i) => value === (values[i] ?? null))) return
+          if (state === 'error' && img.parentElement?.tagName !== 'PICTURE' && snapshot().every((value, i) => value === (values[i] ?? null))) return
           // Hidden before the target is assigned, so neither a partial image nor the alt text flashes.
           if (!assigned && box) {
             img.style.opacity = '0'
@@ -294,13 +327,11 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           assigned = true
           // An upgrade keeps the loaded state; the displayed image stays.
           if (!shown) report('loading')
-          if (picture?.tagName === 'PICTURE') {
-            for (const source of picture.querySelectorAll(':scope>source[data-le-srcset]')) {
-              if (!activated.has(source)) activated.set(source, snapshot(source))
-              const deferred = source.getAttribute('data-le-sizes')
-              if (deferred !== null) source.setAttribute('sizes', deferred)
-              source.setAttribute('srcset', source.getAttribute('data-le-srcset')!)
-            }
+          for (const source of deferredSources()) {
+            if (!activated.has(source)) activated.set(source, snapshot(source))
+            const deferred = source.getAttribute('data-le-sizes')
+            if (deferred !== null) source.setAttribute('sizes', deferred)
+            source.setAttribute('srcset', source.getAttribute('data-le-srcset')!)
           }
           restore(values)
         }
@@ -401,6 +432,7 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           // A native source is what the element has when the update runs.
           if (!isNative(next)) {
             restore([null, null, inert])
+            targets[targetKey] = undefined
             activated.forEach((values, source) => restore(values, source))
           }
         }
@@ -426,10 +458,14 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
       const prior = owner.getAttribute('data-state')
       /** Starts a generation. If it throws, the element is released as it was, so a later attach can take it. */
       const start = () => {
+        const before = [img, ...deferredSources()].map((element) => [element, snapshot(element)] as const)
+        const recorded = targets[targetKey]
         try {
           stop = run()
         } catch (error) {
           stop = undefined
+          before.forEach(([element, values]) => restore(values, element))
+          targets[targetKey] = recorded
           clearStyle(img, FADE)
           PLACEHOLDER.forEach((property, i) => (styleOf(surface)[property] = painted[i]!))
           if (prior === null) owner.removeAttribute('data-state')

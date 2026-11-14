@@ -531,6 +531,41 @@ describe('lifecycle', () => {
     expect(img().getAttribute('src')).toBe('/new/a.jpg?w=640')
   })
 
+  it('starts a prepared image over on a quality change, but upgrades a measured one in place', async () => {
+    const provider = { loader: createLoader({ formats: ['webp'], qualities: [50, 75] }) }
+    // Prepared: the URL list is the source, so new URLs are a new source with its placeholder.
+    const prepared = mount({ aspectRatio: 1.5, sizes: '320px', srcWidth: 2400, srcHeight: 1600 }, provider)
+    intersect(prepared.owner())
+    const before = prepared.img().getAttribute('srcset')
+    load(prepared.img())
+    await advance(400)
+    expect(prepared.owner().dataset.state).toBe('loaded')
+    prepared.rerender({ quality: 50 })
+    expect(prepared.owner().dataset.state).toBe('idle')
+    expect(prepared.img().getAttribute('src')).toBe(INERT)
+    expect(prepared.img().hasAttribute('srcset')).toBe(false)
+    intersect(prepared.owner())
+    expect(prepared.img().getAttribute('srcset')).not.toBe(before)
+    expect(prepared.img().style.opacity).toBe('0')
+    prepared.unmount()
+
+    // Measured: the logical source is src, so the displayed image stays and is replaced in place.
+    const measured = mount({ width: 320, height: 240 }, provider)
+    intersect(measured.owner())
+    resize(measured.owner(), 320, 240)
+    const url = measured.img().getAttribute('src')
+    load(measured.img())
+    await advance(400)
+    measured.rerender({ quality: 50 })
+    expect(measured.owner().dataset.state).toBe('loaded')
+    expect(measured.img().getAttribute('src')).toBe(url)
+    intersect(measured.owner())
+    resize(measured.owner(), 320, 240)
+    expect(measured.img().getAttribute('src')).not.toBe(url)
+    expect(measured.img().style.opacity).toBe('')
+    expect(measured.owner().dataset.state).toBe('loaded')
+  })
+
   it('re-attaches for new picture sources with the same src', () => {
     const source = (src: string) => [{ media: '(min-width: 800px)', src, sizes: '50vw', srcWidth: 2400, srcHeight: 1600 }]
     const { owner, rerender } = mount({ aspectRatio: 1.5, sizes: '100vw', srcWidth: 2400, srcHeight: 1600, sources: source('/b.jpg') })

@@ -67,7 +67,7 @@ Each image has one source mode. The attributes go on the img; `data-le` goes on 
 | `data-le-fx`, `data-le-fy` | Focal point in percent, both or neither. |
 | `data-le-token`, `data-le-v`, `data-le-q` | Crop token, revision and quality, passed to the loader. |
 | `data-le-background` | A decorative element. It gets `data-le-visible` once it comes near the viewport. An element marked both `data-le` and `data-le-background` is reported on the console and left alone. |
-| `data-le-auto` | Opts an area in for the script. `data-le-auto="off"` keeps a subtree out of every `enhance` call, for React or Lit images that attach themselves; a nested `data-le-auto` opts back in. |
+| `data-le-auto` | Opts an area in for the script. `data-le-auto="off"` keeps a subtree out of every `enhance` call, for React or Lit images that attach themselves; a nested `data-le-auto` does not opt back in. |
 
 An img with none of the source attributes is native: its own `src`/`srcset` load as the browser decides, and the controller only reports its state and removes the placeholder once it has loaded. The HTML `width` and `height` stay plain dimensions; a measured crop ratio comes from `data-le-ar`. Escape every attribute value for HTML after building the URLs (`&` becomes `&amp;`).
 
