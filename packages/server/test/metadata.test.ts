@@ -3,7 +3,7 @@ import path from 'node:path'
 import { Hono } from 'hono'
 import { thumbHashToApproximateAspectRatio, thumbHashToAverageRGBA, thumbHashToRGBA } from 'thumbhash'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { computeMetadata, createImageApp, createMetaApp } from '../src/index.js'
+import { computeMetadata, createImageApp, createMetaApp, memoryStorage } from '../src/index.js'
 import { createFixtures, solid, type Fixtures } from './fixtures.js'
 
 let fixtures: Fixtures
@@ -79,7 +79,7 @@ describe('createMetaApp', () => {
   const host = () => {
     const app = new Hono()
     app.route('/_meta', createMetaApp({ root: fixtures.root }))
-    app.route('/_img', createImageApp({ root: fixtures.root }))
+    app.route('/_img', createImageApp({ storage: memoryStorage(), root: fixtures.root }))
     return app
   }
 
@@ -99,7 +99,7 @@ describe('createMetaApp', () => {
   })
 
   it('is not part of the image app', async () => {
-    const app = createImageApp({ root: fixtures.root })
+    const app = createImageApp({ storage: memoryStorage(), root: fixtures.root })
     expect((await app.request('/meta?src=/big.jpg')).status).toBe(400)
     expect((await app.request('/big.jpg')).status).toBe(400)
     expect((await app.request('/placeholder?src=/big.jpg')).status).toBe(400)

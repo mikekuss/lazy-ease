@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
+import fs from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { availableParallelism } from 'node:os'
+import path from 'node:path'
 import { Hono, type Context } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import {
@@ -16,6 +18,7 @@ import {
 import { admitsCrop, createContentRevisions, revisionOf, type SourcePolicy, type SourceRef } from './policy.js'
 import { DEFAULT_AVIF_EFFORT, DEFAULT_MAX_INPUT_PIXELS, DEFAULT_TIMEOUT, createRenderQueue, mapSharpError, render, type Encoded } from './render.js'
 import { RENDER_TYPES, openSource, parseSourcePath, realRoot, type Source, type SourcePath } from './source.js'
+import { defaultStorage, defaultStorageDir, type VariantStorage } from './storage.js'
 import { REVISION_PATTERN, TENANT_PATTERN, verifyCropToken, type CropTokenKeys } from './token.js'
 
 export type OriginalType = 'gif' | 'svg'
@@ -88,10 +91,13 @@ export interface ImageServerOptions {
    * the same size of its own. Default 4 × `concurrency`.
    */
   maxPending?: number
-  /** Number of encoded images kept in memory. 0 disables the cache. Default 200. */
-  cacheSize?: number
-  /** Total bytes of encoded images kept in memory. 0 disables the cache. Default 64 MB. */
-  cacheBytes?: number
+  /**
+   * Where encoded variants are kept: `diskStorage()` (the default, in
+   * `.cache/lazy-ease` under the working directory) or `memoryStorage()`.
+   * Must not overlap `root`. Close it on shutdown with `storage.close()`;
+   * the default one is closed with `diskStorage().close()`.
+   */
+  storage?: VariantStorage
   /** AVIF encoder effort, 0 (fastest) to 9 (smallest). Default 4. */
   avifEffort?: number
 }
@@ -137,7 +143,7 @@ const REHASH_COOLDOWN = 1000
  * Admission order: canonical query and path (400), policy (404), viewer
  * authorization of private sources (403), file and size (404, 413), revision
  * (404), crop by token or policy (403), then a conditional request (304), the
- * in-memory cache, and the render queue (503, 504). A `HEAD` for a variant
+ * storage, and the render queue (503, 504). A `HEAD` for a variant
  * that is not cached renders it like a `GET`.
  */
 export function createImageApp({
@@ -156,10 +162,13 @@ export function createImageApp({
   timeout = DEFAULT_TIMEOUT,
   concurrency = Math.max(1, Math.floor(availableParallelism() / 2)),
   maxPending = 4 * concurrency,
-  cacheSize = 200,
-  cacheBytes = 64 * 1024 * 1024,
+  storage,
   avifEffort = DEFAULT_AVIF_EFFORT,
+  ...rest
 }: ImageServerOptions): Hono {
+  if ('cacheSize' in rest || 'cacheBytes' in rest) {
+    throw new TypeError('cacheSize and cacheBytes were replaced by storage: memoryStorage({ maxEntries, maxBytes })')
+  }
   if (qualities.length === 0) throw new RangeError('qualities must not be empty')
   if (formats.length === 0 || formats.some((f) => !OUTPUT_FORMATS.includes(f))) throw new RangeError('formats must be avif, webp or jpeg')
   if (!TENANT_PATTERN.test(tenant)) throw new RangeError('tenant must be 1 to 64 URL-safe characters')
@@ -174,15 +183,23 @@ export function createImageApp({
   const originalTypes = new Map(originals.map((type) => [ORIGINAL_EXTENSIONS[type], type] as const))
   const pathTypes = new Set([...RENDER_TYPES, ...originalTypes.keys()])
 
-  const app = new Hono()
-  const cache = new Map<string, Encoded>()
-  let cachedBytes = 0
   const queue = createRenderQueue({ concurrency, maxPending, retryAfter: timeout / 1000 })
+  // Cold content revisions read the whole file, so they are bounded like renders.
+  const hashing = createRenderQueue({ concurrency, maxPending, retryAfter: timeout / 1000 })
+  const checkOverlap = (dir: string) => {
+    const [a, b] = [realPath(root), realPath(dir)]
+    if (inside(a, b) || inside(b, a)) throw new RangeError('The storage directory must not overlap the source root')
+  }
+  // The default storage is checked before it is opened, and opened last, so
+  // a failed call leaves no LOCK or shared storage behind.
+  if (storage?.dir !== undefined) checkOverlap(storage.dir)
+  if (!storage) checkOverlap(defaultStorageDir())
+  const store = storage ?? defaultStorage()
+
+  const app = new Hono()
   const ladders = { widths, ratios, qualities, formats }
   const rootDir = realRoot(root)
   const revisions = createContentRevisions()
-  // Cold content revisions read the whole file, so they are bounded like renders.
-  const hashing = createRenderQueue({ concurrency, maxPending, retryAfter: timeout / 1000 })
 
   const readSource = async (source: Source) => {
     const bytes = await readFile(source.file)
@@ -242,26 +259,6 @@ export function createImageApp({
     rehashed.delete(key)
     rehashed.set(key, Date.now())
     return revision
-  }
-
-  const forget = (key: string) => {
-    const value = cache.get(key)
-    if (!value) return
-    cache.delete(key)
-    cachedBytes -= value.body.byteLength
-  }
-  // Bounded by count and by bytes. A Map iterates oldest first.
-  const remember = (key: string, value: Encoded) => {
-    if (cacheSize <= 0 || value.body.byteLength > cacheBytes) return
-    forget(key)
-    cache.set(key, value)
-    cachedBytes += value.body.byteLength
-    while (cache.size > cacheSize || cachedBytes > cacheBytes) forget(cache.keys().next().value!)
-  }
-  const recall = (key: string) => {
-    const value = cache.get(key)
-    if (value) remember(key, value)
-    return value
   }
 
   // Errors are never cached, and a 500 does not reveal internal paths.
@@ -336,7 +333,7 @@ export function createImageApp({
 
     if (matches(c.req.header('if-none-match'), etag)) return c.body(null, 304, headers)
 
-    let encoded = recall(identity)
+    let encoded = await store.get(identity)
     if (!encoded) {
       encoded = await queue.run(
         identity,
@@ -355,7 +352,7 @@ export function createImageApp({
                 throw mapSharpError(error)
               })
           // Kept even when the response that asked for it has already timed out.
-          remember(identity, result)
+          store.put(identity, result, `${tenant} ${sourcePath.canonical}`)
           return result
         },
         deadline,
@@ -439,4 +436,21 @@ function matches(header: string | undefined, etag: string): boolean {
     const trimmed = tag.trim()
     return trimmed === '*' || trimmed.replace(/^W\//, '') === etag
   })
+}
+
+/** The real path of `p`, or of its nearest existing ancestor joined with the rest. */
+function realPath(p: string): string {
+  const resolved = path.resolve(p)
+  try {
+    return fs.realpathSync(resolved)
+  } catch {
+    const parent = path.dirname(resolved)
+    return parent === resolved ? resolved : path.join(realPath(parent), path.basename(resolved))
+  }
+}
+
+/** Whether `child` is `parent` or below it. A name like `..foo` is below. */
+function inside(child: string, parent: string): boolean {
+  const relative = path.relative(parent, child)
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
 }

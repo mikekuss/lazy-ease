@@ -2,7 +2,7 @@ import { readFile, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fixtures as vectors } from '@lazy-ease/testing'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_QUALITIES, DEFAULT_RATIOS, DEFAULT_WIDTHS, OUTPUT_FORMATS, createImageApp, signCropToken } from '../src/index.js'
+import { DEFAULT_QUALITIES, DEFAULT_RATIOS, DEFAULT_WIDTHS, OUTPUT_FORMATS, createImageApp, signCropToken, memoryStorage } from '../src/index.js'
 import { render, type Encoded } from '../src/render.js'
 import { revisionOf } from '../src/policy.js'
 import { createFixtures, type Fixtures } from './fixtures.js'
@@ -39,7 +39,7 @@ describe('the default grant', () => {
   const KEY = Buffer.from(vectors.tokens.data.keys[0]!.keyHex, 'hex')
 
   it('admits 39 outputs for one approved crop and nothing else', async () => {
-    const app = createImageApp({ root: fixtures.root, tenant: 'demo', keys: { k1: KEY }, policy: () => ({ crops: [], revision: 'r7' }), cacheSize: 0 })
+    const app = createImageApp({ root: fixtures.root, tenant: 'demo', keys: { k1: KEY }, policy: () => ({ crops: [], revision: 'r7' }), storage: memoryStorage({ maxBytes: 0 }) })
     const token = signCropToken({ tenant: 'demo', source: '/big.jpg', revision: 'r7', ar: '1', fx: '30', fy: '45' }, 'k1', KEY)
     const admitted: string[] = []
     for (const w of DEFAULT_WIDTHS) {
@@ -68,7 +68,7 @@ describe('the default grant', () => {
   })
 
   it('bounds the tokenless default to uncropped plus the centered ratio ladder', async () => {
-    const app = createImageApp({ root: fixtures.root, cacheSize: 0 })
+    const app = createImageApp({ root: fixtures.root, storage: memoryStorage({ maxBytes: 0 }) })
     let crops = 0
     for (const ar of [undefined, ...DEFAULT_RATIOS]) {
       const query = `${ar === undefined ? '' : `ar=${ar}&`}fmt=webp&q=75&w=64`
@@ -83,7 +83,7 @@ describe('render capacity', () => {
   it('answers 504 at the deadline, keeps the slot until the native job ends and keeps its result', async () => {
     const native = deferred<Encoded>()
     vi.mocked(render).mockClear().mockImplementationOnce(() => native.promise)
-    const app = createImageApp({ root: fixtures.root, concurrency: 1, maxPending: 0, timeout: 50 })
+    const app = createImageApp({ storage: memoryStorage(), root: fixtures.root, concurrency: 1, maxPending: 0, timeout: 50 })
     const url = '/big.jpg?fmt=webp&q=75&w=640'
 
     const started = Date.now()
@@ -114,7 +114,7 @@ describe('render capacity', () => {
   it('counts queue time against the deadline and never starts an abandoned job', async () => {
     const first = deferred<Encoded>()
     vi.mocked(render).mockClear().mockImplementationOnce(() => first.promise)
-    const app = createImageApp({ root: fixtures.root, concurrency: 1, maxPending: 4, timeout: 50 })
+    const app = createImageApp({ storage: memoryStorage(), root: fixtures.root, concurrency: 1, maxPending: 4, timeout: 50 })
     const running = app.request('/big.jpg?fmt=webp&q=75&w=640')
     await tick()
     const queued = await app.request('/big.jpg?fmt=webp&q=75&w=1080')
@@ -128,7 +128,7 @@ describe('render capacity', () => {
   it('answers overload with 503 and Retry-After, and serves cache hits meanwhile', async () => {
     const gate = deferred<Encoded>()
     vi.mocked(render).mockClear()
-    const app = createImageApp({ root: fixtures.root, concurrency: 1, maxPending: 1, timeout: 4000 })
+    const app = createImageApp({ storage: memoryStorage(), root: fixtures.root, concurrency: 1, maxPending: 1, timeout: 4000 })
     expect((await app.request('/small.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
     vi.mocked(render).mockImplementationOnce(() => gate.promise)
     const running = app.request('/big.jpg?fmt=webp&q=75&w=64')
@@ -147,7 +147,7 @@ describe('render capacity', () => {
   it('gives a render the full timeout when it starts, however late its request joined', async () => {
     const first = deferred<Encoded>()
     vi.mocked(render).mockClear().mockImplementationOnce(() => first.promise)
-    const app = createImageApp({ root: fixtures.root, concurrency: 1, maxPending: 1, timeout: 3000, policy: () => ({ revision: 'r1' }) })
+    const app = createImageApp({ storage: memoryStorage(), root: fixtures.root, concurrency: 1, maxPending: 1, timeout: 3000, policy: () => ({ revision: 'r1' }) })
     const running = app.request('/big.jpg?fmt=webp&q=75&v=r1&w=640')
     await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(1))
     const queued = app.request('/big.jpg?fmt=webp&q=75&v=r1&w=1080')
@@ -165,7 +165,7 @@ describe('render capacity', () => {
     vi.mocked(render).mockClear()
     const gate = deferred<Buffer>()
     vi.mocked(readFile).mockClear().mockImplementationOnce((() => gate.promise) as never)
-    const app = createImageApp({ root: fixtures.root, concurrency: 1, maxPending: 0, timeout: 4000 })
+    const app = createImageApp({ storage: memoryStorage(), root: fixtures.root, concurrency: 1, maxPending: 0, timeout: 4000 })
     const first = app.request(`/${names[0]}?fmt=webp&q=75&w=64`)
     await vi.waitFor(() => expect(readFile).toHaveBeenCalledTimes(1))
     // Every other cold source needs a hash too, and there is no room to start one.
@@ -197,7 +197,7 @@ describe('a source rewritten in place with the same size and mtime', () => {
       root: fixtures.root,
       concurrency: 1,
       maxPending: 4,
-      cacheSize: 0,
+      storage: memoryStorage({ maxBytes: 0 }),
       policy: ({ path }) => (path === '/big.jpg' ? { revision: 'r1' } : {}),
     })
     // Memoizes the revision of the first bytes.
@@ -221,7 +221,7 @@ describe('a source rewritten in place with the same size and mtime', () => {
   it('serves the new revision on its first request, and bounds the rehashing of random v values', async () => {
     const file = path.join(fixtures.root, 'in-place.gif')
     await rewrite(file, 'AAAA')
-    const app = createImageApp({ root: fixtures.root, cacheSize: 0 })
+    const app = createImageApp({ root: fixtures.root, storage: memoryStorage({ maxBytes: 0 }) })
     vi.mocked(readFile).mockClear()
     expect((await app.request(`/in-place.gif?v=${revisionOf(gif('AAAA'))}`)).status).toBe(200)
     expect(readsOf('in-place.gif')).toBe(2)
@@ -254,7 +254,7 @@ describe('a source rewritten in place with the same size and mtime', () => {
   it('answers the previous deploy’s v with a 404 that reads nothing', async () => {
     const file = path.join(fixtures.root, 'deployed.gif')
     await rewrite(file, 'AAAA')
-    const app = createImageApp({ root: fixtures.root, cacheSize: 0 })
+    const app = createImageApp({ root: fixtures.root, storage: memoryStorage({ maxBytes: 0 }) })
     const old = revisionOf(gif('AAAA'))
     expect((await app.request(`/deployed.gif?v=${old}`)).status).toBe(200)
     // An atomic deploy: new bytes and a new mtime, hashed fresh once.
@@ -278,10 +278,10 @@ describe('a source rewritten in place with the same size and mtime', () => {
     const file = path.join(fixtures.root, 'no-rehash.gif')
     await rewrite(file, 'AAAA')
     vi.mocked(readFile).mockClear()
-    const cold = createImageApp({ root: fixtures.root, cacheSize: 0 })
+    const cold = createImageApp({ root: fixtures.root, storage: memoryStorage({ maxBytes: 0 }) })
     expect((await cold.request('/no-rehash.gif?v=other')).status).toBe(404)
     expect(readsOf('no-rehash.gif')).toBe(1)
-    const pinned = createImageApp({ root: fixtures.root, cacheSize: 0, policy: () => ({ revision: 'r1' }) })
+    const pinned = createImageApp({ root: fixtures.root, storage: memoryStorage({ maxBytes: 0 }), policy: () => ({ revision: 'r1' }) })
     expect((await pinned.request('/no-rehash.gif?v=other')).status).toBe(404)
     expect(readsOf('no-rehash.gif')).toBe(1)
   })

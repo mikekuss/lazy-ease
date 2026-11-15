@@ -3,7 +3,7 @@ import path from 'node:path'
 import { Hono } from 'hono'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_RATIOS, createImageApp, type Crop, type SourcePolicy } from '../src/index.js'
+import { DEFAULT_RATIOS, createImageApp, type Crop, type SourcePolicy, memoryStorage } from '../src/index.js'
 import { createFixtures, decode, solid, split, type Fixtures } from './fixtures.js'
 
 let fixtures: Fixtures
@@ -26,14 +26,14 @@ const testPolicy = ({ path }: { path: string }): SourcePolicy => ({
 
 beforeAll(async () => {
   fixtures = await createFixtures()
-  app = createImageApp({ root: fixtures.root, policy: testPolicy })
+  app = createImageApp({ storage: memoryStorage(), root: fixtures.root, policy: testPolicy })
 })
 
 afterAll(() => fixtures.cleanup())
 
 /** Mounted the way the docs say, so paths look exactly like the client's URLs. */
 function mounted(options: Partial<Parameters<typeof createImageApp>[0]> = {}) {
-  return createImageApp({ root: fixtures.root, policy: testPolicy, ...options })
+  return createImageApp({ storage: memoryStorage(), root: fixtures.root, policy: testPolicy, ...options })
 }
 
 const get = (url: string, init?: RequestInit) => app.request(url, init)
@@ -399,16 +399,16 @@ describe('limits', () => {
   })
 
   it('504 when a render takes longer than the timeout', async () => {
-    const slow = mounted({ timeout: 1, cacheSize: 0 })
+    const slow = mounted({ timeout: 1, storage: memoryStorage({ maxBytes: 0 }) })
     expect((await slow.request('/big.jpg?ar=0.5&fmt=avif&q=75&w=1920')).status).toBe(504)
   })
 
   it('passes the timeout to sharp in whole seconds', async () => {
     const timeout = vi.spyOn(sharp.prototype, 'timeout')
     try {
-      expect((await mounted({ timeout: 1500, cacheSize: 0 }).request('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
+      expect((await mounted({ timeout: 1500, storage: memoryStorage({ maxBytes: 0 }) }).request('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
       expect(timeout).toHaveBeenCalledWith({ seconds: 2 })
-      expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
+      expect((await mounted({ storage: memoryStorage({ maxBytes: 0 }) }).request('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
       expect(timeout).toHaveBeenLastCalledWith({ seconds: 10 })
     } finally {
       timeout.mockRestore()
@@ -419,7 +419,7 @@ describe('limits', () => {
     // What sharp rejects with once decode or resize runs past `timeout` seconds.
     const toBuffer = vi.spyOn(sharp.prototype, 'toBuffer').mockRejectedValue(new Error('timeout: 42% complete'))
     try {
-      expect((await mounted({ cacheSize: 0 }).request('/big.jpg?fmt=avif&q=75&w=1920')).status).toBe(504)
+      expect((await mounted({ storage: memoryStorage({ maxBytes: 0 }) }).request('/big.jpg?fmt=avif&q=75&w=1920')).status).toBe(504)
     } finally {
       toBuffer.mockRestore()
     }
@@ -428,9 +428,9 @@ describe('limits', () => {
   it('passes avifEffort to the AVIF encoder, default 4', async () => {
     const avif = vi.spyOn(sharp.prototype, 'avif')
     try {
-      await mounted({ cacheSize: 0 }).request('/small.jpg?fmt=avif&q=75&w=64')
+      await mounted({ storage: memoryStorage({ maxBytes: 0 }) }).request('/small.jpg?fmt=avif&q=75&w=64')
       expect(avif).toHaveBeenLastCalledWith({ quality: 75, effort: 4 })
-      await mounted({ cacheSize: 0, avifEffort: 0 }).request('/small.jpg?fmt=avif&q=75&w=64')
+      await mounted({ storage: memoryStorage({ maxBytes: 0 }), avifEffort: 0 }).request('/small.jpg?fmt=avif&q=75&w=64')
       expect(avif).toHaveBeenLastCalledWith({ quality: 75, effort: 0 })
     } finally {
       avif.mockRestore()
@@ -438,7 +438,7 @@ describe('limits', () => {
   })
 
   it('serves concurrent requests for one variant', async () => {
-    const coalescing = mounted({ cacheSize: 0, concurrency: 1 })
+    const coalescing = mounted({ storage: memoryStorage({ maxBytes: 0 }), concurrency: 1 })
     const url = '/my%20photos/caf%C3%A9.jpg?ar=1&fmt=avif&q=75&w=1200'
     const responses = await Promise.all([0, 1, 2, 3, 4].map(() => coalescing.request(url)))
     const bodies = await Promise.all(responses.map(async (r) => Buffer.from(await r.arrayBuffer())))
@@ -447,7 +447,7 @@ describe('limits', () => {
   })
 
   it('renders other keys under a concurrency of 1', async () => {
-    const serial = mounted({ cacheSize: 0, concurrency: 1 })
+    const serial = mounted({ storage: memoryStorage({ maxBytes: 0 }), concurrency: 1 })
     const responses = await Promise.all(
       [64, 128, 256].map((w) => serial.request(`/big.jpg?fmt=webp&q=75&w=${w}`)),
     )
@@ -455,7 +455,7 @@ describe('limits', () => {
   })
 
   it('serves repeat requests from the LRU', async () => {
-    const cached = mounted({ cacheSize: 1 })
+    const cached = mounted({ storage: memoryStorage({ maxEntries: 1 }) })
     const a = await (await cached.request('/big.jpg?fmt=webp&q=75&w=750')).arrayBuffer()
     const b = await (await cached.request('/big.jpg?fmt=webp&q=75&w=750')).arrayBuffer()
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true)
@@ -469,7 +469,7 @@ describe('limits', () => {
     const toBuffer = vi.spyOn(sharp.prototype, 'toBuffer')
     try {
       // Room for one of the two only.
-      const cached = mounted({ cacheBytes: a + b - 1 })
+      const cached = mounted({ storage: memoryStorage({ maxBytes: a + b - 1, maxSourceBytes: a + b - 1 }) })
       await cached.request(A)
       await cached.request(B)
       expect(toBuffer).toHaveBeenCalledTimes(2)
@@ -479,7 +479,7 @@ describe('limits', () => {
       expect(toBuffer).toHaveBeenCalledTimes(3)
 
       // An entry larger than the whole budget is never kept.
-      const tiny = mounted({ cacheBytes: Math.min(a, b) - 1 })
+      const tiny = mounted({ storage: memoryStorage({ maxBytes: Math.min(a, b) - 1, maxSourceBytes: Math.min(a, b) - 1 }) })
       await tiny.request(A)
       await tiny.request(A)
       expect(toBuffer).toHaveBeenCalledTimes(5)

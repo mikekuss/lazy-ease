@@ -8,7 +8,7 @@ import { HTTPException } from 'hono/http-exception'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_QUALITIES, DEFAULT_RATIOS, DEFAULT_WIDTHS, formatNumber, parseImageQuery } from '../src/contract.js'
-import { createImageApp, cropTokenMessage, signCropToken, verifyCropToken, type CropTokenKeys, type SourcePolicy } from '../src/index.js'
+import { createImageApp, cropTokenMessage, signCropToken, verifyCropToken, type CropTokenKeys, type SourcePolicy, memoryStorage } from '../src/index.js'
 import { render } from '../src/render.js'
 
 // The portable fixtures from @lazy-ease/testing, run against the reference
@@ -220,7 +220,7 @@ describe('loader URLs and source paths over HTTP', () => {
       await writeFile(file, await sharp({ create: { width: 800, height: 600, channels: 3, background: '#33aa77' } }).jpeg().toBuffer())
     }
     app = new Hono()
-    app.route('/_img', createImageApp({ root, tenant: 'demo', keys: testKeys('demo'), policy: ({ path }) => records.get(path) ?? {} }))
+    app.route('/_img', createImageApp({ storage: memoryStorage(), root, tenant: 'demo', keys: testKeys('demo'), policy: ({ path }) => records.get(path) ?? {} }))
   })
 
   it.each(urlCases)('$id', async ({ input, expected }) => {
@@ -283,7 +283,7 @@ describe('crop tokens over HTTP', () => {
     const server = new Hono()
     server.route(
       '/_img',
-      createImageApp({ root, tenant: input.grant.tenant, keys: testKeys(input.grant.tenant), policy: () => ({ crops: [], revision: input.grant.revision }) }),
+      createImageApp({ storage: memoryStorage(), root, tenant: input.grant.tenant, keys: testKeys(input.grant.tenant), policy: () => ({ crops: [], revision: input.grant.revision }) }),
     )
     const response = await server.request(urlOf(input, input.token))
     const wellFormed = new RegExp(fixtures.tokens.data.tokenPattern).test(input.token)
@@ -296,7 +296,7 @@ describe('crop tokens over HTTP', () => {
 
   it('serves the URL of sign-focal-crop', async () => {
     const server = new Hono()
-    server.route('/_img', createImageApp({ root, tenant: 'demo', keys: testKeys('demo'), policy: () => ({ crops: [], revision: 'r7' }) }))
+    server.route('/_img', createImageApp({ storage: memoryStorage(), root, tenant: 'demo', keys: testKeys('demo'), policy: () => ({ crops: [], revision: 'r7' }) }))
     const signed = casesOf('tokens', 'sign').find((c) => c.id === 'sign-focal-crop')!
     if ('error' in signed.expected) throw new Error('sign-focal-crop is a valid record')
     const response = await server.request(signed.expected.url!)

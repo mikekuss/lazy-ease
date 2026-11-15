@@ -2,7 +2,7 @@ import { mkdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { serve } from '@hono/node-server'
-import { computeMetadata, createImageApp } from '@lazy-ease/server'
+import { computeMetadata, createImageApp, memoryStorage } from '@lazy-ease/server'
 import { build, type BuildOptions } from 'esbuild'
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
@@ -136,7 +136,8 @@ app.use('/_img/*', async (c, next) => {
   if (match) c.res = await throttled(c.res, Number(match[1]), Number(match[2]))
 })
 // The focus fixture's upload record: its server crops are centered on FOCUS (spec 6.1, backend.md).
-app.route('/_img', createImageApp({ root, policy: ({ path }) => (path === images.focus.src ? { focalPoint: FOCUS } : {}) }))
+// RAM-only, so every run renders from the fixtures it just generated.
+app.route('/_img', createImageApp({ root, storage: memoryStorage(), policy: ({ path }) => (path === images.focus.src ? { focalPoint: FOCUS } : {}) }))
 
 app.get('/health', (c) => c.text('ok'))
 app.get('/assets/lazy-ease.min.js', (c) => c.body(vanillaJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))

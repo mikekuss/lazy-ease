@@ -11,4 +11,6 @@ export {
 export { computeMetadata, createMetaApp, type ImageMetadata, type MetaServerOptions } from './metadata.js'
 export { type Crop, type SourcePolicy, type SourceRef } from './policy.js'
 export { render, type Encoded, type RenderOptions } from './render.js'
+export { type PromoteOptions, type RetentionOptions } from './retention.js'
+export { diskStorage, memoryStorage, type DiskStorageOptions, type MemoryStorageOptions, type VariantStorage } from './storage.js'
 export { cropTokenMessage, signCropToken, verifyCropToken, type CropGrant, type CropTokenKeys } from './token.js'
