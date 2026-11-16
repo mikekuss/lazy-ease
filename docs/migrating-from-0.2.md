@@ -14,7 +14,7 @@ This guide describes the planned release boundary. Core extraction preserves 0.2
 | onLoad as a display signal | Real first-load events retain their React event signature. An already displayed image can be adopted before the listener exists. | Use onStateChange for first display including adoption. Width upgrades keep the loaded state. |
 | ThumbHash string | Decoder is opt-in. | Register the optional decoder in the chosen adapter or provide a server-generated color/data URI. Inspect your bundle after opting in. |
 | SVG or animated GIF sent through the loader | The default path preserves the original. | Serve the original with appropriate dimensions and MIME type. |
-| Server in-memory cache | Default storage is a bounded disk directory. | Configure writable disk space and a quota, or choose RAM-only mode explicitly. |
+| Server in-memory cache | Default storage is a bounded disk directory, `.cache/lazy-ease` under the working directory, owned by one process. `cacheSize` and `cacheBytes` are gone and throw. | Pass `storage: diskStorage({ dir, maxBytes })` with writable space outside the source root, one directory per process, or `storage: memoryStorage({ maxEntries, maxBytes })` for the 0.2 behavior. |
 | Arbitrary v or unbounded crops | Revisions and crop sets participate in admission and cache policy. | Publish revision metadata and allowed crops. Update CDN keys for fx/fy and apply authorization before a hit. |
 
 For example, preserve early native discovery for an article:

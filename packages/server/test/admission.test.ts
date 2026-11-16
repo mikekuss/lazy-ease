@@ -5,7 +5,7 @@ import { fixtures as vectors } from '@lazy-ease/testing'
 import { Hono } from 'hono'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { computeMetadata, createImageApp, signCropToken, type ImageServerOptions, type SourcePolicy } from '../src/index.js'
+import { computeMetadata, createImageApp, signCropToken, type ImageServerOptions, type SourcePolicy, memoryStorage } from '../src/index.js'
 import { createFixtures, decode, solid, split, type Fixtures } from './fixtures.js'
 
 // Admission, revisions, viewer authorization and HTTP policy, on real renders.
@@ -23,7 +23,7 @@ const keys = { k1: KEY }
 /** Mounted at `/_img`, as the docs say. */
 function serve(options: Partial<ImageServerOptions> = {}) {
   const app = new Hono()
-  app.route('/_img', createImageApp({ root: fixtures.root, ...options }))
+  app.route('/_img', createImageApp({ storage: memoryStorage(), root: fixtures.root, ...options }))
   return (url: string, init?: RequestInit) => app.request(`/_img${url}`, init)
 }
 
@@ -103,7 +103,7 @@ describe('source policy', () => {
     const get = serve({ formats: ['webp', 'jpeg'] })
     expect((await get('/big.jpg?fmt=webp&q=75&w=64')).status).toBe(200)
     expect((await get('/big.jpg?fmt=avif&q=75&w=64')).status).toBe(400)
-    expect(() => createImageApp({ root: fixtures.root, formats: [] })).toThrow(RangeError)
+    expect(() => createImageApp({ storage: memoryStorage(), root: fixtures.root, formats: [] })).toThrow(RangeError)
   })
 
   it('rejects encoded slashes, empty segments and broken escapes', async () => {
@@ -159,9 +159,9 @@ describe('crop tokens are optional', () => {
   })
 
   it('rejects malformed keys at startup', () => {
-    expect(() => createImageApp({ root: fixtures.root, keys: { k1: new Uint8Array(8) } })).toThrow(RangeError)
-    expect(() => createImageApp({ root: fixtures.root, keys: { 'k.1': KEY } })).toThrow(RangeError)
-    expect(() => createImageApp({ root: fixtures.root, tenant: 'a b' })).toThrow(RangeError)
+    expect(() => createImageApp({ storage: memoryStorage(), root: fixtures.root, keys: { k1: new Uint8Array(8) } })).toThrow(RangeError)
+    expect(() => createImageApp({ storage: memoryStorage(), root: fixtures.root, keys: { 'k.1': KEY } })).toThrow(RangeError)
+    expect(() => createImageApp({ storage: memoryStorage(), root: fixtures.root, tenant: 'a b' })).toThrow(RangeError)
   })
 })
 
@@ -229,7 +229,7 @@ describe('revisions', () => {
     const gif = (payload: string) => Buffer.concat([Buffer.from('GIF89a'), Buffer.from([1, 0, 1, 0]), Buffer.from(payload)])
     await writeFile(file, gif('AAAA'))
     await utimes(file, 4_000_000, 4_000_000)
-    const get = serve({ cacheSize: 0 })
+    const get = serve({ storage: memoryStorage({ maxBytes: 0 }) })
     const first = await get('/same-size.gif')
     expect(first.status).toBe(200)
 

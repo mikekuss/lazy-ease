@@ -107,6 +107,39 @@ A GIF or SVG requested without a query, or with `v` alone (`/_img/logo.svg?v=r2`
 
 The `timeout` deadline starts at admission, so time in the queue counts. When it passes, the response is a `504`, but the render keeps its slot and its key until sharp's work actually ends: sharp gets the full timeout when the render starts and stops decode and resize work after it (whole seconds, rounded up), while an AVIF encode already running finishes, bounded by `avifEffort`. A request for the same variant meanwhile joins that work instead of starting another, and its result is kept in the cache. A queued render whose callers have all timed out is dropped without starting.
 
+## Storage
+
+Encoded variants are kept in a storage between requests. Serving an original, admitting a transform and keeping its result are separate decisions: the storage only decides what to keep.
+
+```ts
+import { createImageApp, diskStorage, memoryStorage } from '@lazy-ease/server'
+
+const storage = diskStorage({ dir: '/var/cache/lazy-ease', maxBytes: 4 * 1024 ** 3 })
+app.route('/_img', createImageApp({ root: './images', storage }))
+process.on('SIGTERM', () => storage.close().then(() => process.exit(0)))
+```
+
+**`diskStorage(options)`** is the default, in `.cache/lazy-ease` under the working directory. Each variant is one file under `objects/`, written to `tmp/` and published with an atomic rename, so a reader never sees half a file. Writes happen after the response and never fail it; a failed write (a full disk, a permission error) is logged once per error code and the variant is simply rendered again next time. The in-memory index is rebuilt at startup: abandoned temporary files are removed, objects are read oldest first by their header, and truncated, misnamed or over-limit files are deleted. The storage only ever deletes files named like its own objects and temporary files, and refuses a directory that overlaps `root`. Requests are served during the scan; a variant the index does not know yet is read from its file. Recency survives restarts in the file's mtime, updated at most once an hour per variant; popularity counts start over.
+
+**Ownership.** One process owns a directory at a time. `diskStorage()` takes a `LOCK` file with its process id, host name, start time and boot identity (the kernel's boot id, where `/proc/sys/kernel/random/boot_id` exists), and the owner refreshes the file's mtime every 10 seconds. A lock is stale, and taken over, when it has not been refreshed for 60 seconds, whatever process or host it names, or at once when it names this host and an earlier boot, a process that no longer runs, or this pid with another start time (a restarted container where Node is PID 1). So after a crash, a power cut or a `SIGKILL`, a directory used from another host or container can be taken over 60 seconds after its owner died. On a host without a real-time clock, such as a Raspberry Pi whose clock starts behind after a power cut, the boot check is what lets the restarted server take its own old lock; a clock that jumps within one boot is not covered. Where there is no boot id (macOS, Windows), a reboot is covered by the pid and start-time checks and by the 60-second limit. An empty or unreadable `LOCK`, as a full disk can leave behind, is taken over once it is 5 seconds old. A fresh lock of a live owner makes `diskStorage()` throw. If you know no process uses the directory, you may delete `LOCK` by hand; a live owner writes it again at its next heartbeat. After a redeploy with a new hostname (a new container or pod on the same volume), the old `LOCK` blocks startup until its heartbeat is 60 seconds old, so use a restart policy, or close the storage on `SIGTERM` as above so the lock is released. An owner that stalls for a minute (a suspended VM, a debugger) can lose its lock; it logs this once and then leaves the directory alone, as if closed: every lookup misses and nothing is stored. A write that is already renaming its file into place when the loss is detected may still land. The limit assumes clocks that agree within a few seconds when the directory is shared between hosts.
+
+In one process, `diskStorage()` for the same directory and limits returns the same shared storage. Each call takes a reference and each `close()` drops one; the directory is released when the last is closed. Opening the directory again in the same process while its `close()` is still pending throws; await the `close()` first. The storage `createImageApp` opens when given none holds no reference, so close it on shutdown with `diskStorage().close()`. Give each process of a cluster, and each container, its own directory: a disk cache is not coordinated across processes or hosts. Shared caching belongs in the CDN or an object store (see the [backend guide](../../docs/backend.md#cdn-and-regional-renderer)).
+
+**`memoryStorage(options)`** keeps variants in the process only, empty after every restart and never touching the disk. `close()` empties it. `memoryStorage({ maxBytes: 0 })` turns storing off.
+
+| Option | Disk default | Memory default | |
+| --- | --- | --- | --- |
+| `dir` | `.cache/lazy-ease` | | Disk only. Outside `root`, owned by this process. |
+| `maxBytes` | 1 GB | 64 MB | Hard cap. Disk counts whole files, headers included. A larger variant is not stored. |
+| `maxEntries` | 100 000 | 1000 | Variants at most, which bounds the index. |
+| `maxSourceBytes` | `maxBytes / 8` | `maxBytes / 8` | What all variants of one source may take, promoted ones included. A larger variant is not stored. |
+| `maxAge` | 30 days | 30 days | A variant unused this long expires. |
+| `promote` | off | off | `{ hits: 3, window: 1 h, perSource: 8 }`, or `true` for these. |
+
+The least recently used variant goes first, at the byte cap, the entry cap and each source's quota. Stale revisions are never served, since the revision is part of the key, and as the least recently used variants of their source they go first. With `promote`, a variant used `hits` times within one `window` is kept after the others of its source, up to `perSource` per source; one that misses two windows steps down again and re-enters the others as their most recently used, whatever its last use. Promoted variants are still held to every limit: they may take at most 80% of `maxBytes` and of `maxSourceBytes`, and past that share they are evicted first, oldest first. Counting is bounded by `maxEntries`, since only stored variants are counted. The server sees only what the CDN misses, so on a CDN-fronted deployment promotion ranks misses; see the [backend guide](../../docs/backend.md#cdn-and-regional-renderer) for hit signals.
+
+**Sizing.** On a small host such as a Raspberry Pi, start with one render (`concurrency: 1`), a short width ladder, one quality and `formats: ['webp', 'jpeg']`, put `dir` on the fastest disk you have, and set `maxBytes` well under its free space.
+
 ## Options
 
 | Option | Default | |
@@ -123,11 +156,10 @@ The `timeout` deadline starts at admission, so time in the queue counts. When it
 | `timeout` | 10 s | Response deadline from admission, in ms; see [Render capacity](#render-capacity). |
 | `concurrency` | half the CPUs, at least 1 | Renders running at once; libvips adds its own threads per render. |
 | `maxPending` | 4 × `concurrency` | Renders waiting for a slot; hashing has its own queue of this size. |
-| `cacheSize` | 200 | Encoded images kept in the in-memory LRU. `0` turns it off. |
-| `cacheBytes` | 64 MB | Total size of the LRU; the oldest entries go first. `0` turns it off. |
+| `storage` | `diskStorage()` | Where encoded variants are kept; see [Storage](#storage). |
 | `avifEffort` | 4 | AVIF encoder effort, `0` (fastest) to `9` (smallest files). |
 
-**Memory.** Each running render holds the source file (up to `maxFileSize`) and its decoded pixels (up to `maxInputPixels` × 4 bytes, 200 MB at the defaults). With the default revision, a cold source is read twice: once in the hashing queue and once by its render, and the hashing queue runs up to `concurrency` reads of its own. Peak memory is about `concurrency × (2 × maxFileSize + 4 × maxInputPixels)`, plus `cacheBytes` for the cache. Lower `concurrency` or `maxInputPixels` on small machines.
+**Memory.** Each running render holds the source file (up to `maxFileSize`) and its decoded pixels (up to `maxInputPixels` × 4 bytes, 200 MB at the defaults). With the default revision, a cold source is read twice: once in the hashing queue and once by its render, and the hashing queue runs up to `concurrency` reads of its own. Peak memory is about `concurrency × (2 × maxFileSize + 4 × maxInputPixels)`, plus `maxBytes` of a `memoryStorage()` and the in-memory index of a `diskStorage()`, which grows with `maxEntries`. Lower `concurrency` or `maxInputPixels` on small machines.
 
 ## Rollout
 
