@@ -500,7 +500,7 @@ pnpm check:next       # Next.js App Router build against the packed @lazy-ease/r
 
 `check:packages` leaves the tarballs in `.cache/packs`, and `check:next` installs from there, so run it second. The Next.js check needs network access for npm.
 
-The demo generates its sample images on first start. Drop your own photos into `apps/demo/images` to try them instead. The full design is in [docs/design-spec.md](docs/design-spec.md).
+The demo generates its sample images on first start. Drop your own photos into `apps/demo/images` to try them instead. It has three routes: `/fade/` (the hero behind a placeholder, with throttling and a late script start), `/lcp/` (the same hero as native markup in the first HTML, no script) and `/recipes/` (every case of [docs/image-recipes.md](docs/image-recipes.md), with sign-in, a denied crop and the server's storage on the live server). `pnpm --filter demo build:static` builds the GitHub Pages version into `apps/demo/dist`; `pnpm --filter demo build:live` and `pnpm --filter demo start` build and serve the live version on :3001. The full design is in [docs/design-spec.md](docs/design-spec.md).
 
 Releases are published from GitHub Actions when a version tag is pushed; the steps are in [RELEASING.md](RELEASING.md).
 

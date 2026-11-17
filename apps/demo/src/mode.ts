@@ -10,10 +10,14 @@ export const STATIC = import.meta.env.MODE === 'static'
 /** `/` live, `/lazy-ease/` on Pages. Ends in a slash. */
 export const BASE = import.meta.env.BASE_URL
 
-/** Registers the throttling service worker (static/sw.js). Static mode only. */
-export function registerThrottleWorker(): void {
+/**
+ * Registers the throttling service worker (static/sw.js) for one route's
+ * scope. Static mode only. Never for the site root, so the LCP route stays
+ * outside every worker.
+ */
+export function registerThrottleWorker(scope: string): void {
   if (!STATIC || !('serviceWorker' in navigator)) return
-  navigator.serviceWorker.register(`${BASE}sw.js`, { scope: BASE }).catch((error: unknown) => {
+  navigator.serviceWorker.register(`${BASE}sw.js`, { scope }).catch((error: unknown) => {
     console.warn('Throttle service worker not registered; images load at real speed.', error)
   })
 }

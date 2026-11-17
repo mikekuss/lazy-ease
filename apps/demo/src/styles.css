@@ -182,13 +182,6 @@ section > p {
   text-align: center;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 16px;
-  align-items: start;
-}
-
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -217,18 +210,6 @@ section > p {
   overflow: hidden;
 }
 
-.fill-row > .demo-image:first-child {
-  flex: 1 1 360px;
-}
-
-.hero {
-  margin: 0;
-}
-
-.hero .demo-image {
-  border-radius: 0;
-  border-width: 0 0 1px;
-}
 
 .demo-image figcaption {
   /* The nowrap rows must not size the card: "200×200 LOADING box 200px" is
@@ -355,4 +336,127 @@ section > p {
   color: #e3b341;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+}
+
+.brand a {
+  font-size: 0.9rem;
+  color: var(--accent);
+}
+
+.inline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.readout,
+.hint {
+  font: 0.8rem/1.4 ui-monospace, monospace;
+  color: var(--muted);
+}
+
+.hint {
+  margin: 0 0 8px;
+  font-family: inherit;
+}
+
+.hint.error,
+.log .error {
+  color: var(--error);
+}
+
+.log .ok {
+  color: var(--ok);
+}
+
+/* The frame is the hero route's viewport; wider than the page, it scrolls. */
+.hero-frame {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.hero-frame iframe {
+  display: block;
+  height: 520px;
+  border: 0;
+  background: #f9fafb;
+}
+
+/* Matches the sizes of the breakpoint card: 100vw below 800px, 50vw above. */
+.split {
+  width: 100%;
+}
+
+@media (min-width: 800px) {
+  .split {
+    width: 50vw;
+    max-width: 100%;
+  }
+}
+
+.cells {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.article {
+  display: grid;
+  gap: 16px;
+  max-width: 720px;
+}
+
+.article > .demo-image:last-child {
+  width: 320px;
+  max-width: 100%;
+}
+
+[data-banner] {
+  aspect-ratio: 2;
+  width: 100%;
+  background: #64756c center / cover no-repeat;
+}
+
+[data-banner][data-le-visible] {
+  background-image: var(--banner);
+}
+
+.banner-figure {
+  max-width: 720px;
+}
+
+.shadow-case {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 600px) {
+  .shadow-case {
+    grid-template-columns: 1fr;
+  }
+}
+
+.backend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+}
+
+.backend h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.log {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font: 0.8rem/1.6 ui-monospace, monospace;
+  min-height: 3.2em;
 }

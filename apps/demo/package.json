@@ -3,14 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n server,web -c blue,green \"tsx watch --conditions=source server.ts\" \"vite\"",
-    "build:static": "vite build --mode static && tsx --conditions=source scripts/build-static.ts",
+    "dev": "concurrently -k -n server,web -c blue,green \"tsx watch --conditions=source server.ts\" \"tsx --conditions=source node_modules/vite/bin/vite.js --configLoader native\"",
+    "build:static": "tsx --conditions=source node_modules/vite/bin/vite.js build --mode static --configLoader native && tsx --conditions=source scripts/build-static.ts",
+    "build:live": "tsx --conditions=source node_modules/vite/bin/vite.js build --mode live --configLoader native",
+    "start": "tsx --conditions=source server.ts --serve dist-live",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.6",
     "@lazy-ease/core": "workspace:*",
     "@lazy-ease/server": "workspace:*",
+    "@lazy-ease/vanilla": "workspace:*",
     "hono": "^4.13.16",
     "@lazy-ease/react": "workspace:*",
     "react": "^19.3.1",

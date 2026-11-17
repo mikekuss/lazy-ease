@@ -1,4 +1,4 @@
-import { mkdir, readdir } from 'node:fs/promises'
+import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 
@@ -99,19 +99,74 @@ function detail({ width, height }: Scene, seed: number): Promise<Buffer> {
     .toBuffer()
 }
 
-/** Renders the demo images into `dir` unless it already contains images. */
-export async function ensureDemoImages(dir: string): Promise<void> {
-  await mkdir(dir, { recursive: true })
-  const existing = (await readdir(dir)).filter((file) => /\.(jpe?g|png|webp|avif)$/i.test(file))
-  if (existing.length > 0) return
+/** Sources the recipe cases use, kept out of the gallery's list in subdirectories. */
+const EXTRA_SCENES: (Scene & { file: string })[] = [
+  // A 40 px original: every width request encodes 40 px, so it gets one URL.
+  { file: 'extra/tiny.jpg', name: 'tiny', width: 40, height: 40, hue: 300 },
+  // Served only to signed-in viewers in the live demo.
+  { file: 'private/fern.jpg', name: 'fern', width: 1600, height: 1200, hue: 120 },
+]
 
-  console.log(`Generating ${SCENES.length} demo images in ${dir} …`)
-  for (const [index, scene] of SCENES.entries()) {
-    const base = await sharp(Buffer.from(svg(scene, index + 1))).png().toBuffer()
-    await sharp(base)
-      .composite([{ input: await detail(scene, index + 1), blend: 'overlay' }])
-      .jpeg({ quality: 90, mozjpeg: true })
-      .toFile(path.join(dir, `${scene.name}.jpg`))
-    console.log(`  ${scene.name}.jpg`)
+const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40">
+  <rect width="120" height="40" rx="8" fill="#1f2937"/>
+  <circle cx="20" cy="20" r="9" fill="#38bdf8"/>
+  <text x="36" y="26" font-family="sans-serif" font-size="16" font-weight="700" fill="#f9fafb">Club</text>
+</svg>
+`
+
+async function scene(scene: Scene, seed: number, file: string): Promise<void> {
+  const base = await sharp(Buffer.from(svg(scene, seed))).png().toBuffer()
+  await sharp(base)
+    .composite([{ input: await detail(scene, seed), blend: 'overlay' }])
+    .jpeg({ quality: 90, mozjpeg: true })
+    .toFile(file)
+}
+
+/** A 64 px waving hand in six frames. */
+async function wave(file: string): Promise<void> {
+  const angles = [-20, -5, 10, 20, 10, -5]
+  const frames = await Promise.all(
+    angles.map((angle) =>
+      sharp(
+        Buffer.from(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#fde68a"/>` +
+            `<g transform="rotate(${angle} 32 52)"><circle cx="32" cy="24" r="14" fill="#f59e0b"/>` +
+            `<rect x="26" y="30" width="12" height="22" rx="5" fill="#f59e0b"/></g></svg>`,
+        ),
+      )
+        .png()
+        .toBuffer(),
+    ),
+  )
+  await sharp(frames, { join: { animated: true } }).gif({ loop: 0, delay: 120 }).toFile(file)
+}
+
+const exists = (file: string) => access(file).then(
+  () => true,
+  () => false,
+)
+
+/** Renders every demo image that is missing from `dir`. */
+export async function ensureDemoImages(dir: string): Promise<void> {
+  const jobs: [string, (file: string) => Promise<void>][] = [
+    ...SCENES.map((s, i): [string, (file: string) => Promise<void>] => [`${s.name}.jpg`, (file) => scene(s, i + 1, file)]),
+    ...EXTRA_SCENES.map((s, i): [string, (file: string) => Promise<void>] => [s.file, (file) => scene(s, SCENES.length + i + 1, file)]),
+    ['extra/logo.svg', (file) => writeFile(file, LOGO)],
+    ['extra/wave.gif', wave],
+  ]
+  for (const [name, make] of jobs) {
+    const file = path.join(dir, name)
+    if (await exists(file)) continue
+    await mkdir(path.dirname(file), { recursive: true })
+    console.log(`Generating ${name} in ${dir} …`)
+    // The demo server and the Vite prerender plugin may both generate at
+    // once: each writes its own file (same extension, sharp picks the
+    // format by it) and renames it into place, so neither reads a partial one.
+    const temp = path.join(path.dirname(file), `.tmp-${process.pid}-${path.basename(file)}`)
+    await make(temp)
+    await rename(temp, file).catch(async (error: unknown) => {
+      await rm(temp, { force: true })
+      if (!(await exists(file))) throw error
+    })
   }
 }
