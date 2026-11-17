@@ -83,6 +83,18 @@ describe('prepared mode', () => {
     expect(img.style.transition).toBe('')
   })
 
+  it('flushes style before the fade, so opacity 0 is its start value', async () => {
+    const { img, box, attach } = setup()
+    const seen: string[] = []
+    Object.defineProperty(img, 'offsetWidth', { get: () => (seen.push(`${img.style.opacity}|${img.style.transition}`), 0) })
+    attach({ url: '/a-640.webp' })
+    intersect(box)
+    // Load and decode in the same frame as the install: no frame resolved opacity 0 yet.
+    await loadAndDecode(img)
+    expect(seen).toEqual(['0|'])
+    expect(img.style.opacity).toBe('1')
+  })
+
   it('needs no loader and reads no layout for a prepared slot', () => {
     const loader = vi.fn((request: ImageRequest) => `/x?w=${request.width}`)
     const { img, box, attach } = setup({ loader })

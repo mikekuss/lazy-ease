@@ -9,12 +9,13 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
-  // Explicit DPR 1 and a fixed viewport in both engines; tests that need
+  // Explicit DPR 1 and a fixed viewport in every engine; tests that need
   // another DPR set it themselves.
   use: { baseURL, viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, trace: 'retain-on-failure' },
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
     { name: 'webkit', use: { browserName: 'webkit' } },
+    { name: 'firefox', use: { browserName: 'firefox' } },
   ],
   webServer: {
     command: 'pnpm serve',

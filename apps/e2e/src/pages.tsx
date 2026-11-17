@@ -2,7 +2,7 @@ import { Image, LazyEaseProvider } from '@lazy-ease/react'
 import { useEffect, type ReactNode } from 'react'
 import * as thumbhash from 'thumbhash'
 // From source: the app depends on @lazy-ease/react only.
-import { thumbhashDecoder } from '../../../packages/core/src/thumbhash.js'
+import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { FOCUS } from './focus.js'
 
 export interface FixtureImage {

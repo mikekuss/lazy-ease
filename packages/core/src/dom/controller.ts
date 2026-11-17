@@ -274,6 +274,8 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           report('loaded')
           if (img.style.opacity !== '0' || fadeMs <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches) release()
           else {
+            // Forces a style and layout flush so opacity 0 is resolved: set in the same frame, it is no start value and no transition runs.
+            void img.offsetWidth
             Object.assign(img.style, { transition: `opacity ${fadeMs}ms ease-out`, opacity: '1' })
             later(release, fadeMs)
           }
