@@ -9,10 +9,19 @@ const TICKS_PER_SECOND = 20
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Registered per route (fade/, recipes/), never for the site root, so the
+// LCP route is outside every worker. Earlier deployments registered it for
+// the root; such a registration removes itself on its next update check.
+const ROOT = new URL('./', self.location).href
+const retired = self.registration.scope === ROOT
+
 self.addEventListener('install', () => self.skipWaiting())
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
+self.addEventListener('activate', (event) =>
+  event.waitUntil(retired ? self.registration.unregister() : self.clients.claim()),
+)
 
 self.addEventListener('fetch', (event) => {
+  if (retired) return
   const url = new URL(event.request.url)
   if (url.origin !== location.origin || !url.pathname.includes('/_img/')) return
   const kbps = Number(url.searchParams.get('kbps'))

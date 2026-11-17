@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fade hero · lazy-ease</title>
+    <link rel="stylesheet" href="/src/fade/fade.css" />
+  </head>
+  <body>
+    <nav><strong>lazy-ease</strong><a href="../lcp/">LCP</a><a href="../recipes/">Recipes</a></nav>
+    <section data-le-auto class="hero-area">
+      <!--le:hero-fade-->
+    </section>
+    <form class="bar" id="settings">
+      <label>Network
+        <select name="net">
+          <option value="off">Real speed</option>
+          <option value="fast-4g">Fast 4G</option>
+          <option value="slow-4g">Slow 4G</option>
+          <option value="3g">3G</option>
+        </select>
+      </label>
+      <label>Start script
+        <select name="late">
+          <option value="0">At once</option>
+          <option value="1000">After 1 s</option>
+          <option value="3000">After 3 s</option>
+        </select>
+      </label>
+      <button type="submit">Reload</button>
+      <output id="status" aria-live="polite">Script waiting</output>
+    </form>
+    <p class="note" id="throttle-note" hidden>Throttle starts on the next reload.</p>
+    <main>
+      <h2>Native and JS</h2>
+      <p class="note">Same template, three modes. The native image shows before the script starts and stays.</p>
+      <section data-le-auto class="pair">
+        <!--le:pair-->
+      </section>
+    </main>
+    <script type="module" src="/src/fade/main.ts"></script>
+  </body>
+</html>

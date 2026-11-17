@@ -1,0 +1,19 @@
+body { margin:0; font:16px/1.5 system-ui, sans-serif; color:#111827; background:#f9fafb }
+nav { display:flex; gap:16px; padding:12px 20px; font-size:14px }
+nav a { color:#2563eb; text-decoration:none }
+nav strong { margin-right:auto }
+.hero-area { position:relative }
+.hero-area .readout { position:absolute; left:8px; bottom:8px; padding:2px 6px; border-radius:4px; background:rgb(0 0 0 / 0.55); color:#fff }
+.bar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid #e5e7eb; font-size:14px }
+.bar label { display:flex; gap:6px; align-items:center }
+.bar output { color:#4b5563 }
+main { max-width:960px; margin:0 auto; padding:16px 20px 64px }
+h2 { margin:16px 0 4px; font-size:20px }
+.note { margin:0 0 12px; color:#4b5563; font-size:14px }
+#throttle-note { padding:0 20px }
+.pair { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; align-items:start }
+.pair-item { margin:0 }
+.pair-item figcaption { font-size:13px; font-weight:600; margin-top:6px }
+.readout { display:block; font:12px/1.4 ui-monospace, monospace; color:#4b5563; min-height:1.4em }
+#native-check[data-result="pass"] { color:#047857 }
+#native-check[data-result="fail"] { color:#b91c1c }

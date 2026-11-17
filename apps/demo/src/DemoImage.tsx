@@ -2,10 +2,14 @@ import { createLoader, fullLadder, Image, useLazyEaseConfig, type ImageFormat, t
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { BASE, STATIC } from './mode'
 import { createStaticLoader } from './staticLoader'
+import { decodedSize, variantOf } from './readout'
 import { removeRecord, updateRecord, whenIdle } from './stats'
 
 interface Delivered {
+  /** The `w` the URL asked for. */
   width?: number
+  /** Decoded pixels. */
+  pixels?: string
   format?: string
   bytes?: number
   ms?: number
@@ -26,6 +30,8 @@ interface View {
 
 interface DemoImageProps extends ImageProps {
   label?: string
+  /** Compare with what a plain `sizes="100vw"` srcset would download (a HEAD request). */
+  compare?: boolean
   /** Wraps the image in a positioned frame with this style, for `fill`. */
   frame?: CSSProperties
 }
@@ -66,42 +72,12 @@ function resourceEntry(url: string): PerformanceResourceTiming | undefined {
   return performance.getEntriesByName(url, 'resource').at(-1) as PerformanceResourceTiming | undefined
 }
 
-interface Variant {
-  width?: number
-  aspectRatio?: number
-  quality?: number
-  format?: string
-}
-
-/**
- * Reads a variant back from its URL: the default loader's query string, or
- * the static loader's `…/w640-ar1.5-q75.webp` file name.
- */
-function variantOf(src: string): Variant {
-  const url = new URL(src, location.href)
-  const file = /\/w(\d+)(?:-ar([\d.]+))?-q([\d.]+)\.(\w+)$/.exec(url.pathname)
-  if (file) {
-    const [, w, ar, q, format] = file
-    return { width: Number(w), aspectRatio: ar ? Number(ar) : undefined, quality: Number(q), format }
-  }
-  const number = (name: string) => {
-    const value = url.searchParams.get(name)
-    return value ? Number(value) : undefined
-  }
-  return {
-    width: number('w'),
-    aspectRatio: number('ar'),
-    quality: number('q'),
-    format: url.searchParams.get('fmt') ?? undefined,
-  }
-}
-
 function describe(img: HTMLImageElement): Delivered {
   const url = new URL(img.currentSrc)
   const entry = resourceEntry(img.currentSrc)
   const variant = variantOf(img.currentSrc)
   return {
-    width: variant.width ?? (img.naturalWidth || undefined),
+    width: variant.width,
     format: variant.format ?? /\.(\w+)$/.exec(url.pathname)?.[1],
     bytes: entry?.encodedBodySize || undefined,
     ms: entry ? entry.responseEnd - entry.startTime : undefined,
@@ -120,7 +96,7 @@ const kb = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
  * `<Image>` with a caption showing its state, the measured box, what was
  * delivered and what a plain `sizes="100vw"` srcset would have downloaded.
  */
-export function DemoImage({ label, frame, ...props }: DemoImageProps) {
+export function DemoImage({ label, frame, compare = false, ...props }: DemoImageProps) {
   const id = useId()
   const { loader } = useLazyEaseConfig()
   const figureRef = useRef<HTMLElement>(null)
@@ -141,11 +117,17 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
       const state = box.dataset.state ?? 'idle'
       const delivered = state === 'loaded' && img.currentSrc ? describe(img) : undefined
       setView((view) => ({ ...view, state, delivered }))
+      if (delivered) {
+        const url = img.currentSrc
+        void decodedSize(url).then((pixels) => {
+          if (alive && pixels && img.currentSrc === url) setView((view) => (view.delivered ? { ...view, delivered: { ...view.delivered, pixels } } : view))
+        })
+      }
       updateRecord(id, { state, bytes: delivered?.bytes })
 
       const current = variantOf(img.currentSrc || 'about:blank')
       const fmt = current.format
-      if (!delivered || !current.width || !fmt || naiveFor === img.currentSrc) return
+      if (!compare || !delivered || !current.width || !fmt || naiveFor === img.currentSrc) return
       naiveFor = img.currentSrc
       // What the browser would pick from the full ladder for 100vw at this DPR.
       const ladder = fullLadder({ ladder: loader.widths, srcWidth })
@@ -184,7 +166,7 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
       img.removeEventListener('load', read)
       removeRecord(id)
     }
-  }, [id, loader, src, srcWidth])
+  }, [id, loader, src, srcWidth, compare])
 
   const { state, boxWidth, delivered, naive } = view
   const image = <Image {...props} />
@@ -218,7 +200,7 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
         <div className="caption-row delivered">
           {delivered &&
             [
-              delivered.width && `${delivered.width}w`,
+              delivered.width ? `w${delivered.width} → ${delivered.pixels ?? '…'}` : delivered.pixels,
               delivered.format,
               delivered.bytes !== undefined && kb(delivered.bytes),
               delivered.ms !== undefined && `${delivered.ms.toFixed(0)} ms`,
@@ -227,7 +209,7 @@ export function DemoImage({ label, frame, ...props }: DemoImageProps) {
               .filter(Boolean)
               .join(' · ')}
         </div>
-        <div className="caption-row naive" title='What a sizes="100vw" srcset would have downloaded'>
+        <div className="caption-row naive" title='What a sizes="100vw" srcset would have downloaded' hidden={!compare}>
           {naive && `100vw: ${naive.width}w${naive.bytes !== undefined ? ` · ${kb(naive.bytes)}` : ''}`}
         </div>
       </figcaption>

@@ -41,6 +41,9 @@ importers:
       '@lazy-ease/server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@lazy-ease/vanilla':
+        specifier: workspace:*
+        version: link:../../packages/vanilla
       hono:
         specifier: ^4.13.16
         version: 4.13.16
