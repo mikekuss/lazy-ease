@@ -6,11 +6,14 @@
     "e2e": "playwright test",
     "serve": "tsx --conditions=source server.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:frames": "playwright test -c playwright.frames.config.ts"
+    "test:frames": "playwright test -c playwright.frames.config.ts",
+    "perf": "tsx perf/run.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.6",
+    "@lazy-ease/core": "workspace:*",
     "@lazy-ease/server": "workspace:*",
+    "@lazy-ease/vanilla": "workspace:*",
     "hono": "^4.13.16",
     "@lazy-ease/react": "workspace:*",
     "react": "^19.3.1",

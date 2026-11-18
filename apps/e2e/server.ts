@@ -1,4 +1,4 @@
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { serve } from '@hono/node-server'
@@ -7,7 +7,7 @@ import { build, type BuildOptions } from 'esbuild'
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 import sharp from 'sharp'
-import { cssText } from '../../packages/vanilla/src/css.js'
+import { cssText } from '@lazy-ease/vanilla/css'
 import { buildScript } from '../../packages/vanilla/scripts/bundle.mjs'
 import { FOCUS } from './src/focus.js'
 import type { FixtureImage, PageData } from './src/pages.js'
@@ -51,7 +51,24 @@ async function focusImage(file: string): Promise<FixtureImage> {
   return { src: `/${file}`, ...(await computeMetadata(full)) }
 }
 
+/** Pass-through originals: an SVG and a two-frame GIF the loader must not resize. */
+async function originals(): Promise<void> {
+  await mkdir(path.join(root, 'extra'), { recursive: true })
+  const svg = path.join(root, 'extra', 'mark.svg')
+  if (!(await stat(svg).catch(() => undefined))) {
+    await writeFile(svg, '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80"><rect width="120" height="80" fill="#0a7"/></svg>')
+  }
+  const gif = path.join(root, 'extra', 'blink.gif')
+  if (!(await stat(gif).catch(() => undefined))) {
+    const frame = (background: string) => sharp({ create: { width: 90, height: 60, channels: 3, background } }).png().toBuffer()
+    await sharp([await frame('#ff0000'), await frame('#0000ff')], { join: { animated: true } })
+      .gif({ delay: [200, 200], loop: 0 })
+      .toFile(gif)
+  }
+}
+
 await mkdir(root, { recursive: true })
+await originals()
 const images: PageData['images'] = {
   photo: await fixtureImage('photo.jpg', 2400, 1600),
   small: await fixtureImage('small.jpg', 500, 400),
@@ -97,8 +114,17 @@ const vanillaJs = (await buildScript({ conditions: ['source'], write: false })).
 const vanillaHtml = await readFile(path.join(here, 'static', 'vanilla.html'), 'utf8')
 
 // Core as an ES module, for specs that drive the controller directly.
-const coreJs = (
-  await build({ ...shared, entryPoints: [path.join(here, '..', '..', 'packages', 'core', 'src', 'index.ts')], write: false, format: 'esm' })
+const coreJs = (await build({ ...shared, stdin: { contents: "export * from '@lazy-ease/core'", resolveDir: here }, write: false, format: 'esm' }))
+  .outputFiles[0]!.text
+// Vanilla with its own copy of core, as a separately bundled ES module: a
+// second bundle next to the IIFE, sharing nothing with it but the page.
+const vanillaEsm = (
+  await build({
+    ...shared,
+    stdin: { contents: "export * from '@lazy-ease/core'; export { enhance, readOptions } from '@lazy-ease/vanilla'", resolveDir: here },
+    write: false,
+    format: 'esm',
+  })
 ).outputFiles[0]!.text
 const coreHtml = '<!doctype html><meta charset="utf-8"><title>core</title><script type="module">import * as core from "/assets/core.js"; window.core = core</script>'
 
@@ -130,6 +156,35 @@ async function throttled(response: Response, latency: number, duration: number):
 
 const app = new Hono()
 
+// Server-side request log per browser context: a context sends `x-e2e-run`
+// with every request (Playwright extraHTTPHeaders), and /_e2e/log/{run} lists
+// what reached the server, 304s included. The ground truth for request counts,
+// independent of what the browser reports.
+const logs = new Map<string, { url: string; status: number }[]>()
+app.use('*', async (c, next) => {
+  await next()
+  const run = c.req.header('x-e2e-run')
+  if (!run || c.req.path.startsWith('/_e2e/')) return
+  const url = new URL(c.req.url)
+  let log = logs.get(run)
+  if (!log) logs.set(run, (log = []))
+  log.push({ url: url.pathname + url.search, status: c.res.status })
+})
+app.get('/_e2e/images', (c) => c.json(images))
+app.get('/_e2e/log/:run', (c) => c.json(logs.get(c.req.param('run')) ?? []))
+
+// Lab pages: a spec stores an HTML document and opens /lab/{id}. Served
+// without page.route, which would turn off the browser's HTTP cache.
+const labPages = new Map<string, string>()
+app.put('/_e2e/lab/:id', async (c) => {
+  labPages.set(c.req.param('id'), await c.req.text())
+  return c.body(null, 204)
+})
+app.get('/lab/:id', (c) => {
+  const html = labPages.get(c.req.param('id'))
+  return html === undefined ? c.notFound() : c.html(html, 200, { 'Cache-Control': 'no-store' })
+})
+
 app.use('/_img/*', async (c, next) => {
   const match = /^(\d+):(\d+)$/.exec(getCookie(c, 'e2e-throttle') ?? '')
   await next()
@@ -137,10 +192,19 @@ app.use('/_img/*', async (c, next) => {
 })
 // The focus fixture's upload record: its server crops are centered on FOCUS (spec 6.1, backend.md).
 // RAM-only, so every run renders from the fixtures it just generated.
-app.route('/_img', createImageApp({ root, storage: memoryStorage(), policy: ({ path }) => (path === images.focus.src ? { focalPoint: FOCUS } : {}) }))
+// q=60 besides the default 75: the second bundle in the two-bundle test writes it, so a double attach shows.
+app.route('/_img', createImageApp({ root, storage: memoryStorage(), qualities: [60, 75], policy: ({ path }) => (path === images.focus.src ? { focalPoint: FOCUS } : {}) }))
 
 app.get('/health', (c) => c.text('ok'))
-app.get('/assets/lazy-ease.min.js', (c) => c.body(vanillaJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
+// `?delay={ms}` holds the script back, `?status={code}` fails it: a script that arrives late or not at all.
+app.get('/assets/lazy-ease.min.js', async (c) => {
+  const delay = Number(c.req.query('delay'))
+  if (delay > 0) await sleep(Math.min(delay, 10_000))
+  const status = Number(c.req.query('status'))
+  if (status >= 400) return c.text('Script failed', status as 500, { 'Cache-Control': 'no-store' })
+  return c.body(vanillaJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' })
+})
+app.get('/assets/vanilla.js', (c) => c.body(vanillaEsm, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
 app.get('/assets/lazy-ease.css', (c) => c.body(cssText, 200, { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' }))
 app.get('/vanilla', (c) => c.html(vanillaHtml))
 app.get('/assets/core.js', (c) => c.body(coreJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))

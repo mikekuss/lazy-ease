@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-type Core = typeof import('../../../packages/core/src/index.js')
+type Core = typeof import('@lazy-ease/core')
 
 // The core controller driven directly on a blank page (/core), for what jsdom
 // cannot show: real load, complete and naturalWidth values.

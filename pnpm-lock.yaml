@@ -84,12 +84,18 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.6
         version: 2.1.6(hono@4.13.16)
+      '@lazy-ease/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@lazy-ease/react':
         specifier: workspace:*
         version: link:../../packages/react
       '@lazy-ease/server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@lazy-ease/vanilla':
+        specifier: workspace:*
+        version: link:../../packages/vanilla
       hono:
         specifier: ^4.13.16
         version: 4.13.16
