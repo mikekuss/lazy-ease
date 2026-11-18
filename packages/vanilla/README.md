@@ -1,6 +1,6 @@
 # @lazy-ease/vanilla
 
-lazy-ease for server-rendered HTML: a PHP template, a static site or any markup you write yourself. The template renders the image, its box and an inline placeholder. This package finds the marked images and hands them to the controller from [`@lazy-ease/core`](../core), which loads them when they come near the viewport and fades them in. It also ships the stylesheet and a script that starts itself.
+lazy-ease for server-rendered HTML: a PHP template, a static site or any markup you write yourself. The template renders the image, its box and an inline placeholder. This package finds the marked images and hands them to the controller from [`@lazy-ease/core`](https://github.com/mikekuss/lazy-ease/tree/main/packages/core), which loads them when they come near the viewport and fades them in. It also ships the stylesheet and a script that starts itself.
 
 ```bash
 npm install @lazy-ease/vanilla
@@ -37,14 +37,16 @@ Content added after the script ran is not enhanced on its own. Use the ESM API f
 
 ## With a bundler
 
+The controller and the loader come from `@lazy-ease/core`, so install both: `npm install @lazy-ease/vanilla @lazy-ease/core`.
+
 ```js
 import { createLazyEase, createLoader } from '@lazy-ease/core'
 import { enhance } from '@lazy-ease/vanilla'
 import '@lazy-ease/vanilla/lazy-ease.css'
 
 const le = createLazyEase({ loader: createLoader({ baseUrl: '/_img' }) })
-const enhanced = enhance(le, document.querySelector('main'))
-// Later, e.g. before the area is removed:
+const enhanced = enhance(le, document.body)
+// Later, e.g. before the page's content is replaced:
 enhanced.destroy()
 ```
 
@@ -87,11 +89,19 @@ For art direction, put `media`, `type` and dimensions on the `<source>` elements
 `lazy-ease.css` makes a box a block, lets its img and placeholder cover it and hides the alt text of a deferred image until it fails. Every rule has zero specificity, so your own CSS wins. The controller does not need it: the fade and the placeholder are inline styles. A shadow root does not see the document's stylesheets; adopt the same text there:
 
 ```js
+import { createLazyEase } from '@lazy-ease/core'
+import { enhance } from '@lazy-ease/vanilla'
 import { cssText } from '@lazy-ease/vanilla/css'
+
+const le = createLazyEase()
 const sheet = new CSSStyleSheet()
 sheet.replaceSync(cssText)
-shadow.adoptedStyleSheets = [...shadow.adoptedStyleSheets, sheet]
-enhance(le, shadow)
+
+/** @param {ShadowRoot} shadow a shadow root with marked images */
+export function enhanceShadow(shadow) {
+  shadow.adoptedStyleSheets = [...shadow.adoptedStyleSheets, sheet]
+  return enhance(le, shadow)
+}
 ```
 
 ## Content Security Policy

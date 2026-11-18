@@ -1,6 +1,6 @@
 # lazy-ease design specification
 
-**Target: 0.3.0, approved design for implementation.** The root README describes the shipped 0.2 API. The [0.2 design](https://github.com/mikekuss/lazy-ease/blob/6c9043f37909bc8af6c8ab64782b13cc9f510c00/docs/design-spec.md) records the baseline, including the focal-window math, prop precedence and existing loader API. This document governs 0.3. See the [recipes](image-recipes.md), [backend contract in practice](backend.md) and [migration guide](migrating-from-0.2.md).
+**The design of 0.3.0, as implemented.** The root and package READMEs describe the 0.3 API. The [0.2 design](https://github.com/mikekuss/lazy-ease/blob/6c9043f37909bc8af6c8ab64782b13cc9f510c00/docs/design-spec.md) records the baseline, including the focal-window math, prop precedence and existing loader API. This document governs 0.3. See the [recipes](image-recipes.md), [backend contract in practice](backend.md) and [migration guide](migrating-from-0.2.md).
 
 ## Packages and cost
 
@@ -8,16 +8,16 @@ All public packages share one release version. Core exports pure functions and a
 
 ESM imports must perform no detection, DOM access, observer setup or ladder computation. Use functions, static ladder data and lazy initialization. Keep optional ThumbHash decoding in an explicit entry point. A browser ESM import must work without a Node process global. The standalone IIFE is explicitly activated by its script tag. Preserve stylesheet imports in production bundles.
 
-Measure each public import plus required core code with a pinned minifying bundler, production defines, external React peers and Brotli quality 11: esbuild 0.28.2, ES2022 ESM. The measurement fixtures are in `scripts/sizes`; `pnpm check:sizes` measures them after `pnpm build` and fails over budget (`--details` lists each entry's largest inputs).
+Measure each public import plus required core code with a pinned minifying bundler, production defines, external React peers and Brotli quality 11: esbuild 0.28.2, ES2022 ESM. The measurement fixtures are in `scripts/sizes`; `pnpm check:sizes` measures them after `pnpm build` and fails over budget or with another esbuild version (`--details` lists each entry's largest inputs, `--packed` measures the tarballs `pnpm check:packages` packed, `--json <file>` writes the results).
 
 | Entry | Approved 0.3 budget | Measured for 0.3 | Goal after 0.3 |
 | --- | --- | --- | --- |
 | createLoader | 1000 | 833 | 1000 |
-| attach with controller creation | 5400 | 5324 | 3500 |
-| enhance with controller | 6000 | 5914 | 4000 |
-| self-starting IIFE | 6600 | 6570 | 4500 |
+| attach with controller creation | 5400 | 5348 | 3500 |
+| enhance with controller | 6000 | 5910 | 4000 |
+| self-starting IIFE | 6600 | 6581 | 4500 |
 | CSS | 500 | 161 | 500 |
-| React Image | 7900 | 7802 | 5000 |
+| React Image | 7900 | 7809 | 5000 |
 
 Bytes after Brotli. Entries that measured over their original budget got the measured size rounded up to the next 100 B as their approved 0.3 budget; the others keep their original budget. The goals are the original targets, for the size pass that follows the 0.3 release.
 

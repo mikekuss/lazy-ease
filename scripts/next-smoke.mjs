@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { readTarball } from './lib/release.mjs'
 
 // Pinned on purpose: bump them deliberately, not by accident.
 const NEXT = '16.4.5'
@@ -160,6 +161,28 @@ rmSync(join(app, 'package-lock.json'), { force: true })
 const npmCli = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
 const npm = existsSync(npmCli) ? [process.execPath, npmCli] : ['npm']
 run([...npm, 'install', '--no-audit', '--no-fund', '--loglevel=error'], { shell: !existsSync(npmCli) && process.platform === 'win32' })
+
+// The app must run on the packed core, not a registry copy: one @lazy-ease/core,
+// installed from the local tarball, byte for byte, at the version react needs.
+const installed = (name, path) => readFileSync(join(app, 'node_modules', ...name.split('/'), path))
+for (const [name, file] of [['@lazy-ease/core', coreTarball], ['@lazy-ease/react', tarball], ['@lazy-ease/testing', testingTarball]]) {
+  const entries = readTarball(join(packDir, file))
+  const differ = [...entries].filter(([path, data]) => !installed(name, path).equals(data)).map(([path]) => path)
+  if (differ.length) {
+    console.error(`✗ node_modules/${name} is not ${file}: ${differ.join(', ')} differ`)
+    process.exit(1)
+  }
+}
+const coreVersion = JSON.parse(installed('@lazy-ease/core', 'package.json')).version
+const needed = JSON.parse(installed('@lazy-ease/react', 'package.json')).dependencies['@lazy-ease/core']
+const lock = JSON.parse(readFileSync(join(app, 'package-lock.json'), 'utf8')).packages
+const copies = Object.keys(lock).filter((path) => path.endsWith('node_modules/@lazy-ease/core'))
+if (needed !== coreVersion || copies.length !== 1 || !lock[copies[0]].resolved?.startsWith('file:')) {
+  console.error(`✗ @lazy-ease/react needs core ${needed}; installed ${coreVersion} at ${copies.join(', ')} from ${copies.map((p) => lock[p].resolved).join(', ')}`)
+  process.exit(1)
+}
+console.log(`✓ one @lazy-ease/core ${coreVersion}, installed from ${coreTarball}, as @lazy-ease/react needs`)
+
 run([process.execPath, join('node_modules', 'next', 'dist', 'bin', 'next'), 'build'])
 
 const htmlFile = join(app, '.next', 'server', 'app', 'index.html')

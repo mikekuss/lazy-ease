@@ -13,7 +13,9 @@
     "check:packages": "node scripts/check-packages.mjs",
     "check:next": "node scripts/next-smoke.mjs",
     "check:fixtures": "python3 scripts/check-fixtures.py",
-    "check:sizes": "node scripts/check-sizes.mjs"
+    "check:sizes": "node scripts/check-sizes.mjs",
+    "check:examples": "node scripts/check-examples.mjs",
+    "check:release": "node scripts/release-check.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@lazy-ease/react` and `@lazy-ease/server` are documented here. Both packages are versioned together.
+All notable changes to the `@lazy-ease` packages are documented here. Up to 0.2 that was `@lazy-ease/react` and `@lazy-ease/server`; from 0.3 on, `@lazy-ease/core`, `@lazy-ease/react`, `@lazy-ease/vanilla`, `@lazy-ease/server` and `@lazy-ease/testing` share one version and are released together.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -38,8 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `@lazy-ease/core`: `encodePath()` NFC-normalizes each path segment, encodes a stray `%` as `%25`, keeps the escapes of a segment that is not UTF-8, and throws a `RangeError` for any scheme except `http` and `https`, a drive letter included. Core passes the `nfc` and `safe-paths` fixtures.
 - `@lazy-ease/core`: when `attach` throws because no IntersectionObserver can be built (for example for a root margin without units), it releases its claim and restores `data-state`, the placeholder and the fade styles, so a later valid attach or `enhance` takes the image.
 - `@lazy-ease/vanilla`: the self-starting script accepts `data-root-margin` without reporting it when the browser has no IntersectionObserver.
-- The READMEs no longer link to `@lazy-ease/server` on npm, where it isn't published yet. They point to the repository instead.
-- `@lazy-ease/react` is published from GitHub Actions with npm Trusted Publishing, so new versions carry a provenance attestation.
+- The root and package READMEs describe the 0.3 API, and `pnpm check:examples` typechecks their complete examples against the built packages.
+- Releases publish all five packages at one version (lockstep), dependencies first, from GitHub Actions with npm Trusted Publishing, so every version carries a provenance attestation. Each `@lazy-ease` dependency is the exact version of the same release. The GitHub Release has the `@lazy-ease/testing` fixtures and `release.json` (every tarball with its npm integrity and files) as assets. `pnpm check:release` checks the lockstep versions and the changelog; `pnpm check:packages` installs every packed entry point and uses it as a consumer would.
 
 ## [0.2.0] - 2026-11-06
 

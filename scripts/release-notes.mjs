@@ -8,6 +8,7 @@
 // is missing or empty.
 
 import { readFileSync } from "node:fs";
+import { publishOrder, workspacePackages } from "./lib/release.mjs";
 
 const [version, ...published] = process.argv.slice(2);
 if (!version) {
@@ -29,12 +30,13 @@ if (!body) {
   process.exit(1);
 }
 
-const all = ["@lazy-ease/react", "@lazy-ease/server"];
+const all = publishOrder(workspacePackages()).map((p) => p.name);
 const links = published.map((name) => `[\`${name}\` ${version}](https://www.npmjs.com/package/${name}/v/${version})`);
 const missing = all.filter((name) => !published.includes(name)).map((name) => `\`${name}\``);
 let intro = links.length > 0 ? `Published to npm: ${links.join(", ")}.` : "";
 if (missing.length > 0) {
-  intro += `${intro ? " " : ""}${missing.join(" and ")} ${missing.length > 1 ? "aren't" : "isn't"} on npm yet.`;
+  const list = missing.length > 1 ? `${missing.slice(0, -1).join(", ")} and ${missing.at(-1)}` : missing[0];
+  intro += `${intro ? " " : ""}${list} ${missing.length > 1 ? "weren't" : "wasn't"} published with this release.`;
 }
 
 const compare = lines.find((line) => line.startsWith(`[${version}]: `))?.slice(version.length + 4).trim();

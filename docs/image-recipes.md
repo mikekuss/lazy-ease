@@ -1,6 +1,6 @@
 # Image recipes for 0.3
 
-These examples describe the planned API. The server owns variants in every example. A PHP template can consume a manifest written at upload time, render a single optimized URL, or implement the canonical loader using the JSON conformance fixtures.
+These examples use the 0.3 API. The server owns variants in every example. A PHP template can consume a manifest written at upload time, render a single optimized URL, or implement the canonical loader using the JSON conformance fixtures.
 
 ## Start with one server-rendered image
 

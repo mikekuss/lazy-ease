@@ -1,16 +1,20 @@
 // Checks the published shape of the packages: packs each one with pnpm, then
-// runs publint and attw on the tarball and asserts what it contains.
+// runs publint and attw on the tarball, asserts what it contains and installs
+// it into a temporary node_modules (next to the packed packages it needs) to
+// use every entry point the way a consumer does: plain Node imports, a
+// production esbuild bundle (tree shaking, sideEffects, the stylesheet) and,
+// for react and server, a render. The packed `sideEffects` field is checked
+// directly too: a bundle of a provably pure module tree-shakes without it.
 // Run `pnpm build` first. Tarballs land in .cache/packs for scripts/next-smoke.mjs.
 
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { gunzipSync } from 'node:zlib'
+import { internalDependencies, readTarball, root, workspacePackages } from './lib/release.mjs'
 
-const root = resolve(import.meta.dirname, '..')
 const packDir = join(root, '.cache', 'packs')
 
 const common = (path) => path === 'package.json' || path === 'README.md' || path === 'LICENSE'
@@ -26,11 +30,14 @@ const testing = {
   required: ['package.json', 'README.md', 'LICENSE', 'index.js', 'index.d.ts', 'fixtures/manifest.json', ...fixtureNames.map((n) => `fixtures/${n}`)],
 }
 
+// Files in clientFiles must start with 'use client', so Server Components can import them.
+// sideEffects is the exact value the packed package.json must have.
+// A package's packed @lazy-ease dependencies are packed before it.
 const packages = [
-  // Files that must start with 'use client', so Server Components can import them.
   {
     dir: 'packages/core',
     clientFiles: [],
+    sideEffects: false,
     ...built,
     required: [...built.required, 'dist/thumbhash.js', 'dist/thumbhash.d.ts', 'dist/dom/controller.js'],
     smoke: smokeCore,
@@ -38,16 +45,34 @@ const packages = [
   {
     dir: 'packages/vanilla',
     clientFiles: [],
+    sideEffects: ['*.css', './dist/lazy-ease.min.js'],
     ...built,
     required: [...built.required, 'dist/css.js', 'dist/css.d.ts', 'dist/lazy-ease.css', 'dist/lazy-ease.min.js'],
     smoke: smokeVanilla,
     // A stylesheet and a classic script: neither has types to resolve.
     attw: ['--exclude-entrypoints', './lazy-ease.css', './lazy-ease.min.js'],
   },
-  { dir: 'packages/react', clientFiles: ['dist/Image.js', 'dist/context.js'], ...built },
-  { dir: 'packages/server', clientFiles: [], ...built },
-  { dir: 'packages/testing', clientFiles: [], ...testing, smoke: smokeTesting },
+  { dir: 'packages/react', clientFiles: ['dist/Image.js', 'dist/context.js'], sideEffects: false, ...built, smoke: smokeReact },
+  { dir: 'packages/server', clientFiles: [], sideEffects: false, ...built, smoke: smokeServer },
+  { dir: 'packages/testing', clientFiles: [], sideEffects: false, ...testing, smoke: smokeTesting },
 ]
+for (const { dir } of workspacePackages()) {
+  if (!packages.some((p) => p.dir === dir)) {
+    console.error(`${dir} is not checked here; add it to the list in scripts/check-packages.mjs`)
+    process.exit(1)
+  }
+}
+
+// The workspace's own installs of the third-party packages a smoke test needs.
+const requireFrom = (dir) => createRequire(join(root, dir, 'package.json'))
+const esbuild = requireFrom('packages/vanilla')('esbuild')
+const thirdParty = {
+  react: 'packages/react',
+  'react-dom': 'packages/react',
+  thumbhash: 'packages/server',
+  hono: 'packages/server',
+  sharp: 'packages/server',
+}
 
 // Tarball entries by package name, for smoke tests that need a dependency.
 const packed = new Map()
@@ -69,29 +94,6 @@ function pnpm(args, cwd = root) {
   console.log(`$ pnpm ${args.join(' ')}`)
   const result = spawnSync(process.execPath, [pnpmScript, ...args], { cwd, stdio: 'inherit' })
   return result.status === 0
-}
-
-/** Reads a .tgz into a map of path (without the leading `package/`) to contents. */
-function readTarball(file) {
-  const tar = gunzipSync(readFileSync(file))
-  const entries = new Map()
-  let offset = 0
-  while (offset + 512 <= tar.length) {
-    const header = tar.subarray(offset, offset + 512)
-    if (header.every((byte) => byte === 0)) break
-    const field = (start, length) => header.toString('utf8', start, start + length).replace(/\0.*$/s, '')
-    const name = field(0, 100)
-    const prefix = field(345, 155)
-    const size = parseInt(field(124, 12).trim() || '0', 8)
-    const type = field(156, 1)
-    const path = prefix ? `${prefix}/${name}` : name
-    offset += 512
-    if (type === '0' || type === '') {
-      entries.set(path.replace(/^package\//, ''), tar.subarray(offset, offset + size))
-    }
-    offset += Math.ceil(size / 512) * 512
-  }
-  return entries
 }
 
 /**
@@ -132,17 +134,72 @@ console.log('imported @lazy-ease/testing: ' + manifest.files.length + ' files, '
   }
 }
 
-/** Writes a tarball's entries into a temporary node_modules under `name`, next to `others` ({ name: entries }). */
-function install(entries, name, others = {}) {
+/**
+ * Writes a tarball's entries into a temporary node_modules under `name`, next
+ * to the packed @lazy-ease packages it depends on and links to the
+ * workspace's installs of `links` (third-party packages).
+ */
+function install(entries, name, links = []) {
   const dir = mkdtempSync(join(tmpdir(), 'lazy-ease-smoke-'))
+  const manifest = JSON.parse(entries.get('package.json').toString('utf8'))
+  const others = Object.fromEntries(internalDependencies(manifest).map(([, dep]) => [dep, packed.get(dep)]))
   for (const [packageName, files] of Object.entries({ ...others, [name]: entries })) {
+    if (!files) throw new Error(`${packageName} must be packed before ${name}`)
     for (const [path, data] of files) {
       const file = join(dir, 'node_modules', ...packageName.split('/'), path)
       mkdirSync(dirname(file), { recursive: true })
       writeFileSync(file, data)
     }
   }
+  for (const dep of links) {
+    const target = realpathSync(join(root, thirdParty[dep], 'node_modules', dep))
+    symlinkSync(target, join(dir, 'node_modules', dep), 'junction')
+  }
   return dir
+}
+
+/** Runs `code` as smoke.mjs inside an install directory. */
+function runSmoke(dir, label, code) {
+  writeFileSync(join(dir, 'smoke.mjs'), code)
+  console.log(`$ node smoke.mjs (${label})`)
+  return spawnSync(process.execPath, ['smoke.mjs'], { cwd: dir, stdio: 'inherit' }).status === 0
+}
+
+/**
+ * Bundles `code` inside an install directory as an application's production
+ * build would: esbuild, minified, tree-shaken, honoring each package's
+ * sideEffects. Returns the JavaScript and the CSS it emits.
+ */
+async function bundle(dir, code) {
+  const result = await esbuild.build({
+    stdin: { contents: code, resolveDir: dir, loader: 'js' },
+    absWorkingDir: dir,
+    bundle: true,
+    minify: true,
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2022',
+    external: ['react', 'react-dom', 'react/*', 'react-dom/*'],
+    define: { 'process.env.NODE_ENV': '"production"' },
+    outdir: join(dir, 'out'),
+    write: false,
+    logLevel: 'silent',
+  })
+  const text = (extension) =>
+    result.outputFiles
+      .filter((file) => file.path.endsWith(extension))
+      .map((file) => file.text)
+      .join('')
+      .trim()
+  return { js: text('.js'), css: text('.css') }
+}
+
+/** Fails unless importing the specifiers only for their side effects bundles to nothing. */
+async function bundlesToNothing(dir, name, specifiers) {
+  const { js } = await bundle(dir, specifiers.map((s) => `import '${s}'`).join('\n'))
+  if (js) console.error(`✗ ${name}: importing ${specifiers.join(', ')} for side effects left ${js.length} B in a production bundle`)
+  else console.log(`✓ ${specifiers.join(', ')}: nothing left in a production bundle (sideEffects)`)
+  return !js
 }
 
 /**
@@ -150,16 +207,17 @@ function install(entries, name, others = {}) {
  * a consumer reaches by name: the ESM entries import without touching a
  * browser global, the CSS export path holds the same text as `cssText`, and
  * the script at its export path starts itself in a page (jsdom) and enhances
- * only the opted-in area.
+ * only the opted-in area. In a production bundle the ESM entries leave
+ * nothing when unused, while the stylesheet and the script are kept
+ * (sideEffects).
  */
-function smokeVanilla(entries) {
-  const core = packed.get('@lazy-ease/core')
-  if (!core) return false
-  const dir = install(entries, '@lazy-ease/vanilla', { '@lazy-ease/core': core })
-  const jsdom = createRequire(join(root, 'packages/react/package.json')).resolve('jsdom')
+async function smokeVanilla(entries) {
+  const dir = install(entries, '@lazy-ease/vanilla')
+  const jsdom = requireFrom('packages/react').resolve('jsdom')
   try {
-    writeFileSync(
-      join(dir, 'smoke.mjs'),
+    const ran = runSmoke(
+      dir,
+      'packed @lazy-ease/vanilla',
       `import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 const touched = []
@@ -186,8 +244,26 @@ if (doc.querySelector('#out').hasAttribute('data-state')) throw new Error('the s
 console.log('imported @lazy-ease/vanilla without browser globals; the packed script enhanced its area')
 `,
     )
-    console.log('$ node smoke.mjs (packed @lazy-ease/vanilla)')
-    return spawnSync(process.execPath, ['smoke.mjs'], { cwd: dir, stdio: 'inherit' }).status === 0
+    if (!ran) return false
+    let ok = await bundlesToNothing(dir, '@lazy-ease/vanilla', ['@lazy-ease/vanilla', '@lazy-ease/vanilla/css'])
+
+    // The stylesheet import survives tree shaking and carries the whole sheet.
+    const sheet = readFileSync(join(dir, 'node_modules/@lazy-ease/vanilla/dist/lazy-ease.css'), 'utf8')
+    const minifiedSheet = (await esbuild.transform(sheet, { loader: 'css', minify: true })).code.trim()
+    const app = await bundle(dir, `import '@lazy-ease/vanilla/lazy-ease.css'\nimport { enhance } from '@lazy-ease/vanilla'\nexport const run = enhance`)
+    if (app.css !== minifiedSheet) {
+      console.error(`✗ @lazy-ease/vanilla: the bundled stylesheet (${app.css.length} B) is not lazy-ease.css (${minifiedSheet.length} B minified)`)
+      ok = false
+    } else console.log(`✓ import '@lazy-ease/vanilla/lazy-ease.css': the whole sheet is in the production CSS (${app.css.length} B)`)
+
+    // The self-starting script is kept when imported for its side effect.
+    const script = readFileSync(join(dir, 'node_modules/@lazy-ease/vanilla/dist/lazy-ease.min.js'), 'utf8')
+    const started = await bundle(dir, `import '@lazy-ease/vanilla/lazy-ease.min.js'`)
+    if (started.js.length < script.length * 0.9) {
+      console.error(`✗ @lazy-ease/vanilla: import '@lazy-ease/vanilla/lazy-ease.min.js' left ${started.js.length} B of ${script.length} B`)
+      ok = false
+    } else console.log(`✓ import '@lazy-ease/vanilla/lazy-ease.min.js': kept in a production bundle (${started.js.length} B)`)
+    return ok
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -197,13 +273,15 @@ console.log('imported @lazy-ease/vanilla without browser globals; the packed scr
  * Imports the packed @lazy-ease/core in plain Node the way a browser bundle
  * would see it: no process global, and every browser global a trap. Importing
  * both entry points and creating an instance must touch none of them and
- * build no ladder.
+ * build no ladder. The optional decoder then runs with the real `thumbhash`
+ * package, and a production bundle drops both entries when they are unused.
  */
-function smokeCore(entries) {
-  const dir = install(entries, '@lazy-ease/core')
+async function smokeCore(entries) {
+  const dir = install(entries, '@lazy-ease/core', ['thumbhash'])
   try {
-    writeFileSync(
-      join(dir, 'smoke.mjs'),
+    const ran = runSmoke(
+      dir,
+      'packed @lazy-ease/core',
       `const touched = []
 for (const name of ['process', 'document', 'window', 'navigator', 'IntersectionObserver', 'ResizeObserver', 'matchMedia', 'Image', 'requestAnimationFrame', 'getComputedStyle', 'devicePixelRatio', 'HTMLElement']) {
   Object.defineProperty(globalThis, name, { configurable: true, get: () => (touched.push(name), undefined) })
@@ -219,10 +297,107 @@ Number.prototype.toFixed = toFixed
 if (touched.length || computed) throw new Error('import touched ' + touched.join(', ') + ', toFixed calls: ' + computed)
 if (typeof thumbhashDecoder !== 'function' || core.DEFAULT_RATIOS.length !== 73) throw new Error('exports')
 console.log('imported @lazy-ease/core without process or browser globals: ' + loaded + ' exports')
+
+// The optional decoder with the package an application installs.
+const thumbhash = await import('thumbhash')
+const placeholder = thumbhashDecoder(thumbhash)('1QcSHQRnh493V4dIh4eXh1h4kJUI')
+const image = placeholder?.lazy?.()
+if (!/^#[0-9a-f]{6}$/.test(placeholder?.style.backgroundColor ?? '') || !String(image?.backgroundImage).startsWith('url("data:image/png;base64,')) {
+  throw new Error('thumbhashDecoder: ' + JSON.stringify({ style: placeholder?.style, image }))
+}
+console.log('@lazy-ease/core/thumbhash decoded a hash with thumbhash: ' + placeholder.style.backgroundColor)
 `,
     )
-    console.log('$ node smoke.mjs (packed @lazy-ease/core)')
-    return spawnSync(process.execPath, ['smoke.mjs'], { cwd: dir, stdio: 'inherit' }).status === 0
+    return ran && (await bundlesToNothing(dir, '@lazy-ease/core', ['@lazy-ease/core', '@lazy-ease/core/thumbhash']))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Renders the packed @lazy-ease/react on the server with the packed core
+ * beside it (React from the workspace): a deferred image and a priority one.
+ * Checks that react resolves exactly the packed core of the same version, and
+ * that an unused import leaves nothing in a production bundle.
+ */
+async function smokeReact(entries) {
+  const dir = install(entries, '@lazy-ease/react', ['react', 'react-dom'])
+  try {
+    const ran = runSmoke(
+      dir,
+      'packed @lazy-ease/react',
+      `import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+import { createElement } from 'react'
+import { renderToString } from 'react-dom/server'
+import { Image, LazyEaseProvider } from '@lazy-ease/react'
+
+// The manifest of the package \`name\` resolves to from \`from\` (the packages don't export ./package.json).
+const manifest = (from, name) => JSON.parse(readFileSync(join(dirname(createRequire(from).resolve(name)), '..', 'package.json'), 'utf8'))
+const react = manifest(import.meta.url, '@lazy-ease/react')
+const core = manifest(createRequire(import.meta.url).resolve('@lazy-ease/react'), '@lazy-ease/core')
+if (core.version !== react.version || react.dependencies['@lazy-ease/core'] !== core.version) {
+  throw new Error('react ' + react.version + ' needs core ' + react.dependencies['@lazy-ease/core'] + ' and resolved ' + core.version)
+}
+const html = renderToString(
+  createElement(LazyEaseProvider, null,
+    createElement(Image, { src: '/a.jpg', alt: 'Lake', width: 320, height: 240 }),
+    createElement(Image, { src: '/hero.jpg', alt: 'Hero', width: 640, height: 320, priority: true })),
+)
+// Without the source size a priority image gets one URL, for 2x its width snapped to the ladder, preloaded from the same string.
+const hero = '/_img/hero.jpg?ar=2&amp;fmt=webp&amp;q=75&amp;w=1440'
+const expected = ['alt="Lake"', 'data-le', 'data:image/gif;base64,', 'alt="Hero"', 'fetchPriority="high"', 'rel="preload" href="' + hero + '"', 'src="' + hero + '"']
+const missing = expected.filter((needle) => !html.includes(needle))
+if (missing.length) throw new Error('server HTML lacks ' + missing.join(', ') + ':\\n' + html)
+console.log('rendered @lazy-ease/react ' + react.version + ' on the server with the packed core ' + core.version)
+`,
+    )
+    return ran && (await bundlesToNothing(dir, '@lazy-ease/react', ['@lazy-ease/react']))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Runs the packed @lazy-ease/server with the packed core beside it (hono and
+ * sharp from the workspace): metadata for a generated source, one render
+ * through the mounted app, and the packed core as the one it resolves.
+ */
+function smokeServer(entries) {
+  const dir = install(entries, '@lazy-ease/server', ['hono', 'sharp', 'thumbhash'])
+  try {
+    return runSmoke(
+      dir,
+      'packed @lazy-ease/server',
+      `import { mkdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+import { Hono } from 'hono'
+import sharp from 'sharp'
+import { computeMetadata, createImageApp, memoryStorage } from '@lazy-ease/server'
+
+// The manifest of the package \`name\` resolves to from \`from\` (the packages don't export ./package.json).
+const manifest = (from, name) => JSON.parse(readFileSync(join(dirname(createRequire(from).resolve(name)), '..', 'package.json'), 'utf8'))
+const server = manifest(import.meta.url, '@lazy-ease/server')
+const core = manifest(createRequire(import.meta.url).resolve('@lazy-ease/server'), '@lazy-ease/core')
+if (core.version !== server.version || server.dependencies['@lazy-ease/core'] !== core.version) throw new Error('core ' + core.version)
+
+mkdirSync('images')
+await sharp({ create: { width: 400, height: 200, channels: 3, background: '#3366cc' } }).jpeg().toFile('images/a.jpg')
+const meta = await computeMetadata('images/a.jpg')
+if (meta.width !== 400 || meta.height !== 200 || !meta.revision) throw new Error('metadata ' + JSON.stringify(meta))
+
+const app = new Hono()
+app.route('/_img', createImageApp({ root: 'images', storage: memoryStorage() }))
+const response = await app.request('/_img/a.jpg?ar=1&fmt=webp&q=75&v=' + meta.revision + '&w=64')
+const body = Buffer.from(await response.arrayBuffer())
+const out = response.status === 200 && (await sharp(body).metadata())
+if (!out || out.format !== 'webp' || out.width !== 64 || out.height !== 64) throw new Error(response.status + ' ' + JSON.stringify(out))
+if (!/immutable/.test(response.headers.get('cache-control') ?? '')) throw new Error('cache-control ' + response.headers.get('cache-control'))
+console.log('rendered a 64x64 WebP with the packed @lazy-ease/server ' + server.version + ' and core ' + core.version)
+`,
+    )
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -239,7 +414,7 @@ function sourceConditions(value, path = 'exports') {
 rmSync(packDir, { recursive: true, force: true })
 mkdirSync(packDir, { recursive: true })
 
-for (const { dir, clientFiles, allowed, required, smoke, attw = [] } of packages) {
+for (const { dir, clientFiles, sideEffects, allowed, required, smoke, attw = [] } of packages) {
   const before = new Set(readdirSync(packDir))
   if (!pnpm(['pack', '--pack-destination', relative(join(root, dir), packDir)], join(root, dir))) {
     fail(dir, 'pnpm pack failed')
@@ -257,10 +432,17 @@ for (const { dir, clientFiles, allowed, required, smoke, attw = [] } of packages
   for (const path of entries.keys()) if (!allowed(path)) fail(name, `unexpected file in tarball: ${path}`)
   for (const path of required) if (!entries.has(path)) fail(name, `missing from tarball: ${path}`)
   for (const path of sourceConditions(manifest.exports)) fail(name, `packed package.json has ${path}`)
+  if (JSON.stringify(manifest.sideEffects) !== JSON.stringify(sideEffects)) {
+    fail(name, `packed sideEffects is ${JSON.stringify(manifest.sideEffects)}, not ${JSON.stringify(sideEffects)}`)
+  }
   for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
     for (const [dep, range] of Object.entries(manifest[field] ?? {})) {
       if (range.startsWith('workspace:')) fail(name, `${field}.${dep} is ${range}`)
     }
+  }
+  // Lockstep: a @lazy-ease dependency is the exact version of this release.
+  for (const [field, dep, range] of internalDependencies(manifest)) {
+    if (range !== manifest.version) fail(name, `${field}.${dep} is ${range}, not ${manifest.version}`)
   }
   for (const path of clientFiles) {
     const code = entries.get(path)?.toString('utf8') ?? ''
@@ -275,7 +457,7 @@ for (const { dir, clientFiles, allowed, required, smoke, attw = [] } of packages
   // ESM-only package can't resolve by design. node16-from-ESM and bundler
   // must still pass.
   if (!pnpm(['exec', 'attw', tgz, '--profile', 'esm-only', ...attw])) fail(name, 'attw failed')
-  if (smoke && !smoke(entries)) fail(name, 'import smoke test failed')
+  if (smoke && !(await smoke(entries))) fail(name, 'import smoke test failed')
 }
 
 if (failures) {
