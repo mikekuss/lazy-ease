@@ -1,6 +1,6 @@
 {
   "name": "@lazy-ease/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Framework-free lazy-ease logic: ladders, canonical URLs, crop geometry, loaders and the DOM image controller",
   "license": "MIT",
   "author": "Mike Kuss",

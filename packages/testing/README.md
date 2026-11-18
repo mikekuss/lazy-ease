@@ -2,8 +2,6 @@
 
 Portable conformance fixtures for the lazy-ease image contract (0.3). The JSON files describe what a loader, template or backend must produce: the default ladders, canonical numbers and URLs, focal crop windows, encoded pixel sizes, candidate lists, what the reference backend admits, and the optional crop token. A PHP, Go or CDN implementation can read the same files the JS packages are tested against. The package has no dependencies and no build step.
 
-The package is planned for npm with the 0.3 release; until then it lives in the repository only. Once published:
-
 ```bash
 npm install --save-dev @lazy-ease/testing
 ```
@@ -13,6 +11,7 @@ import { casesOf, fixtures } from '@lazy-ease/testing'
 import { createLoader } from '@lazy-ease/core'
 
 for (const { id, input, expected } of casesOf('urls', 'url', { skipTopics: ['token'] })) {
+  if (!('url' in expected)) continue // a source the loader must reject
   const url = createLoader({ baseUrl: input.baseUrl }).url(input.request)
   if (url !== expected.url) throw new Error(`${id}: ${url}`)
 }
@@ -36,7 +35,7 @@ Each file is also exported on its own, e.g. `import outputs from '@lazy-ease/tes
 | `backend.json` | query, path | Queries and source paths the backend admits or rejects |
 | `tokens.json` | sign, verify | Optional crop token: signed bytes, test keys, vectors |
 
-From the 0.3 release on, the plan is to attach these ten files unchanged as GitHub release assets (`node scripts/fixture-assets.mjs <new-dir>` in the repository collects them from the packed package into a new or empty directory). Check them against `manifest.json` after downloading. The files use UTF-8 with LF line endings and only ASCII characters (non-ASCII text is written as `\u` escapes).
+From 0.3.0 on, every [GitHub release](https://github.com/mikekuss/lazy-ease/releases) has these ten files as assets, byte for byte as in the npm package, next to `release.json`, which lists each published package with its tarball, integrity and files. Check the fixture files against `manifest.json` after downloading. In the repository, `node scripts/fixture-assets.mjs <new-dir>` collects them from the packed package. The files use UTF-8 with LF line endings and only ASCII characters (non-ASCII text is written as `\u` escapes).
 
 ## Envelope and conventions
 
@@ -59,7 +58,7 @@ From the 0.3 release on, the plan is to attach these ten files unchanged as GitH
 - `fixtureVersion` changes when the schema or the meaning of a field changes. A release may add cases without changing it. `id` is unique within its file and stable, so failures can be reported by id.
 - `op` names the operation when a file has several. `note` is a comment. `data` holds shared tables and is absent in most files.
 - `topics` marks a case that exercises a capability beyond the base contract: `nfc` (NFD input normalized to NFC), `strict-q` (a missing `q` is rejected), `token` (crop tokens) and `url-parsing` (a source that is not a plain path, resolved as a URL; see Source paths). An implementation may skip a topic it does not support yet, but should list the skipped cases rather than drop them silently.
-- `safe-paths` marks the source path rules for a stray `%`, escapes that are not UTF-8 and schemes other than `http` and `https`: core implements it with step 06; the URL a backend or PHP template writes must already follow it.
+- `safe-paths` marks the source path rules for a stray `%`, escapes that are not UTF-8 and schemes other than `http` and `https`. Core implements them, and the URL a backend or PHP template writes must follow them too.
 - Read every JSON number as an IEEE 754 double, as JS does. `2**70` is written as an integer literal that does not fit 64 bits.
 - Inputs omit absent optional fields; they never contain `null`. Expected objects are complete: a field with no value is `null`, never missing. `{ "error": "range" }` or `{ "error": "invalid-input" }` means the operation must fail.
 - `{ "special": "NaN" }` stands for a number JSON cannot write (`NaN`, `Infinity`, `-Infinity`).
@@ -103,7 +102,7 @@ In `@lazy-ease/core`, `candidateSet` implements this rule and passes every recor
 
 - leading and trailing C0 controls and spaces are trimmed, and ASCII tab, LF and CR are removed everywhere;
 - an `http` or `https` scheme and the authority are dropped (`https://cdn.example/p/x.jpg` and `//cdn.example/x.jpg` keep only `/p/x.jpg` and `/x.jpg`), and a bare name is relative to `/`;
-- any other scheme is `{ "error": "invalid-input" }` (`a:b.jpg`, `x:/hero.jpg`, `C:\photos\lake.jpg`, `data:`, `ftp:`): it never names a file under the mount (from step 06 the JS loader throws a `RangeError`);
+- any other scheme is `{ "error": "invalid-input" }` (`a:b.jpg`, `x:/hero.jpg`, `C:\photos\lake.jpg`, `data:`, `ftp:`): it never names a file under the mount (the JS loader throws a `RangeError`);
 - a backslash counts as a slash;
 - the query and fragment are dropped;
 - `.` and `..` segments are resolved, also when written as `%2e`/`%2E` (`/a/%2e%2e/b.jpg` is `/b.jpg`).

@@ -1,6 +1,6 @@
 # Migrating from 0.2 to 0.3
 
-This guide describes the planned release boundary. Core extraction preserves 0.2 React behavior while the controller is developed and tested independently. Upgrade the public packages together when 0.3 ships.
+This guide covers the changes from 0.2 to 0.3. All lazy-ease packages are released under one version, so upgrade them together.
 
 | Existing usage | 0.3 behavior | Migration |
 | --- | --- | --- |

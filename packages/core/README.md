@@ -20,10 +20,10 @@ outputSize(1200, 400, { width: 640, aspectRatio: 1 })
 `candidateSet()` turns request widths into the srcset a browser chooses from, labeled with the width the backend actually encodes and merged where two requests encode the same pixels:
 
 ```js
-import { candidateSet, measuredCandidates } from '@lazy-ease/core'
+import { candidateSet, createLoader } from '@lazy-ease/core'
 
 candidateSet({ src: '/strip.jpg', widths: [256, 384, 640], srcWidth: 2000, srcHeight: 300,
-  aspectRatio: 1, quality: 75, format: 'webp', loader })
+  aspectRatio: 1, quality: 75, format: 'webp', loader: createLoader() })
 // { srcset: '/_img/strip.jpg?ar=1&fmt=webp&q=75&w=256 256w, /_img/strip.jpg?ar=1&fmt=webp&q=75&w=384 300w', src: … }
 ```
 
@@ -31,17 +31,18 @@ candidateSet({ src: '/strip.jpg', widths: [256, 384, 640], srcWidth: 2000, srcHe
 
 `createLazyEase(config)` returns an instance whose `attach(img, options)` takes over one image the template rendered: the img and, for a fade, its box, the nearest `[data-le]` element. The template reserves the geometry and supplies an inert source and a placeholder; the controller owns the deferred source attributes, the `data-state` of the owner, the fade and the placeholder styles.
 
-```js
+```ts
 import { createLazyEase, createLoader } from '@lazy-ease/core'
 
 const le = createLazyEase({ loader: createLoader({ baseUrl: '/_img', formats: ['webp'] }) })
+const image = (selector: string) => document.querySelector<HTMLImageElement>(selector)!
 
 // Prepared: copies the values on intersection. Needs no loader and reads no layout.
-le.attach(cardImg, { srcset: '/a-640.webp 640w, /a-1280.webp 1280w', sizes: '50vw' })
+le.attach(image('#card img'), { srcset: '/a-640.webp 640w, /a-1280.webp 1280w', sizes: '50vw' })
 // Measured: observes the box's content size and installs the loader's candidates.
-const handle = le.attach(cellImg, { src: '/fern.jpg', fill: true, srcWidth: 2400, srcHeight: 1600 })
+const handle = le.attach(image('#cell img'), { src: '/fern.jpg', fill: true, srcWidth: 2400, srcHeight: 1600 })
 // Native: adopts the sources in the HTML, here with eager loading and high fetch priority.
-le.attach(heroImg, { priority: true })
+le.attach(image('#hero img'), { priority: true })
 
 handle.update({ src: '/lake.jpg', fill: true }) // a new source: back to its placeholder
 handle.destroy() // releases listeners, observers, timers and the claim on the element
@@ -64,6 +65,8 @@ External URLs, SVG and GIF load directly. A loader with one format, without AVIF
 `imageSet({ src, width, loader })` builds the CSS `image-set()` value for a decorative background: 1x and 2x (or the `densities` you pass) for every declared format, best first, with optional `aspectRatio`, `focalPoint`, `srcWidth`, `quality`, `version` and `token`:
 
 ```js
+import { createLoader, imageSet } from '@lazy-ease/core'
+
 imageSet({ src: '/banner.jpg', width: 700, aspectRatio: 2, loader: createLoader({ formats: ['webp'] }) })
 // 'image-set(url("/_img/banner.jpg?ar=2&fmt=webp&q=75&w=750") 1x type("image/webp"), url("/_img/banner.jpg?ar=2&fmt=webp&q=75&w=1440") 2x type("image/webp"))'
 ```
@@ -72,6 +75,7 @@ ThumbHash placeholders decode in an explicit entry point, with the `thumbhash` p
 
 ```js
 import * as thumbhash from 'thumbhash'
+import { createLazyEase } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 
 const le = createLazyEase({ thumbhash: thumbhashDecoder(thumbhash) })

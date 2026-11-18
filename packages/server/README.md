@@ -3,7 +3,6 @@
 The reference image backend for [`@lazy-ease/react`](https://www.npmjs.com/package/@lazy-ease/react) and `@lazy-ease/core`: a [Hono](https://hono.dev) app that resizes, crops and encodes images with [sharp](https://sharp.pixelplumbing.com), plus metadata tooling for upload or build scripts. Node 22+.
 
 ```bash
-# Not on npm yet; for now, use it from this repository.
 npm install @lazy-ease/server hono @hono/node-server
 ```
 
@@ -17,7 +16,7 @@ app.route('/_img', createImageApp({ root: './images' }))
 serve({ fetch: app.fetch, port: 3001 })
 ```
 
-It serves `GET /_img/{src path}?ar&fmt&fx&fy&q&token&v&w` (and `HEAD`), accepts only the canonical URLs the core loader writes, never upscales and strips metadata. The [backend guide](../../docs/backend.md) describes the contract this package implements.
+It serves `GET /_img/{src path}?ar&fmt&fx&fy&q&token&v&w` (and `HEAD`), accepts only the canonical URLs the core loader writes, never upscales and strips metadata. The [backend guide](https://github.com/mikekuss/lazy-ease/blob/main/docs/backend.md) describes the contract this package implements.
 
 ```ts
 import { computeMetadata } from '@lazy-ease/server'
@@ -69,7 +68,7 @@ The default policy admits 74 crops per source (uncropped and the 73 centered rat
 
 ### Crop tokens
 
-Tokens are optional. They let a deployment admit crops it did not list, such as an editor's per-image focus, without publishing every crop in the policy. The byte format and test vectors are in [`@lazy-ease/testing`](../testing/README.md#crop-token).
+Tokens are optional. They let a deployment admit crops it did not list, such as an editor's per-image focus, without publishing every crop in the policy. The byte format and test vectors are in [`@lazy-ease/testing`](https://github.com/mikekuss/lazy-ease/blob/main/packages/testing/README.md#crop-token).
 
 ```ts
 import { createImageApp, signCropToken } from '@lazy-ease/server'
@@ -112,9 +111,11 @@ The `timeout` deadline starts at admission, so time in the queue counts. When it
 Encoded variants are kept in a storage between requests. Serving an original, admitting a transform and keeping its result are separate decisions: the storage only decides what to keep.
 
 ```ts
-import { createImageApp, diskStorage, memoryStorage } from '@lazy-ease/server'
+import { createImageApp, diskStorage } from '@lazy-ease/server'
+import { Hono } from 'hono'
 
 const storage = diskStorage({ dir: '/var/cache/lazy-ease', maxBytes: 4 * 1024 ** 3 })
+const app = new Hono()
 app.route('/_img', createImageApp({ root: './images', storage }))
 process.on('SIGTERM', () => storage.close().then(() => process.exit(0)))
 ```
@@ -123,7 +124,7 @@ process.on('SIGTERM', () => storage.close().then(() => process.exit(0)))
 
 **Ownership.** One process owns a directory at a time. `diskStorage()` takes a `LOCK` file with its process id, host name, start time and boot identity (the kernel's boot id, where `/proc/sys/kernel/random/boot_id` exists), and the owner refreshes the file's mtime every 10 seconds. A lock is stale, and taken over, when it has not been refreshed for 60 seconds, whatever process or host it names, or at once when it names this host and an earlier boot, a process that no longer runs, or this pid with another start time (a restarted container where Node is PID 1). So after a crash, a power cut or a `SIGKILL`, a directory used from another host or container can be taken over 60 seconds after its owner died. On a host without a real-time clock, such as a Raspberry Pi whose clock starts behind after a power cut, the boot check is what lets the restarted server take its own old lock; a clock that jumps within one boot is not covered. Where there is no boot id (macOS, Windows), a reboot is covered by the pid and start-time checks and by the 60-second limit. An empty or unreadable `LOCK`, as a full disk can leave behind, is taken over once it is 5 seconds old. A fresh lock of a live owner makes `diskStorage()` throw. If you know no process uses the directory, you may delete `LOCK` by hand; a live owner writes it again at its next heartbeat. After a redeploy with a new hostname (a new container or pod on the same volume), the old `LOCK` blocks startup until its heartbeat is 60 seconds old, so use a restart policy, or close the storage on `SIGTERM` as above so the lock is released. An owner that stalls for a minute (a suspended VM, a debugger) can lose its lock; it logs this once and then leaves the directory alone, as if closed: every lookup misses and nothing is stored. A write that is already renaming its file into place when the loss is detected may still land. The limit assumes clocks that agree within a few seconds when the directory is shared between hosts.
 
-In one process, `diskStorage()` for the same directory and limits returns the same shared storage. Each call takes a reference and each `close()` drops one; the directory is released when the last is closed. Opening the directory again in the same process while its `close()` is still pending throws; await the `close()` first. The storage `createImageApp` opens when given none holds no reference, so close it on shutdown with `diskStorage().close()`. Give each process of a cluster, and each container, its own directory: a disk cache is not coordinated across processes or hosts. Shared caching belongs in the CDN or an object store (see the [backend guide](../../docs/backend.md#cdn-and-regional-renderer)).
+In one process, `diskStorage()` for the same directory and limits returns the same shared storage. Each call takes a reference and each `close()` drops one; the directory is released when the last is closed. Opening the directory again in the same process while its `close()` is still pending throws; await the `close()` first. The storage `createImageApp` opens when given none holds no reference, so close it on shutdown with `diskStorage().close()`. Give each process of a cluster, and each container, its own directory: a disk cache is not coordinated across processes or hosts. Shared caching belongs in the CDN or an object store (see the [backend guide](https://github.com/mikekuss/lazy-ease/blob/main/docs/backend.md#cdn-and-regional-renderer)).
 
 **`memoryStorage(options)`** keeps variants in the process only, empty after every restart and never touching the disk. `close()` empties it. `memoryStorage({ maxBytes: 0 })` turns storing off.
 
@@ -136,7 +137,7 @@ In one process, `diskStorage()` for the same directory and limits returns the sa
 | `maxAge` | 30 days | 30 days | A variant unused this long expires. |
 | `promote` | off | off | `{ hits: 3, window: 1 h, perSource: 8 }`, or `true` for these. |
 
-The least recently used variant goes first, at the byte cap, the entry cap and each source's quota. Stale revisions are never served, since the revision is part of the key, and as the least recently used variants of their source they go first. With `promote`, a variant used `hits` times within one `window` is kept after the others of its source, up to `perSource` per source; one that misses two windows steps down again and re-enters the others as their most recently used, whatever its last use. Promoted variants are still held to every limit: they may take at most 80% of `maxBytes` and of `maxSourceBytes`, and past that share they are evicted first, oldest first. Counting is bounded by `maxEntries`, since only stored variants are counted. The server sees only what the CDN misses, so on a CDN-fronted deployment promotion ranks misses; see the [backend guide](../../docs/backend.md#cdn-and-regional-renderer) for hit signals.
+The least recently used variant goes first, at the byte cap, the entry cap and each source's quota. Stale revisions are never served, since the revision is part of the key, and as the least recently used variants of their source they go first. With `promote`, a variant used `hits` times within one `window` is kept after the others of its source, up to `perSource` per source; one that misses two windows steps down again and re-enters the others as their most recently used, whatever its last use. Promoted variants are still held to every limit: they may take at most 80% of `maxBytes` and of `maxSourceBytes`, and past that share they are evicted first, oldest first. Counting is bounded by `maxEntries`, since only stored variants are counted. The server sees only what the CDN misses, so on a CDN-fronted deployment promotion ranks misses; see the [backend guide](https://github.com/mikekuss/lazy-ease/blob/main/docs/backend.md#cdn-and-regional-renderer) for hit signals.
 
 **Sizing.** On a small host such as a Raspberry Pi, start with one render (`concurrency: 1`), a short width ladder, one quality and `formats: ['webp', 'jpeg']`, put `dir` on the fastest disk you have, and set `maxBytes` well under its free space.
 
@@ -170,7 +171,7 @@ Admission is stricter than in 0.2. Deploy the server, its policy and the CDN con
 - Focal crops need a recorded focus, a listed crop or a token. Uncropped images and centered ladder crops keep working with the default policy.
 - A CDN must key on `ar fmt fx fy q token v w`, or authorize the viewer and verify the token on the viewer-request path before dropping `token` from its key. Private sources need the viewer check before every hit.
 
-- [Documentation](https://github.com/mikekuss/lazy-ease#server): URL contract, limits, errors, options, CDN notes
+- [Documentation](https://github.com/mikekuss/lazy-ease#server): overview, options, CDN notes
 - [Changelog](https://github.com/mikekuss/lazy-ease/blob/main/CHANGELOG.md)
 
 ## License
