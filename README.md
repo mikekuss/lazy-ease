@@ -108,7 +108,7 @@ export function App() {
 | `onLoad` | | | The React event of the first real load of the displayed source, called once. An image adopted after hydration gets no event; use `onStateChange`. Resolution upgrades aren't reported. |
 | `ref` | | | Forwarded to the `<img>`. |
 | `className`, `style` | | | Applied to the `<img>`. |
-| `wrapperClassName`, `wrapperStyle` | | | Applied to the box, the `<span>` around the `<img>`. Passing either keeps the box. |
+| `wrapperClassName`, `wrapperStyle` | | | Applied to the box, the `<span>` around the `<img>`. Passing either keeps the box. With `noScript`, the box is a grid that stacks the fallback on the placeholder; keep its `display` a grid (`grid` or `inline-grid`). |
 
 Any other `<img>` attribute (`crossOrigin`, `referrerPolicy`, `onError`, …) is passed through. `decoding` defaults to `"async"`.
 

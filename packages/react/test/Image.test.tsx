@@ -548,6 +548,21 @@ describe('lifecycle', () => {
     expect(onLoad).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps the author’s background over the placeholder when it attaches', () => {
+    const boxed = mount({ aspectRatio: 1.5, wrapperStyle: { backgroundColor: '#123456' } })
+    expect(boxed.owner().style.backgroundColor).toBe('rgb(18, 52, 86)')
+    const bare = mount({ aspectRatio: 1.5, fadeDuration: 0, style: { backgroundColor: '#123456' } })
+    expect(bare.owner()).toBe(bare.img())
+    expect(bare.img().style.backgroundColor).toBe('rgb(18, 52, 86)')
+  })
+
+  it('positions the no-JS fallback of a measured browser crop at the focal point', () => {
+    const props = { fill: true, srcWidth: 2400, srcHeight: 1600, focalPoint: { x: 90, y: 50 } }
+    const markup = renderToString(tree({ ...props, noScript: true }))
+    expect(markup).toContain('container-type:size')
+    expect(markup.match(/<noscript[^>]*>(.*?)<\/noscript>/)?.[1]).toContain('object-position:clamp(')
+  })
+
   it('stacks the noScript fallback with the inert img in one grid cell', () => {
     const markup = renderToString(tree({ width: 320, fadeDuration: 0, noScript: true }))
     expect(markup).toContain('display:grid')

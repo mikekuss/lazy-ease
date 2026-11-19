@@ -64,7 +64,7 @@ test.describe('scripting disabled', () => {
   })
 })
 
-test('with scripting, the same page reserves the same slots and loads every image once', async ({ page }) => {
+test('with scripting, the same page reserves the same slots and renders one img per image', async ({ page }) => {
   await page.goto('/noscript')
   await waitForHydration(page)
   for (const id of ids) {
@@ -73,4 +73,8 @@ test('with scripting, the same page reserves the same slots and loads every imag
     expect(Math.round(await slot.evaluate((element) => element.getBoundingClientRect().height))).toBe(slotOf(id).height)
     expect(await slot.locator('img').count()).toBe(1)
   }
+  const picture = page.locator('#picture')
+  await expect(picture.locator('[data-le]')).toHaveAttribute('data-state', 'loaded')
+  expect(Math.round(await picture.locator('[data-le]').evaluate((element) => element.getBoundingClientRect().height))).toBe(Math.round(320 / 1.5))
+  expect(await picture.locator('img').count()).toBe(1)
 })

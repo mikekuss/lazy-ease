@@ -242,7 +242,8 @@ function ImageBox({
   let paint: CSSProperties = { ...(ssrImage ? parsed.lazy!() : parsed.style) }
   if (paint.backgroundImage) paint.backgroundPosition = focus ? percentPosition(focus) : 'center'
 
-  const focused = focus && !measured ? focusStyles({ focus, crop: serverCrop, srcWidth, srcHeight }) : undefined
+  // A measured image is positioned by the controller, its no-JS fallback by these styles.
+  const focused = focus && (!measured || noScript) ? focusStyles({ focus, crop: serverCrop, srcWidth, srcHeight }) : undefined
   const fallback = !native && noScript && prepared(sizes)
   // A box only where something needs it: fill, a fade, browser focal positioning, wrapper
   // props or a no-JS fallback. The fallback shares one grid cell with the inert img: it
@@ -354,7 +355,8 @@ function ImageBox({
     const state = latest.current
     // Destroying a displayed source removed the placeholder that React wrote for this new one.
     if (state.shown !== identity) {
-      Object.assign(img.closest<HTMLElement>('[data-le]')!.style, paint)
+      // The author's own styles win over the placeholder, as in the markup.
+      Object.assign(img.closest<HTMLElement>('[data-le]')!.style, paint, boxed ? wrapperStyle : style)
       // A deferred source left before it was displayed starts over, with its placeholder
       // and onLoad, when it comes back.
       if (!native) state.shown = ''
