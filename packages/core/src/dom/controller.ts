@@ -131,8 +131,8 @@ const identity = (o: Options, sources: Iterable<Element>) =>
  * the package, can share one page.
  */
 export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
-  /** Attach options over the instance's config over the defaults, validated. */
-  const resolve = (options: AttachOptions): Options => {
+  /** Attach options over the instance's config over the defaults, validated; with `img` (update) also against the observer. */
+  const resolve = (options: AttachOptions, img?: HTMLImageElement): Options => {
     const o: Options = { rootMargin: '400px', fadeDuration: 400, decodeTimeout: 250, quality: 75, ...config }
     for (const key in options) {
       const value = options[key as keyof AttachOptions]
@@ -159,6 +159,9 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
                       ? 'invalid placeholder'
                       : ''
     if (problem) throw new TypeError(`[lazy-ease] ${problem}`)
+    // What the next generation could still reject, found before update() ends the current one: a root or margin
+    // the IntersectionObserver refuses. A subscription made and cancelled at once builds the observer.
+    if (img && !isNative(o) && o.loading !== 'eager') whenVisible(img, o, () => {})()
     return o
   }
 
@@ -189,6 +192,11 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
       const deferredSources = () =>
         img.parentElement?.tagName === 'PICTURE' ? [...img.parentElement.querySelectorAll(':scope>source[data-le-srcset]')] : []
       const painted = PLACEHOLDER.map((property) => styleOf(surface)[property]!)
+      // Back to the styles the element had before the first generation.
+      const unpaint = () => {
+        clearStyle(img, FADE)
+        PLACEHOLDER.forEach((property, i) => (styleOf(surface)[property] = painted[i]!))
+      }
       const snapshot = (element: Element = img) => ATTRIBUTES.map((name) => element.getAttribute(name))
       // In this order: sizes before srcset, or the browser selects for 100vw first.
       const restore = (values: (string | null | undefined)[], element: Element = img) =>
@@ -207,8 +215,8 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
         o.onStateChange?.(next, img)
       }
 
-      /** One generation: everything that belongs to one logical source. Returns its cleanup. */
-      const run = (): ((next?: Options) => void) => {
+      /** One generation: everything that belongs to one logical source. Sets `stop` to its cleanup. */
+      const run = () => {
         const native = isNative(o)
         // A native data: URI is the target; only the inert pixel is a placeholder there.
         const placeholderSrc = native ? INERT : inert
@@ -236,6 +244,7 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
         let shown = false
         let hidden = false
         let good: (string | null)[] | undefined
+        let fade: Animation | undefined
         // The <source> elements this generation activated, with their attributes from before.
         const activated = new Map<Element, (string | null)[]>()
         let unfocus = () => {}
@@ -263,8 +272,9 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
         }
         if (placeholder) paint(placeholder.style)
 
-        // Shows the image and removes the placeholder, so transparent images don't show it.
+        // Shows the image and removes the placeholder, so transparent images don't show it. Ends a fade cut short.
         const release = () => {
+          fade?.cancel()
           clearStyle(img, FADE)
           clearStyle(surface, PLACEHOLDER)
         }
@@ -274,8 +284,10 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           report('loaded')
           if (img.style.opacity !== '0' || fadeMs <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches) release()
           else {
-            // Forces a style and layout flush so opacity 0 is resolved: set in the same frame, it is no start value and no transition runs.
-            void img.offsetWidth
+            // No style or layout flush (spec): an opacity 0 set in this frame is no start value for the transition,
+            // so the animation's keyframes give the fade its start. Where it runs, the transition shows the same fade.
+            // Without Web Animations (jsdom) only the transition is left.
+            fade = img.animate?.({ opacity: [0, 1], easing: 'ease-out' }, fadeMs)
             Object.assign(img.style, { transition: `opacity ${fadeMs}ms ease-out`, opacity: '1' })
             later(release, fadeMs)
           }
@@ -439,22 +451,16 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           }
         }
 
+        // Before what can throw, so that start() can end the generation.
+        stop = end
         if (native) {
           if (o.priority) {
             img.setAttribute('fetchpriority', 'high')
             img.setAttribute('loading', 'eager')
           }
         } else if (o.loading === 'eager') activate()
-        else {
-          try {
-            cleanups.push(whenVisible(surface, o, activate))
-          } catch (error) {
-            // No IntersectionObserver for this root margin: the generation ends before it started.
-            end()
-            throw error
-          }
-        }
-        return end
+        // Throws when there is no IntersectionObserver for this root and margin.
+        else cleanups.push(whenVisible(surface, o, activate))
       }
 
       const prior = owner.getAttribute('data-state')
@@ -463,13 +469,13 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
         const before = [img, ...deferredSources()].map((element) => [element, snapshot(element)] as const)
         const recorded = targets[targetKey]
         try {
-          stop = run()
+          run()
         } catch (error) {
+          stop?.()
           stop = undefined
           before.forEach(([element, values]) => restore(values, element))
           targets[targetKey] = recorded
-          clearStyle(img, FADE)
-          PLACEHOLDER.forEach((property, i) => (styleOf(surface)[property] = painted[i]!))
+          unpaint()
           if (prior === null) owner.removeAttribute('data-state')
           else owner.setAttribute('data-state', prior)
           if (claims[key] === claim) delete claims[key]
@@ -482,11 +488,10 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           return state!
         },
         update(next) {
-          const resolved = resolve(next)
+          const resolved = resolve(next, img)
           if (!stop) return
           stop(resolved)
-          clearStyle(img, FADE)
-          PLACEHOLDER.forEach((property, i) => (styleOf(surface)[property] = painted[i]!))
+          unpaint()
           o = resolved
           start()
         },

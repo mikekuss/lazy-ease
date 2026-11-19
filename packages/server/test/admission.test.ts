@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process'
-import { stat, symlink, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fixtures as vectors } from '@lazy-ease/testing'
 import { Hono } from 'hono'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { computeMetadata, createImageApp, signCropToken, type ImageServerOptions, type SourcePolicy, memoryStorage } from '../src/index.js'
+import { computeMetadata, createImageApp, diskStorage, signCropToken, type ImageServerOptions, type SourcePolicy, memoryStorage } from '../src/index.js'
 import { createFixtures, decode, solid, split, type Fixtures } from './fixtures.js'
 
 // Admission, revisions, viewer authorization and HTTP policy, on real renders.
@@ -162,6 +162,97 @@ describe('crop tokens are optional', () => {
     expect(() => createImageApp({ storage: memoryStorage(), root: fixtures.root, keys: { k1: new Uint8Array(8) } })).toThrow(RangeError)
     expect(() => createImageApp({ storage: memoryStorage(), root: fixtures.root, keys: { 'k.1': KEY } })).toThrow(RangeError)
     expect(() => createImageApp({ storage: memoryStorage(), root: fixtures.root, tenant: 'a b' })).toThrow(RangeError)
+  })
+})
+
+describe('configured ladders', () => {
+  const create = (options: Partial<ImageServerOptions>) => () => createImageApp({ storage: memoryStorage(), root: fixtures.root, ...options })
+
+  it.each([
+    [{ widths: [] }, 'widths must not be empty'],
+    [{ widths: [0] }, 'widths must be positive integers, not 0'],
+    [{ widths: [64, 100.5] }, 'widths must be positive integers, not 100.5'],
+    [{ widths: [64, Number.NaN] }, 'widths must be positive integers, not NaN'],
+    [{ widths: [128, 64] }, 'widths must be ascending, without duplicates'],
+    [{ widths: [64, 64] }, 'widths must be ascending, without duplicates'],
+    [{ ratios: [] }, 'ratios must not be empty'],
+    [{ ratios: [-1] }, 'ratios must be positive numbers, not -1'],
+    [{ ratios: [0.0001] }, 'ratios must be positive numbers, not 0.0001'],
+    [{ ratios: [1, Number.POSITIVE_INFINITY] }, 'ratios must be positive numbers, not Infinity'],
+    [{ ratios: [2, 1] }, 'ratios must be ascending, without duplicates'],
+    // One URL spelling, `ar=1.778`, for two ratios.
+    [{ ratios: [1.7777, 1.7778] }, 'ratios must be ascending, without duplicates'],
+    [{ qualities: [] }, 'qualities must not be empty'],
+    [{ qualities: [0] }, 'qualities must be integers from 1 to 100, not 0'],
+    [{ qualities: [101] }, 'qualities must be integers from 1 to 100, not 101'],
+    [{ qualities: [75.5] }, 'qualities must be integers from 1 to 100, not 75.5'],
+    [{ qualities: [75, 75] }, 'qualities must not repeat a value'],
+  ])('rejects %o at startup', (options, message) => {
+    expect(create(options)).toThrow(new RangeError(message))
+  })
+
+  it('accepts small custom ladders, qualities in any order', async () => {
+    const get = serve({ widths: [100, 200], ratios: [1, 1.5], qualities: [90, 50] })
+    expect((await get('/big.jpg?ar=1.5&fmt=webp&q=50&w=200')).status).toBe(200)
+    expect((await get('/big.jpg?fmt=webp&q=75&w=200')).status).toBe(400)
+  })
+})
+
+describe('apps sharing one storage', () => {
+  const svg = (fill: string) => `<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="${fill}"/></svg>`
+  // Same path, size, mtime and policy revision in both roots: only the root tells them apart.
+  async function roots(name: string) {
+    const [a, b] = [path.join(fixtures.dir, `${name}-a`), path.join(fixtures.dir, `${name}-b`)]
+    for (const [root, fill] of [[a, 'red'], [b, 'tan']] as const) {
+      await mkdir(root, { recursive: true })
+      await writeFile(path.join(root, 'same.svg'), svg(fill))
+      await utimes(path.join(root, 'same.svg'), 1_700_000_000, 1_700_000_000)
+    }
+    return [a, b] as const
+  }
+
+  it.each(['memory', 'disk'] as const)('never serves a private source of one root as a public source of another (%s)', async (kind) => {
+    const [a, b] = await roots(`shared-${kind}`)
+    const storage = kind === 'memory' ? memoryStorage() : diskStorage({ dir: path.join(fixtures.dir, `cache-${kind}`) })
+    try {
+      const privateApp = createImageApp({
+        root: a,
+        storage,
+        policy: () => ({ revision: 'r7', private: true }),
+        authorize: (request) => request.headers.get('x-viewer') === 'allowed',
+      })
+      const publicApp = createImageApp({ root: b, storage, policy: () => ({ revision: 'r7' }) })
+      const first = await privateApp.request('/same.svg?v=r7', { headers: { 'x-viewer': 'allowed' } })
+      expect(first.status).toBe(200)
+      expect(await first.text()).toBe(svg('red'))
+      await storage.flush()
+
+      const second = await publicApp.request('/same.svg?v=r7')
+      expect(second.status).toBe(200)
+      expect(second.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+      expect(await second.text()).toBe(svg('tan'))
+      expect(second.headers.get('etag')).not.toBe(first.headers.get('etag'))
+      // The private app's ETag is no validator for the public one.
+      expect((await publicApp.request('/same.svg?v=r7', { headers: { 'if-none-match': first.headers.get('etag')! } })).status).toBe(200)
+    } finally {
+      await storage.close()
+    }
+  })
+
+  it('shares variants across roots only under one configured sourceNamespace', async () => {
+    const [a, b] = await roots('namespaced')
+    await writeFile(path.join(b, 'same.svg'), svg('red'))
+    await utimes(path.join(b, 'same.svg'), 1_700_000_000, 1_700_000_000)
+    const storage = memoryStorage()
+    const etag = async (root: string, sourceNamespace?: string) =>
+      (await createImageApp({ root, storage, sourceNamespace }).request('/same.svg')).headers.get('etag')
+    // The same sources mounted at two paths, as on two hosts sharing one storage.
+    expect(await etag(a, 'images-v1')).toBe(await etag(b, 'images-v1'))
+    expect(await etag(a)).not.toBe(await etag(b))
+    expect(await etag(a)).not.toBe(await etag(a, 'images-v1'))
+    for (const sourceNamespace of ['', 'a\0b', 'x'.repeat(1025)]) {
+      expect(() => createImageApp({ root: a, storage, sourceNamespace })).toThrow(new RangeError('sourceNamespace must be 1 to 1024 characters without NUL'))
+    }
   })
 })
 

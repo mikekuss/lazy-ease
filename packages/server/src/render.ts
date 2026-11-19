@@ -120,7 +120,7 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T
   }
 }
 
-const timedOut = () => new HTTPException(504, { message: 'Render timed out' })
+const timedOut = () => new HTTPException(504, { message: 'Timed out' })
 
 /** A 503 with `Retry-After`, for a full queue. */
 export function overloaded(retryAfter: number): HTTPException {

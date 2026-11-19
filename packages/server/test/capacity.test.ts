@@ -158,6 +158,33 @@ describe('render capacity', () => {
     expect(vi.mocked(render).mock.calls.map((call) => call[2]?.timeout)).toEqual([3000, 3000])
   })
 
+  it.each([
+    ['a storage hit', { storage: 'slow' }],
+    ['the policy', { policy: 'slow' }],
+    ['viewer authorization', { authorize: 'slow' }],
+  ] as const)('answers 504 at the deadline while %s is still running', async (_, slow) => {
+    const gate = deferred<void>()
+    const late = <T>(value: T) => gate.promise.then(() => value)
+    vi.mocked(render).mockClear()
+    const storage = memoryStorage()
+    const app = createImageApp({
+      root: fixtures.root,
+      timeout: 50,
+      storage: 'storage' in slow ? { ...storage, get: () => late(encoded) } : storage,
+      policy: () => ('policy' in slow ? late({ revision: 'r1' }) : { revision: 'r1', private: 'authorize' in slow }),
+      authorize: () => late(true),
+    })
+    const started = Date.now()
+    const response = await app.request('/big.jpg?fmt=webp&q=75&v=r1&w=640')
+    expect(response.status).toBe(504)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(Date.now() - started).toBeLessThan(1000)
+    // The abandoned handling runs on, past its deadline, so it starts no render.
+    gate.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(render).not.toHaveBeenCalled()
+  })
+
   it('bounds hashing for content revisions, so a 503 also limits disk reads', async () => {
     const names = Array.from({ length: 8 }, (_, i) => `cold-${i}.jpg`)
     const bytes = Buffer.from('not decoded, render is mocked')

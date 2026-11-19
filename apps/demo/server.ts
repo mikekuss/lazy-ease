@@ -182,6 +182,10 @@ async function listImages() {
 }
 app.get('/api/images', async (c) => c.json(await (imageList ??= listImages())))
 
+// Which checkout this server runs from, so `pnpm test:frames` can refuse to
+// reuse a server another worktree started on the same port.
+app.get('/api/identity', (c) => c.json({ dir: demoDir }))
+
 app.get('/api/session', (c) => c.json({ signedIn: signedIn(c.req.raw) }))
 app.post('/api/session', (c) => {
   const id = randomBytes(16).toString('base64url')

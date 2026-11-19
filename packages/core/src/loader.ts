@@ -51,7 +51,8 @@ export type ImageLoaderFunction = (request: ImageRequest) => string
 export type ResolvedLoader = ImageLoader & { ratios: readonly number[] }
 
 const DEFAULT_QUALITIES: readonly number[] = [75]
-const DEFAULT_FORMATS: readonly ImageFormat[] = ['avif', 'webp', 'jpeg']
+/** Every format, best first. */
+export const DEFAULT_FORMATS: readonly ImageFormat[] = ['avif', 'webp', 'jpeg']
 
 // Same function, same object, so the result is stable as a React dependency.
 const normalized = new WeakMap<object, ResolvedLoader>()

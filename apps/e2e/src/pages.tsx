@@ -164,6 +164,27 @@ function Focus({ images: { focus } }: PageProps) {
   )
 }
 
+/** No-JS fallbacks: a hard swap needs no box of its own, intrinsic reserves the source ratio. */
+export const NO_SCRIPT = {
+  'hard-swap': { width: 320, height: 240, fadeDuration: 0 },
+  'hard-swap-prepared': { width: 320, height: 240, sizes: '320px', fadeDuration: 0 },
+  intrinsic: { width: 320, fadeDuration: 0 },
+  'intrinsic-fade': { width: 320 },
+  fade: { width: 320, height: 240 },
+}
+
+function NoScriptFallbacks({ images: { photo } }: PageProps) {
+  return (
+    <div className="row" style={{ flexWrap: 'wrap' }}>
+      {Object.entries(NO_SCRIPT).map(([id, props]) => (
+        <div key={id} id={id} style={{ width: 320, flexShrink: 0 }}>
+          <Image src={photo.src} alt="Fallback" srcWidth={photo.width} srcHeight={photo.height} noScript {...props} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export const pages: Record<string, (props: PageProps) => ReactNode> = {
   'below-fold': BelowFold,
   dpr: Dpr,
@@ -173,6 +194,7 @@ export const pages: Record<string, (props: PageProps) => ReactNode> = {
   priority: Priority,
   'first-viewport': FirstViewport,
   focus: Focus,
+  noscript: NoScriptFallbacks,
 }
 
 function HydrationFlag() {

@@ -411,6 +411,21 @@ describe('native images', () => {
       expect(targets).toHaveLength(1)
     })
   }
+
+  it('calls onLoad again for a new revision, and does not paint the placeholder back', () => {
+    const onLoad = vi.fn()
+    const { img, rerender } = mount({ width: 320, height: 240, loading: 'native', version: 'r1', onLoad })
+    load(img())
+    expect(img().style.backgroundColor).toBe('')
+    rerender({ placeholder: '#00ff00' })
+    expect(img().style.backgroundColor).toBe('')
+    rerender({ version: 'r2', placeholder: '#00ff00' })
+    expect(img().getAttribute('src')).toContain('v=r2')
+    // The displayed r1 image stays until r2 loads, so no placeholder comes back.
+    expect(img().style.backgroundColor).toBe('')
+    load(img())
+    expect(onLoad).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('lifecycle', () => {
@@ -566,6 +581,63 @@ describe('lifecycle', () => {
     expect(measured.owner().dataset.state).toBe('loaded')
   })
 
+  it('calls onLoad again for a new revision of the same src', async () => {
+    const onLoad = vi.fn()
+    const { owner, img, rerender } = mount({ width: 320, height: 240, version: 'r1', onLoad })
+    intersect(owner())
+    resize(owner(), 320, 240)
+    load(img())
+    await advance(400)
+    expect(onLoad).toHaveBeenCalledTimes(1)
+    rerender({ version: 'r2' })
+    expect(owner().dataset.state).toBe('idle')
+    intersect(owner())
+    resize(owner(), 320, 240)
+    expect(img().getAttribute('src')).toContain('v=r2')
+    load(img())
+    await advance(400)
+    expect(owner().dataset.state).toBe('loaded')
+    expect(onLoad).toHaveBeenCalledTimes(2)
+  })
+
+  it('calls onLoad again for new prepared URLs, not for an upgrade of a measured image', async () => {
+    const provider = { loader: createLoader({ formats: ['webp'], qualities: [50, 75] }) }
+    const onLoad = vi.fn()
+    const prepared = mount({ aspectRatio: 1.5, sizes: '320px', srcWidth: 2400, srcHeight: 1600, onLoad }, provider)
+    intersect(prepared.owner())
+    load(prepared.img())
+    await advance(400)
+    prepared.rerender({ quality: 50 })
+    intersect(prepared.owner())
+    load(prepared.img())
+    await advance(400)
+    expect(prepared.owner().dataset.state).toBe('loaded')
+    expect(onLoad).toHaveBeenCalledTimes(2)
+    prepared.unmount()
+
+    onLoad.mockClear()
+    const measured = mount({ width: 320, height: 240, onLoad }, provider)
+    intersect(measured.owner())
+    resize(measured.owner(), 320, 240)
+    load(measured.img())
+    await advance(400)
+    const url = measured.img().getAttribute('src')
+    // A larger slot and a new quality both upgrade the displayed image in place.
+    resize(measured.owner(), 640, 480)
+    await advance(400)
+    expect(measured.img().getAttribute('src')).not.toBe(url)
+    load(measured.img())
+    await advance(400)
+    measured.rerender({ quality: 50 })
+    intersect(measured.owner())
+    resize(measured.owner(), 640, 480)
+    expect(measured.img().getAttribute('src')).toContain('q=50')
+    load(measured.img())
+    await advance(400)
+    expect(measured.owner().dataset.state).toBe('loaded')
+    expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
   it('re-attaches for new picture sources with the same src', () => {
     const source = (src: string) => [{ media: '(min-width: 800px)', src, sizes: '50vw', srcWidth: 2400, srcHeight: 1600 }]
     const { owner, rerender } = mount({ aspectRatio: 1.5, sizes: '100vw', srcWidth: 2400, srcHeight: 1600, sources: source('/b.jpg') })
@@ -631,6 +703,23 @@ describe('placeholders', () => {
     expect(owner().style.backgroundPosition).toBe('center center')
   })
 
+  it('does not paint the placeholder back once the image is displayed, but does for a new source', async () => {
+    for (const fadeDuration of [undefined, 0]) {
+      const { owner, img, rerender, unmount } = mount({ width: 320, height: 240, version: 'r1', fadeDuration })
+      intersect(owner())
+      resize(owner(), 320, 240)
+      load(img())
+      await advance(400)
+      expect(owner().style.backgroundColor).toBe('')
+      rerender({ placeholder: '#00ff00' })
+      expect(owner().dataset.state).toBe('loaded')
+      expect(owner().style.backgroundColor).toBe('')
+      rerender({ placeholder: '#00ff00', version: 'r2' })
+      expect(owner().style.backgroundColor).toBe('rgb(0, 255, 0)')
+      unmount()
+    }
+  })
+
   it('moves an image placeholder with the focal point', () => {
     const style = mount({ width: 320, height: 240, placeholder: 'data:image/png;base64,AAAA', focalPoint: { x: 30, y: 60 } }).owner().style
     expect(style.backgroundPosition).toBe('30% 60%')
@@ -651,6 +740,19 @@ describe('no-JS fallback', () => {
     expect(markup).toContain('loading="lazy"')
     expect(markup).toContain('position:absolute')
     expect(noscript({ src: 'https://other.site/a.jpg', width: 320, height: 240, noScript: true })).toContain('src="https://other.site/a.jpg"')
+  })
+
+  it('keeps a box for the fallback and overlays it on the placeholder img', () => {
+    for (const props of [
+      { width: 320, height: 240, fadeDuration: 0 },
+      { srcWidth: 2400, srcHeight: 1600, fadeDuration: 0 },
+      { width: 320, srcWidth: 2400, srcHeight: 1600 },
+      { width: 320, height: 240, sizes: '320px', fadeDuration: 0 },
+    ]) {
+      const markup = renderToString(tree({ ...props, noScript: true }))
+      expect(markup).toMatch(/^<span data-le="" data-le-auto="off" style="display:block;position:relative/)
+      expect(noscript({ ...props, noScript: true })).toContain('position:absolute;inset:0')
+    }
   })
 
   it('is never needed for a native image', () => {

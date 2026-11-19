@@ -13,11 +13,11 @@ Measure each public import plus required core code with a pinned minifying bundl
 | Entry | Approved 0.3 budget | Measured for 0.3 | Goal after 0.3 |
 | --- | --- | --- | --- |
 | createLoader | 1000 | 833 | 1000 |
-| attach with controller creation | 5400 | 5348 | 3500 |
-| enhance with controller | 6000 | 5910 | 4000 |
-| self-starting IIFE | 6600 | 6581 | 4500 |
+| attach with controller creation | 5400 | 5349 | 3500 |
+| enhance with controller | 6000 | 5960 | 4000 |
+| self-starting IIFE | 6600 | 6589 | 4500 |
 | CSS | 500 | 161 | 500 |
-| React Image | 7900 | 7809 | 5000 |
+| React Image | 7900 | 7859 | 5000 |
 
 Bytes after Brotli. Entries that measured over their original budget got the measured size rounded up to the next 100 B as their approved 0.3 budget; the others keep their original budget. The goals are the original targets, for the size pass that follows the 0.3 release.
 
@@ -49,7 +49,7 @@ A marked image or its nearest marked box owns one logical image, possibly inside
 
 Use one source mode per image. A prepared list may include a prepared fallback URL. Reject ambiguous measured and prepared input before mutating the element. For deferred picture markup put media, type and dimensions on source elements and defer their srcset/sizes as on img. Native picture uses standard attributes throughout. Calls to enhance(le, root) accept a document, element or shadow root. Roots for markup discovery and for intersection are separate options. React and Lit attach within their own lifecycle. Skip their managed subtrees during auto-enhancement. An element-local, cross-copy ownership marker prevents duplicate attachment. Only its owner releases it. Shadow-root users can adopt the exported CSS string.
 
-createLazyEase(config) returns an instance with attach(img, options) returning a handle with update(options) and destroy(). update starts a new generation on the same element and claim, and validates the new options before it ends the current one, so invalid options leave the displayed image alone; destroy followed by attach reaches the same result for a valid source change. The adapter renders initial static markup before hydration. After attach, the controller owns deferred source attributes, dynamic state, fade and placeholder styles. Re-renders must preserve those values. Destroy releases listeners, observers, timers and ownership. Adoption preserves an already displayed target of the same logical source (src, srcset, url, revision and deferred picture sources); the element remembers that source past destroy, so attaching it again with another one does not adopt the old image. A prepared image's logical source is its URL list, so a re-attach with other prepared URLs (a new quality or loader URL in React) returns to the placeholder and fades again, while a measured image keeps its src and upgrades the displayed image in place. Changing the logical source starts a new generation with its own placeholder. A native data URI is a target and is adopted; only the inert pixel counts as a placeholder there. Stale completions cannot mutate that generation.
+createLazyEase(config) returns an instance with attach(img, options) returning a handle with update(options) and destroy(). update starts a new generation on the same element and claim, and checks the new options that can throw (the observer's root and margin) before it ends the current one, so they leave the displayed image alone; a loader whose ladders are invalid (an empty or out-of-range list) still throws only when it is used, after the current generation ended; destroy followed by attach reaches the same result for a valid source change. The adapter renders initial static markup before hydration. After attach, the controller owns deferred source attributes, dynamic state, fade and placeholder styles. Re-renders must preserve those values. Destroy releases listeners, observers, timers and ownership. Adoption preserves an already displayed target of the same logical source (src, srcset, url, revision and deferred picture sources); the element remembers that source past destroy, so attaching it again with another one does not adopt the old image. A prepared image's logical source is its URL list, so a re-attach with other prepared URLs (a new quality or loader URL in React) returns to the placeholder and fades again, while a measured image keeps its src and upgrades the displayed image in place. Changing the logical source starts a new generation with its own placeholder. A native data URI is a target and is adopted; only the inert pixel counts as a placeholder there. Stale completions cannot mutate that generation.
 
 ## Display lifecycle
 

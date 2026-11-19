@@ -105,7 +105,7 @@ export interface ImageProps
   loader?: ImageLoader | ImageLoaderFunction
   /** Art-direction sources, in a `<picture>`. Their ratios belong in CSS, through `--le-ar` on the box. */
   sources?: readonly ImageSource[]
-  /** Adds native markup in `<noscript>` for visitors without JavaScript. Deferred images only. */
+  /** Adds native markup in `<noscript>` for visitors without JavaScript, over the placeholder in a box. Deferred images only. */
   noScript?: boolean
   /** Every state change. `loaded` once per source, also for an image that loaded before hydration. */
   onStateChange?: (state: LoadState, img: HTMLImageElement) => void
@@ -239,13 +239,15 @@ function ImageBox({
   // A decoded ThumbHash on the server, or only its color with the image swapped in on activation.
   const ssrImage = parsed.lazy && (config.thumbhashSsr === 'image' || priority)
   // A copy: the parsed styles are shared, memoized per hash.
-  const paint: CSSProperties = { ...(ssrImage ? parsed.lazy!() : parsed.style) }
+  let paint: CSSProperties = { ...(ssrImage ? parsed.lazy!() : parsed.style) }
   if (paint.backgroundImage) paint.backgroundPosition = focus ? percentPosition(focus) : 'center'
 
   const focused = focus && !measured ? focusStyles({ focus, crop: serverCrop, srcWidth, srcHeight }) : undefined
-  // A box only where something needs it: fill, a fade, browser focal positioning or wrapper props.
+  const fallback = !native && noScript && prepared(sizes)
+  // A box only where something needs it: fill, a fade, browser focal positioning, wrapper
+  // props or a no-JS fallback, which overlays the placeholder img in its slot.
   const boxed =
-    fill || wrapperClassName !== undefined || wrapperStyle !== undefined || (!native && fadeMs > 0) || (measured ? !!focus : !!focused?.box.containerType)
+    fill || wrapperClassName !== undefined || wrapperStyle !== undefined || (!native && fadeMs > 0) || !!fallback || (measured ? !!focus : !!focused?.box.containerType)
 
   const ratio = mode === 'fixed' ? `${width} / ${height}` : mode === 'ratio' ? `${aspectRatio}` : sourceRatio && `${srcWidth} / ${srcHeight}`
   // With breakpoint sources, CSS owns the ratio: `--le-ar` on the box or an ancestor.
@@ -254,15 +256,6 @@ function ImageBox({
     ? { position: 'absolute', inset: 0 }
     : { width: width ?? '100%', maxWidth: mode === 'fixed' ? '100%' : undefined, aspectRatio: ar }
   const cover = fill || !!ar
-  const imgStyle: CSSProperties = boxed
-    ? { display: 'block', width: '100%', height: cover ? '100%' : 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...style }
-    : { display: 'block', ...slot, height: 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...paint, ...style }
-
-  const imgWidth = fill ? undefined : (width ?? (mode === 'intrinsic' ? srcWidth : undefined))
-  const imgHeight =
-    mode === 'fixed'
-      ? height
-      : imgWidth && (mode === 'ratio' ? Math.round(imgWidth / aspectRatio!) : sourceRatio && Math.round(imgWidth / sourceRatio))
 
   const pictureSources = sources.map((source) => {
     const sourceCrop = source.aspectRatio && snapRatio(source.aspectRatio, loader.ratios)
@@ -275,6 +268,37 @@ function ImageBox({
     })
     return { media: source.media, src: set.src, srcSet: set.srcSet ?? set.src, sizes: set.sizes }
   })
+
+  // The logical source: a new one fires its own first onLoad and shows its placeholder.
+  // A measured image's src is its key, and its candidates upgrade in place.
+  const identity = JSON.stringify([version, real, pictureSources])
+  const latest = useRef({
+    onLoad,
+    onStateChange,
+    loader,
+    decoder,
+    event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
+    // The currentSrc the stored load event was for.
+    eventSrc: '',
+    state: '',
+    // The identity of the source last displayed, '' before the first display.
+    shown: '',
+    hidden: false,
+  })
+  Object.assign(latest.current, { onLoad, onStateChange, loader, decoder })
+  // The controller removes the placeholder on display; a rerender must not write it back.
+  // A native image keeps its displayed image under a new source, so it never returns.
+  const shown = latest.current.shown
+  if (shown && (native || shown === identity)) paint = {}
+  const imgStyle: CSSProperties = boxed
+    ? { display: 'block', width: '100%', height: cover ? '100%' : 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...style }
+    : { display: 'block', ...slot, height: 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...paint, ...style }
+
+  const imgWidth = fill ? undefined : (width ?? (mode === 'intrinsic' ? srcWidth : undefined))
+  const imgHeight =
+    mode === 'fixed'
+      ? height
+      : imgWidth && (mode === 'ratio' ? Math.round(imgWidth / aspectRatio!) : sourceRatio && Math.round(imgWidth / sourceRatio))
 
   if (priority) {
     // At most one preload: the first source under its media query, else the img itself,
@@ -296,20 +320,6 @@ function ImageBox({
     self.current = node
     return setRef(ref, node)
   }, [ref])
-  // The latest callbacks, loader and decoder, for an attachment that outlives renders.
-  const latest = useRef({
-    onLoad,
-    onStateChange,
-    loader,
-    decoder,
-    event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
-    // The currentSrc the stored load event was for.
-    eventSrc: '',
-    state: '',
-    shown: false,
-    hidden: false,
-  })
-  Object.assign(latest.current, { onLoad, onStateChange, loader, decoder })
 
   let options: AttachOptions = { loading: strategy === 'eager' ? 'eager' : undefined, rootMargin: rootMargin ?? config.rootMargin, dwellTime: config.dwellTime, fadeDuration: fadeMs }
   if (native) options = { ...options, loading: 'native', priority }
@@ -330,6 +340,8 @@ function ImageBox({
   useEffect(() => {
     const img = self.current!
     const state = latest.current
+    // Destroying a displayed source removed the placeholder that React wrote for this new one.
+    if (state.shown !== identity) Object.assign(img.closest<HTMLElement>('[data-le]')!.style, paint)
     // The SSR placeholder sets the background position, which the decoded image keeps.
     const thumbhash: ThumbHashDecoder | undefined =
       decoder &&
@@ -349,15 +361,15 @@ function ImageBox({
       },
       onDisplay(_, event) {
         // A native image calls onLoad from its React handler.
-        if (state.shown || native) {
-          if (!event) state.shown = true
+        if (state.shown === identity || native) {
+          if (!event) state.shown = identity
           return
         }
         // Adoption has no event of its own. A load seen for this very source before a
         // re-attach (one mid-decode) is still its first load; otherwise no onLoad follows.
         const loaded = state.event && (event ? state.event.nativeEvent === event : state.eventSrc === img.currentSrc)
         if (event && !loaded) return
-        state.shown = true
+        state.shown = identity
         if (!loaded) return
         const synthetic = state.event as unknown as { currentTarget: EventTarget | null }
         // React has reset currentTarget since the event was dispatched.
@@ -397,7 +409,6 @@ function ImageBox({
     // Checks the props the image mounted with; later changes are not re-checked.
   }, [])
 
-  const fallback = !native && noScript && prepared(sizes)
   const img = (
     <img
       {...imgProps}
@@ -420,8 +431,8 @@ function ImageBox({
         state.event = event
         state.eventSrc = event.currentTarget.currentSrc
         // A native image calls onLoad here, with currentTarget set, on the first load of its source.
-        if (native && !state.shown && event.currentTarget.currentSrc !== INERT) {
-          state.shown = true
+        if (native && state.shown !== identity && event.currentTarget.currentSrc !== INERT) {
+          state.shown = identity
           state.onLoad?.(event)
         }
       }}
@@ -456,7 +467,7 @@ function ImageBox({
             loading="lazy"
             decoding="async"
             className={className}
-            style={{ ...imgStyle, ...(boxed && cover ? { position: 'absolute', inset: 0 } : null) }}
+            style={{ ...imgStyle, position: 'absolute', inset: 0 }}
           />
         </noscript>
       )}
