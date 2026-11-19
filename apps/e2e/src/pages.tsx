@@ -4,6 +4,7 @@ import * as thumbhash from 'thumbhash'
 // From source: the app depends on @lazy-ease/react only.
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { FOCUS } from './focus.js'
+import { NO_SCRIPT } from './noscript.js'
 
 export interface FixtureImage {
   src: string
@@ -164,6 +165,28 @@ function Focus({ images: { focus } }: PageProps) {
   )
 }
 
+function NoScriptFallbacks({ images: { photo } }: PageProps) {
+  return (
+    <div className="row" style={{ flexWrap: 'wrap' }}>
+      {Object.entries(NO_SCRIPT).map(([id, props]) => (
+        <div key={id} id={id} style={{ width: 320, flexShrink: 0 }}>
+          <Image src={photo.src} alt="Fallback" srcWidth={photo.width} srcHeight={photo.height} noScript {...props} />
+        </div>
+      ))}
+      {/* With sources, the picture holds the inert img: it shares the fallback's slot too. */}
+      <div id="picture" style={{ width: 320, flexShrink: 0 }}>
+        <Image src={photo.src} alt="Picture" aspectRatio={1.5} fadeDuration={0} sources={[{ media: '(min-width: 1px)', src: photo.src, aspectRatio: 1.5 }]} noScript />
+        <p id="after-picture">After the picture</p>
+      </div>
+      {/* No height to reserve: the fallback must push the next paragraph down, not cover it. */}
+      <div id="unsized" style={{ width: 320, flexShrink: 0 }}>
+        <Image src="/tall.svg" alt="Tall" width={320} fadeDuration={0} noScript />
+        <p id="after">After the image</p>
+      </div>
+    </div>
+  )
+}
+
 export const pages: Record<string, (props: PageProps) => ReactNode> = {
   'below-fold': BelowFold,
   dpr: Dpr,
@@ -173,6 +196,7 @@ export const pages: Record<string, (props: PageProps) => ReactNode> = {
   priority: Priority,
   'first-viewport': FirstViewport,
   focus: Focus,
+  noscript: NoScriptFallbacks,
 }
 
 function HydrationFlag() {

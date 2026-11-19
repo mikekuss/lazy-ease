@@ -3,11 +3,14 @@ import { defineConfig } from '@playwright/test'
 // The opt-in pixel frame test for the controller case page (apps/demo/controller.html).
 // Run it with `pnpm test:frames`. It is not part of `pnpm e2e` or CI: the default
 // config only looks in tests/, this one only in frames/.
-const PORT = 5173
+// PORT and SERVER_PORT move Vite and the image server, as in apps/demo.
+const PORT = Number(process.env.PORT) || 5173
 const baseURL = `http://localhost:${PORT}`
 
 export default defineConfig({
   testDir: 'frames',
+  // Refuses servers that another checkout started on these ports.
+  globalSetup: './frames/identity.ts',
   // One page records at a time, so the cases don't compete for the CPU while they are filmed.
   workers: 1,
   fullyParallel: false,
@@ -22,7 +25,7 @@ export default defineConfig({
     deviceScaleFactor: 1,
   },
   webServer: {
-    // The demo's dev script: Vite on 5173 and the image server on 3001.
+    // The demo's dev script: Vite on PORT (5173) and the image server on SERVER_PORT (3001).
     command: 'pnpm --dir ../demo dev',
     // Proxied to the image server, so this only answers once both are up
     // (the first start generates the images).

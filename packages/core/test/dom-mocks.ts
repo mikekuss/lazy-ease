@@ -1,5 +1,5 @@
 // Browser APIs jsdom lacks, driven by the controller tests.
-import { vi } from 'vitest'
+import { onTestFinished, vi } from 'vitest'
 
 export class MockIntersectionObserver {
   static instances: MockIntersectionObserver[] = []
@@ -140,3 +140,41 @@ export function fail(img: HTMLImageElement): void {
 
 /** Lets pending promises (decode, format detection) settle under fake timers. */
 export const flush = () => vi.advanceTimersByTimeAsync(0)
+
+export interface MockAnimation {
+  keyframes: unknown
+  duration: unknown
+  cancelled: boolean
+  cancel(): void
+}
+
+/** Gives `img` an `animate()` (jsdom has none) and returns the animations it starts. */
+export function mockAnimate(img: HTMLElement): MockAnimation[] {
+  const animations: MockAnimation[] = []
+  Object.defineProperty(img, 'animate', {
+    configurable: true,
+    value: (keyframes: unknown, duration: unknown) => {
+      const animation: MockAnimation = { keyframes, duration, cancelled: false, cancel: () => void (animation.cancelled = true) }
+      animations.push(animation)
+      return animation
+    },
+  })
+  return animations
+}
+
+/** Records every read that resolves style or layout, in order. Undone when the test ends. */
+export function recordLayoutReads(): string[] {
+  const reads: string[] = []
+  const getters = (proto: object, names: string[]) =>
+    names.map((name) => vi.spyOn(proto as Record<string, number>, name, 'get').mockImplementation(() => (reads.push(name), 0)))
+  const spies = [
+    ...getters(HTMLElement.prototype, ['offsetWidth', 'offsetHeight', 'offsetTop', 'offsetLeft', 'offsetParent']),
+    ...getters(Element.prototype, ['clientWidth', 'clientHeight', 'clientTop', 'clientLeft', 'scrollWidth', 'scrollHeight', 'scrollTop', 'scrollLeft']),
+    ...(['getBoundingClientRect', 'getClientRects'] as const).map((name) =>
+      vi.spyOn(Element.prototype, name).mockImplementation(() => (reads.push(name), {}) as never),
+    ),
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(() => (reads.push('getComputedStyle'), {}) as never),
+  ]
+  onTestFinished(() => spies.forEach((spy) => spy.mockRestore()))
+  return reads
+}

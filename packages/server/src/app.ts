@@ -16,7 +16,7 @@ import {
   type OutputFormat,
 } from './contract.js'
 import { admitsCrop, createContentRevisions, revisionOf, type SourcePolicy, type SourceRef } from './policy.js'
-import { DEFAULT_AVIF_EFFORT, DEFAULT_MAX_INPUT_PIXELS, DEFAULT_TIMEOUT, createRenderQueue, mapSharpError, render, type Encoded } from './render.js'
+import { DEFAULT_AVIF_EFFORT, DEFAULT_MAX_INPUT_PIXELS, DEFAULT_TIMEOUT, createRenderQueue, mapSharpError, render, withDeadline, type Encoded } from './render.js'
 import { RENDER_TYPES, openSource, parseSourcePath, realRoot, type Source, type SourcePath } from './source.js'
 import { defaultStorage, defaultStorageDir, type VariantStorage } from './storage.js'
 import { REVISION_PATTERN, TENANT_PATTERN, verifyCropToken, type CropTokenKeys } from './token.js'
@@ -26,11 +26,11 @@ export type OriginalType = 'gif' | 'svg'
 export interface ImageServerOptions {
   /** Directory the source images are read from. */
   root: string
-  /** Width ladder. Must match the loader's. */
+  /** Width ladder. Must match the loader's. Positive integers, ascending, without duplicates. */
   widths?: readonly number[]
-  /** Ratio ladder. Must match the loader's. */
+  /** Ratio ladder. Must match the loader's. Positive numbers, ascending, without duplicates in their URL spelling. */
   ratios?: readonly number[]
-  /** Allowed `q` values. Must match the loader's. Every request names one. */
+  /** Allowed `q` values. Must match the loader's. Every request names one. Integers from 1 to 100, without duplicates. */
   qualities?: readonly number[]
   /** Formats encoded. Must match the loader's `formats`. Default avif, webp and jpeg. */
   formats?: readonly OutputFormat[]
@@ -39,6 +39,15 @@ export interface ImageServerOptions {
    * crop token. `[A-Za-z0-9._~-]{1,64}`, never taken from the request. Default `default`.
    */
   tenant?: string
+  /**
+   * Which sources the variants come from: part of every variant identity and
+   * ETag, so apps with different roots never share a stored variant. Default
+   * the real path of `root`. Set it when one storage is shared between hosts:
+   * the same value on hosts that serve the same sources (whatever their
+   * mount paths), a different one for different sources. 1 to 1024
+   * characters, no NUL.
+   */
+  sourceNamespace?: string
   /**
    * The policy of a source, by its canonical path. `undefined` makes the
    * source a 404. Default: every source is public, with its content revision
@@ -68,10 +77,11 @@ export interface ImageServerOptions {
   /** Sources with more pixels than this are a 413. Default 50 MP. */
   maxInputPixels?: number
   /**
-   * Response deadline in ms, from admission: waiting in the queue counts. The
-   * request is answered with a 504 after this long. Each render also gives
-   * sharp the full timeout when it starts, in whole seconds rounded up, to
-   * stop decode and resize work; an AVIF encode already running finishes in
+   * Response deadline in ms, from admission: everything after it counts,
+   * `policy`, `authorize`, file system calls, storage lookups and waiting in
+   * the queue included. The request is answered with a 504 after this long.
+   * Each render also gives sharp the full timeout when it starts, in whole
+   * seconds rounded up, to stop decode and resize work; an AVIF encode already running finishes in
    * the background, still holding its render slot, so `avifEffort` bounds
    * that part. Default 10 s.
    */
@@ -153,6 +163,7 @@ export function createImageApp({
   qualities = DEFAULT_QUALITIES,
   formats = OUTPUT_FORMATS,
   tenant = 'default',
+  sourceNamespace,
   policy = () => ({}),
   keys,
   authorize,
@@ -169,9 +180,15 @@ export function createImageApp({
   if ('cacheSize' in rest || 'cacheBytes' in rest) {
     throw new TypeError('cacheSize and cacheBytes were replaced by storage: memoryStorage({ maxEntries, maxBytes })')
   }
-  if (qualities.length === 0) throw new RangeError('qualities must not be empty')
+  checkLadder('widths', widths, 'positive integers', (n) => Number.isSafeInteger(n) && n >= 1, true)
+  checkLadder('ratios', ratios, 'positive numbers', (n) => Number.isFinite(n) && Number(formatNumber(n)) > 0, true)
+  // sharp takes quality 1 to 100 for AVIF, WebP and JPEG.
+  checkLadder('qualities', qualities, 'integers from 1 to 100', (n) => Number.isInteger(n) && n >= 1 && n <= 100, false)
   if (formats.length === 0 || formats.some((f) => !OUTPUT_FORMATS.includes(f))) throw new RangeError('formats must be avif, webp or jpeg')
   if (!TENANT_PATTERN.test(tenant)) throw new RangeError('tenant must be 1 to 64 URL-safe characters')
+  if (sourceNamespace !== undefined && !(typeof sourceNamespace === 'string' && /^[^\0]{1,1024}$/.test(sourceNamespace))) {
+    throw new RangeError('sourceNamespace must be 1 to 1024 characters without NUL')
+  }
   // An empty map is no keys: a token is a 400, not a 403 for every token.
   const tokenKeys = keys && Object.keys(keys).length > 0 ? keys : undefined
   if (tokenKeys) {
@@ -278,8 +295,14 @@ export function createImageApp({
     return c.text('Internal Server Error', 500, { 'Cache-Control': 'no-store' })
   })
 
-  app.get('/:path{.+}', async (c) => {
+  // One deadline from admission bounds the whole response. Work it abandons
+  // (a slow policy, storage or render) runs on; a render keeps its slot.
+  app.get('/:path{.+}', (c) => {
     const deadline = Date.now() + timeout
+    return withDeadline(serve(c, deadline), deadline)
+  })
+
+  async function serve(c: Context, deadline: number): Promise<Response> {
     const url = new URL(c.req.url)
     const query = url.search.slice(1)
     const sourcePath = parseSourcePath(rawSourcePath(c, url.pathname), pathTypes)
@@ -302,7 +325,9 @@ export function createImageApp({
     // Before the file system, the cache and 304s: a private image is checked on every request.
     if (rules.private && !(authorize && (await authorize(c.req.raw, ref)))) throw forbidden('Not authorized')
 
-    const source = await openSource(await rootDir(), sourcePath, original ? new Set([ORIGINAL_EXTENSIONS[original]]) : RENDER_TYPES)
+    const realRootDir = await rootDir()
+    const namespace = sourceNamespace ?? realRootDir
+    const source = await openSource(realRootDir, sourcePath, original ? new Set([ORIGINAL_EXTENSIONS[original]]) : RENDER_TYPES)
     if (source.size > maxFileSize) throw tooLarge()
 
     const version = params ? params.version : originalQuery?.[1]
@@ -320,7 +345,7 @@ export function createImageApp({
     if (version !== undefined && version !== revision) throw unknownRevision()
     if (params) admit(params, rules, sourcePath)
 
-    const identity = variantIdentity(source, sourcePath, revision, params)
+    const identity = variantIdentity(namespace, source, sourcePath, revision, params)
     const etag = `"${createHash('sha256').update(identity).digest('base64url').slice(0, 32)}"`
     const headers: Record<string, string> = {
       // Only a validated revision in the URL makes a public response immutable.
@@ -352,7 +377,7 @@ export function createImageApp({
                 throw mapSharpError(error)
               })
           // Kept even when the response that asked for it has already timed out.
-          store.put(identity, result, `${tenant} ${sourcePath.canonical}`)
+          store.put(identity, result, `${tenant}\0${namespace}\0${sourcePath.canonical}`)
           return result
         },
         deadline,
@@ -364,7 +389,7 @@ export function createImageApp({
       'Content-Type': encoded.type,
       'Content-Length': String(encoded.body.byteLength),
     })
-  })
+  }
 
   /** Throws a 403 unless a valid token or the policy admits the crop. */
   function admit(params: ImageParams, rules: SourcePolicy, sourcePath: SourcePath) {
@@ -384,12 +409,12 @@ export function createImageApp({
   }
 
   /**
-   * Everything that selects the bytes: tenant, source, revision and the
-   * file's identity, the transform profile and the representation. The token
-   * and the spelling of the path are not part of it.
+   * Everything that selects the bytes: tenant, source namespace, source,
+   * revision and the file's identity, the transform profile and the
+   * representation. The token and the spelling of the path are not part of it.
    */
-  function variantIdentity(source: Source, sourcePath: SourcePath, revision: string, params: ImageParams | undefined): string {
-    const common = [tenant, sourcePath.canonical, revision, source.size, source.mtimeMs]
+  function variantIdentity(namespace: string, source: Source, sourcePath: SourcePath, revision: string, params: ImageParams | undefined): string {
+    const common = [tenant, namespace, sourcePath.canonical, revision, source.size, source.mtimeMs]
     if (!params) return [...common, 'original'].join('\0')
     return [
       ...common,
@@ -404,6 +429,21 @@ export function createImageApp({
   }
 
   return app
+}
+
+/**
+ * Throws unless `values` is a non-empty ladder of `rule` values whose URL
+ * spellings are distinct and, when `sorted`, ascending: the loader's
+ * candidate code assumes sorted width and ratio ladders.
+ */
+function checkLadder(name: string, values: readonly number[], rule: string, valid: (n: number) => boolean, sorted: boolean) {
+  if (!(values.length > 0)) throw new RangeError(`${name} must not be empty`)
+  const bad = values.findIndex((n) => typeof n !== 'number' || !valid(n))
+  if (bad >= 0) throw new RangeError(`${name} must be ${rule}, not ${String(values[bad])}`)
+  const spelled = values.map((n) => Number(formatNumber(n)))
+  if (sorted ? spelled.some((n, i) => i > 0 && !(n > spelled[i - 1]!)) : new Set(spelled).size < spelled.length) {
+    throw new RangeError(sorted ? `${name} must be ascending, without duplicates` : `${name} must not repeat a value`)
+  }
 }
 
 /**

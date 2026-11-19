@@ -196,6 +196,13 @@ app.use('/_img/*', async (c, next) => {
 app.route('/_img', createImageApp({ root, storage: memoryStorage(), qualities: [60, 75], policy: ({ path }) => (path === images.focus.src ? { focalPoint: FOCUS } : {}) }))
 
 app.get('/health', (c) => c.text('ok'))
+// 320×640 and loaded as is: an intrinsic image whose height nothing reserves.
+app.get('/tall.svg', (c) =>
+  c.body('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="640"><rect width="320" height="640" fill="#2a6"/></svg>', 200, {
+    'Content-Type': 'image/svg+xml',
+    'Cache-Control': 'no-store',
+  }),
+)
 // `?delay={ms}` holds the script back, `?status={code}` fails it: a script that arrives late or not at all.
 app.get('/assets/lazy-ease.min.js', async (c) => {
   const delay = Number(c.req.query('delay'))

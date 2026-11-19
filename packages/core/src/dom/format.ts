@@ -1,4 +1,4 @@
-import type { ImageFormat } from '../loader.js'
+import { DEFAULT_FORMATS as PREFERENCE, type ImageFormat } from '../loader.js'
 
 // 1×1 white pixels, encoded with sharp.
 const AVIF =
@@ -7,7 +7,6 @@ const AVIF =
 /** How long an image waits for detection before it falls back to WebP. */
 export const DETECTION_TIMEOUT = 200
 
-const PREFERENCE: readonly ImageFormat[] = ['avif', 'webp', 'jpeg']
 let detection: Promise<ImageFormat> | undefined
 let detected: ImageFormat | undefined
 

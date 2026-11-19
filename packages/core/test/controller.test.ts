@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLazyEase, createLoader, whenVisible, type AttachOptions, type Attachment, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
 import { chooseFormat, resetFormatDetection } from '../src/dom/format.js'
 import { observeResize, resetObservers } from '../src/dom/observe.js'
-import { fail, fakeImage, flush, installDom, intersect, load, media, MockIntersectionObserver, MockResizeObserver, probe, resize } from './dom-mocks.js'
+import { fail, fakeImage, flush, installDom, intersect, load, media, mockAnimate, MockIntersectionObserver, MockResizeObserver, probe, recordLayoutReads, resize } from './dom-mocks.js'
 
 const INERT = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
 const PLACEHOLDER = 'rgb(187, 200, 207)'
@@ -83,16 +83,50 @@ describe('prepared mode', () => {
     expect(img.style.transition).toBe('')
   })
 
-  it('flushes style before the fade, so opacity 0 is its start value', async () => {
+  it('starts the fade from opacity 0 with an animation, not a style flush', async () => {
     const { img, box, attach } = setup()
-    const seen: string[] = []
-    Object.defineProperty(img, 'offsetWidth', { get: () => (seen.push(`${img.style.opacity}|${img.style.transition}`), 0) })
+    const animations = mockAnimate(img)
+    const reads = recordLayoutReads()
     attach({ url: '/a-640.webp' })
     intersect(box)
     // Load and decode in the same frame as the install: no frame resolved opacity 0 yet.
     await loadAndDecode(img)
-    expect(seen).toEqual(['0|'])
+    expect(animations).toMatchObject([{ keyframes: { opacity: [0, 1], easing: 'ease-out' }, duration: 400, cancelled: false }])
     expect(img.style.opacity).toBe('1')
+    expect(img.style.transition).toBe('opacity 400ms ease-out')
+    vi.advanceTimersByTime(400)
+    expect(box.style.backgroundColor).toBe('')
+    expect(img.style.opacity).toBe('')
+    expect(reads).toEqual([])
+  })
+
+  it('reads no style or layout through load, decode and reveal', async () => {
+    const reads = recordLayoutReads()
+    const run = async (options: AttachOptions, hang = false) => {
+      const { img, box, attach, fake } = setup()
+      mockAnimate(img)
+      // A decode that never settles: the timeout reveals the image.
+      if (hang) fake.decodeWith = 'hang'
+      const handle = attach(options)
+      intersect(box)
+      resize(box, 320, 213)
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(250)
+      await flush()
+      expect(handle.state, JSON.stringify(options)).toBe('loaded')
+      vi.advanceTimersByTime(400)
+      // Adoption of the displayed image.
+      handle.destroy()
+      expect(attach(options).state).toBe('loaded')
+    }
+    await run({ url: '/a.webp' })
+    await run({ srcset: '/a-640.webp 640w, /a-1280.webp 1280w', sizes: '50vw', url: '/a-640.webp', loading: 'eager' })
+    await run({ src: '/a.jpg', aspectRatio: 1.5 })
+    await run({ src: '/a.jpg', fill: true, focalPoint: { x: 20, y: 70 } })
+    await run({ src: '/a.jpg' }, true)
+    media.reducedMotion = true
+    await run({ url: '/a.webp' })
+    expect(reads).toEqual([])
   })
 
   it('needs no loader and reads no layout for a prepared slot', () => {
@@ -411,6 +445,27 @@ describe('generations', () => {
     expect(img.style.transition).toBe('')
     expect(box.style.backgroundColor).toBe('')
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('cancels the fade animation of a generation that ends mid-fade; its timer cannot release the next', async () => {
+    const { img, box, attach } = setup()
+    const animations = mockAnimate(img)
+    const handle = attach({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(img)
+    expect(animations).toHaveLength(1)
+    vi.advanceTimersByTime(200)
+    handle.update({ url: '/b.webp', loading: 'eager' })
+    expect(animations[0]!.cancelled).toBe(true)
+    // The new source is hidden over its placeholder, and the old fade's end does not change that.
+    vi.advanceTimersByTime(400)
+    expect(img.style.opacity).toBe('0')
+    expect(box.style.backgroundColor).toBe(PLACEHOLDER)
+    await loadAndDecode(img)
+    expect(animations).toHaveLength(2)
+    expect(animations[1]!.cancelled).toBe(false)
+    handle.destroy()
+    expect(animations[1]!.cancelled).toBe(true)
+    expect(img.style.opacity).toBe('')
   })
 
   it('shows a target still loading when destroy ends the generation, over the placeholder', async () => {
@@ -796,11 +851,14 @@ describe('visibility', () => {
     }
     vi.stubGlobal('IntersectionObserver', Strict)
     const { img, box, attach } = setup()
-    const listeners = vi.spyOn(img, 'removeEventListener')
+    const added = vi.spyOn(img, 'addEventListener')
+    const removed = vi.spyOn(img, 'removeEventListener')
     expect(() => attach({ url: '/a.webp', rootMargin: '400', placeholder: '#00f' })).toThrow(SyntaxError)
     expect(box.hasAttribute('data-state')).toBe(false)
     expect(box.style.backgroundColor).toBe(PLACEHOLDER)
-    expect(listeners).toHaveBeenCalledWith('load', expect.any(Function))
+    // The generation that could not start ended: every listener it added is gone.
+    expect(removed.mock.calls).toEqual(added.mock.calls)
+    expect((img as unknown as Record<symbol, unknown>)[Symbol.for('lazy-ease.attachment')]).toBeUndefined()
     // A later valid attach takes it.
     attach({ url: '/a.webp' })
     expect(box.dataset.state).toBe('idle')
@@ -832,6 +890,35 @@ describe('visibility', () => {
     expect(source.getAttribute('sizes')).toBe('100vw')
     // The element still knows its target, so the same source adopts it.
     expect(le.attach(img, { url: '/a.webp' }).state).toBe('loaded')
+  })
+
+  it('keeps the displayed image and the handle when an update has a margin the observer refuses', async () => {
+    class Strict extends MockIntersectionObserver {
+      constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit = {}) {
+        if (options.rootMargin === 'invalid') throw new SyntaxError('rootMargin must be specified in pixels or percent')
+        super(callback, options)
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Strict)
+    const { img, box, attach, states } = setup()
+    const handle = attach({ url: '/old.webp', loading: 'eager' })
+    await loadAndDecode(img)
+    vi.advanceTimersByTime(400)
+    const claim = () => (img as unknown as Record<symbol, unknown>)[Symbol.for('lazy-ease.attachment')]
+    const before = { src: img.getAttribute('src'), state: handle.state, claim: claim(), box: box.getAttribute('style') }
+    expect(before.state).toBe('loaded')
+    expect(() => handle.update({ url: '/new.webp', rootMargin: 'invalid' })).toThrow(SyntaxError)
+    expect(before.claim).toBeDefined()
+    expect({ src: img.getAttribute('src'), state: handle.state, claim: claim(), box: box.getAttribute('style') }).toEqual(before)
+    expect(states.at(-1)).toBe('loaded')
+    // The generation still runs: an upgrade load keeps it loaded, and a valid update still works.
+    load(img, '/old.webp')
+    await flush()
+    expect(handle.state).toBe('loaded')
+    handle.update({ url: '/new.webp', rootMargin: '10px' })
+    expect(img.getAttribute('src')).toBe(INERT)
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/new.webp')
   })
 })
 

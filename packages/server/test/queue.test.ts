@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRenderQueue, mapSharpError, withTimeout } from '../src/render.js'
+import { createRenderQueue, mapSharpError, withDeadline } from '../src/render.js'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -144,13 +144,36 @@ describe('createRenderQueue', () => {
   })
 })
 
-describe('withTimeout', () => {
+describe('createRenderQueue deadlines', () => {
+  it('never starts a queued job after its deadline, even before its timer runs', async () => {
+    const queue = queueOf(1)
+    const gate = deferred<string>()
+    const running = queue.run('a', () => gate.promise, LATER())
+    let started = false
+    const deadline = Date.now() + 20
+    const queued = queue.run('b', async () => ((started = true), 'b'), deadline)
+    queued.catch(() => {})
+    // Block the event loop past the deadline, so no timer has run when the slot frees.
+    while (Date.now() < deadline + 2) {
+      // busy wait
+    }
+    gate.resolve('a')
+    await running
+    await expect(queued).rejects.toMatchObject({ status: 504 })
+    expect(started).toBe(false)
+    expect(queue.pending).toBe(0)
+  })
+})
+
+describe('withDeadline', () => {
   it('passes a fast result through', async () => {
-    expect(await withTimeout(Promise.resolve(1), 100)).toBe(1)
+    expect(await withDeadline(Promise.resolve(1), Date.now() + 100)).toBe(1)
   })
 
-  it('rejects with a 504 when too slow', async () => {
-    await expect(withTimeout(new Promise(() => {}), 5)).rejects.toMatchObject({ status: 504 })
+  it('rejects with a 504 when too slow, never before the deadline', async () => {
+    const deadline = Date.now() + 5
+    await expect(withDeadline(new Promise(() => {}), deadline)).rejects.toMatchObject({ status: 504 })
+    expect(Date.now()).toBeGreaterThanOrEqual(deadline)
   })
 })
 

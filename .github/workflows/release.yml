@@ -90,6 +90,19 @@ jobs:
           # shellcheck disable=SC2086 # PACKAGES is a space-separated list
           node scripts/pack.mjs "$RUNNER_TEMP/pack" $PACKAGES
 
+      # Fails before uploading anything if a package isn't on npm yet (Trusted
+      # Publishing can't create one; RELEASING.md has the first publish by
+      # hand) or if a version already on npm has other files than the tarball
+      # packed here. Matching versions are marked for the Publish step to skip,
+      # and release.json takes npm's integrity for them.
+      - name: Compare with npm
+        env:
+          DRY_RUN: ${{ github.event_name != 'push' }}
+        run: |
+          flags=()
+          [ "$DRY_RUN" = true ] && flags+=(--dry-run)
+          node scripts/check-published.mjs "$RUNNER_TEMP/pack" "${flags[@]}"
+
       # The GitHub Release assets: the conformance fixtures, byte for byte from
       # the packed @lazy-ease/testing, and release.json (every tarball with its
       # integrity and files).
@@ -105,33 +118,31 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           overwrite: true
+      # The tarballs themselves, so a first version published by hand
+      # (RELEASING.md) can be exactly the bytes this workflow checks.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarballs
+          path: ${{ runner.temp }}/pack/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
 
-      # Trusted Publishing can't create a package. Fail before uploading
-      # anything if one of them isn't on npm yet; RELEASING.md has the first
-      # publish by hand.
-      - name: Check that every package exists on npm
-        env:
-          DRY_RUN: ${{ github.event_name != 'push' }}
+      # The tag on GitHub must still name the commit this run checked and packed:
+      # a tag moved after the push would give npm and the release other code.
+      - name: Check that the tag still points at this commit
+        if: github.event_name == 'push'
         run: |
-          missing=()
-          while IFS=$'\t' read -r name; do
-            npm view "$name" name > /dev/null 2>&1 || missing+=("$name")
-          done < <(node -e 'for (const p of require(process.argv[1])) console.log(p.name)' "$RUNNER_TEMP/pack/packed.json")
-          if [ "${#missing[@]}" -gt 0 ]; then
-            if [ "$DRY_RUN" = true ]; then
-              echo "::warning::Not on npm yet, a tag push would fail here (RELEASING.md): ${missing[*]}"
-            else
-              echo "::error::Not on npm yet, publish the first version by hand (RELEASING.md): ${missing[*]}"
-              exit 1
-            fi
+          # An annotated tag lists its commit as the peeled ref (^{}), last.
+          remote=$(git ls-remote origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}" | tail -n 1 | cut -f 1)
+          if [ "$remote" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME points at ${remote:-nothing} on GitHub, not at $GITHUB_SHA, which this run checked"
+            exit 1
           fi
 
       # Publishes the tarballs checked above, dependencies first (packed.json
-      # is in publication order). A version that is already on npm is skipped,
-      # so a failed run can be re-run. If its integrity on npm differs from the
-      # tarball packed here (a version published by hand on another machine:
-      # gzip headers differ between systems), it warns, because release.json
-      # describes the tarball packed here.
+      # is in publication order). Versions that are already on npm with the
+      # same files are skipped, so a failed run can be re-run.
       - name: Publish
         id: publish
         env:
@@ -142,19 +153,15 @@ jobs:
           [ "$PRERELEASE" = true ] && args+=(--tag next)
           [ "$DRY_RUN" = true ] && args+=(--dry-run)
           published=()
-          while IFS=$'\t' read -r name version tarball integrity; do
-            if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
-              echo "::notice::$name@$version is already on npm, skipping"
-              remote="$(npm view "$name@$version" dist.integrity 2>/dev/null)"
-              if [ "$remote" != "$integrity" ]; then
-                echo "::warning::$name@$version on npm has integrity ${remote:-(none)}, release.json has $integrity (the tarball packed here; RELEASING.md)"
-              fi
+          while IFS=$'\t' read -r name version tarball skip; do
+            if [ "$skip" = true ]; then
+              echo "::notice::$name@$version is already on npm with the same files, skipping"
             else
               pnpm publish "$tarball" "${args[@]}"
             fi
             published+=("$name")
           done < <(node -e '
-            for (const p of require(process.argv[1])) console.log([p.name, p.version, p.tarball, p.integrity].join("\t"));
+            for (const p of require(process.argv[1])) console.log([p.name, p.version, p.tarball, !!p.published].join("\t"));
           ' "$RUNNER_TEMP/pack/packed.json")
           echo "published=${published[*]}" >> "$GITHUB_OUTPUT"
 
@@ -170,6 +177,16 @@ jobs:
         with:
           name: release-assets
           path: ${{ runner.temp }}/assets
+      # The tag on GitHub must still name the commit this run checked and packed:
+      # a tag moved after the push would give npm and the release other code.
+      - name: Check that the tag still points at this commit
+        run: |
+          # An annotated tag lists its commit as the peeled ref (^{}), last.
+          remote=$(git ls-remote origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}" | tail -n 1 | cut -f 1)
+          if [ "$remote" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME points at ${remote:-nothing} on GitHub, not at $GITHUB_SHA, which this run checked"
+            exit 1
+          fi
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -179,9 +196,27 @@ jobs:
           PUBLISHED: ${{ needs.publish.outputs.published }}
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
-            # A re-run: the assets come from the same commit, so replacing them changes nothing.
-            echo "::notice::A release for $TAG already exists, only uploading its assets"
-            gh release upload "$TAG" "$RUNNER_TEMP"/assets/*.json --clobber
+            # A re-run. Upload only assets the release lacks; one that differs
+            # from this run means the tag or npm changed, so stop.
+            mkdir "$RUNNER_TEMP/existing"
+            # No asset yet is no match, not an error.
+            gh release download "$TAG" --pattern '*.json' --dir "$RUNNER_TEMP/existing" || true
+            upload=()
+            for file in "$RUNNER_TEMP"/assets/*.json; do
+              old="$RUNNER_TEMP/existing/$(basename "$file")"
+              if [ ! -f "$old" ]; then
+                upload+=("$file")
+              elif ! cmp -s "$file" "$old"; then
+                echo "::error::The release for $TAG already has a different $(basename "$file")"
+                exit 1
+              fi
+            done
+            echo "::notice::A release for $TAG already exists, uploading ${#upload[@]} missing assets"
+            [ "${#upload[@]}" -eq 0 ] || gh release upload "$TAG" "${upload[@]}"
+            # A run that failed while uploading can leave the release a draft.
+            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true ]; then
+              gh release edit "$TAG" --draft=false
+            fi
             exit 0
           fi
           # shellcheck disable=SC2086 # PUBLISHED is a space-separated list

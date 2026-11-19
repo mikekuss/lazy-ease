@@ -2,7 +2,7 @@
 
 All five packages are released together at one version: `@lazy-ease/core`, `@lazy-ease/react`, `@lazy-ease/server`, `@lazy-ease/testing` and `@lazy-ease/vanilla`. Each `@lazy-ease` dependency is `workspace:*` in the repository, and pnpm packs it as the exact version of the same release, so the packages on npm always match each other.
 
-Pushing a version tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml). It checks that the tag, the package versions and the changelog agree (`scripts/release-check.mjs`), runs typecheck, tests and build, packs every package with pnpm and checks the tarballs, publishes them to npm with provenance, dependencies first, and creates the GitHub Release from `CHANGELOG.md` with the release assets.
+Pushing a version tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml). It checks that the tag, the package versions and the changelog agree (`scripts/release-check.mjs`), runs typecheck, tests and build, packs every package with pnpm and checks the tarballs, compares them with any version already on npm, publishes them to npm with provenance, dependencies first, and creates the GitHub Release from `CHANGELOG.md` with the release assets.
 
 ## Before every release: the local checks
 
@@ -29,7 +29,7 @@ To see exactly what would be uploaded, `node scripts/pack.mjs .cache/release` pa
 
 ### The frame test
 
-`pnpm test:frames` starts the demo dev servers (Vite on 5173, the image server on 3001), or reuses them if `pnpm dev` is already running, opens `apps/demo/controller.html` in Chromium and checks that every controller case passes. Then it reruns the fade, placeholder, lazy scroll-root, priority, resize, failed-upgrade and `update()` cases while recording the real screen frames, and fails if any frame shows alt text, a broken-image icon or a blank box between the placeholder and the image. A failing test attaches a contact sheet of the frames to the report (`apps/e2e/playwright-report/frames`, open it with `pnpm --filter e2e exec playwright show-report playwright-report/frames`). How frames are judged is described at the top of `apps/e2e/frames/controller-frames.spec.ts`.
+`pnpm test:frames` starts the demo dev servers (Vite on 5173, the image server on 3001; `PORT` and `SERVER_PORT` move them), or reuses them if `pnpm dev` is already running in the same checkout (it refuses servers that another worktree started on those ports), opens `apps/demo/controller.html` in Chromium and checks that every controller case passes. Then it reruns the fade, placeholder, lazy scroll-root, priority, resize, failed-upgrade and `update()` cases while recording the real screen frames, and fails if any frame shows alt text, a broken-image icon or a blank box between the placeholder and the image. A failing test attaches a contact sheet of the frames to the report (`apps/e2e/playwright-report/frames`, open it with `pnpm --filter e2e exec playwright show-report playwright-report/frames`). How frames are judged is described at the top of `apps/e2e/frames/controller-frames.spec.ts`.
 
 The test is not part of `pnpm test`, `pnpm e2e` or CI: it needs the demo servers, takes about a minute and depends on real frame timing. Don't tag a release while it fails. It needs Chromium for Playwright (`pnpm --filter e2e exec playwright install chromium`).
 
@@ -53,15 +53,15 @@ The test is not part of `pnpm test`, `pnpm e2e` or CI: it needs the demo servers
    git push origin vx.y.z
    ```
 
-5. Watch the Release run under Actions. When it is done, every package is on npm with a provenance badge and the GitHub Release exists with its assets.
+5. Watch the Release run under Actions. When it is done, every package is on npm and the GitHub Release exists with its assets. Versions the workflow published carry a provenance badge; a first version published by hand has none.
 
-The run fails before anything is published if the tag isn't `v` plus the shared version, if the changelog has no `## [x.y.z]` section, if a packed `package.json` still has a `source` export condition or needs a `@lazy-ease` package at another version, or if one of the packages doesn't exist on npm yet (see [First publish of a new package](#first-publish-of-a-new-package)).
+The run fails before anything is published if the tag isn't `v` plus the shared version, if the changelog has no `## [x.y.z]` section, if a packed `package.json` still has a `source` export condition or needs a `@lazy-ease` package at another version, if one of the packages doesn't exist on npm yet (see [First publish of a new package](#first-publish-of-a-new-package)), if a version that is already on npm has other files than the tarball packed in the run, or if the tag on GitHub no longer points at the commit the run checked. The GitHub Release job checks the tag again before it creates or completes the release.
 
-The packages are published one by one in dependency order: `@lazy-ease/core`, then the packages that need it. If a run stops halfway, npm holds the dependencies but not yet the packages that need them, never the other way round. Re-running a failed run is safe: versions that are already on npm are skipped, and an existing GitHub Release for the tag only gets its assets uploaded again. Re-running only the GitHub Release job works while the `release-assets` artifact is kept (7 days); after that, re-run the whole workflow. To change the code of a release, bump the version instead; npm doesn't allow publishing a version twice.
+The packages are published one by one in dependency order: `@lazy-ease/core`, then the packages that need it. If a run stops halfway, npm holds the dependencies but not yet the packages that need them, never the other way round. Re-running a failed run is safe: a version that is already on npm is downloaded and compared file by file with the tarball packed in the run, skipped if they match and a failure if they don't, and an existing GitHub Release for the tag only gets the assets it lacks (an asset that differs from the run fails it). Re-running only the GitHub Release job works while the `release-assets` artifact is kept (7 days); after that, re-run the whole workflow. To change the code of a release, bump the version instead; npm doesn't allow publishing a version twice.
 
 A version with a pre-release part (`1.0.0-rc.1`) is published under the npm dist-tag `next` and marked as a pre-release on GitHub.
 
-To try the workflow without publishing, run it from the Actions tab (Release → Run workflow). That is a dry run: it accepts a changelog that still says `## [Unreleased]`, runs `pnpm publish --dry-run` (skipped if the version is already on npm), warns about packages that aren't on npm yet and creates no release. The release assets are kept as a workflow artifact.
+To try the workflow without publishing, run it from the Actions tab (Release → Run workflow). That is a dry run: it accepts a changelog that still says `## [Unreleased]`, runs `pnpm publish --dry-run` (skipped if the version is already on npm), warns about packages that aren't on npm yet and creates no release. The release assets (`release-assets`) and the tarballs (`tarballs`) are kept as workflow artifacts for 7 days.
 
 ## Release assets
 
@@ -70,7 +70,7 @@ The GitHub Release for each tag carries:
 - the conformance fixtures of `@lazy-ease/testing`: `manifest.json` and every file it lists, byte for byte from the packed tarball (`scripts/fixture-assets.mjs`). Check them against the lengths and SHA-256 sums in `manifest.json` after downloading.
 - `release.json`: the version, the commit, and per package the tarball name, size, npm `integrity` (`sha512-…`) and `shasum`, its `@lazy-ease` dependencies and every file with its size and SHA-256. `npm view @lazy-ease/core@x.y.z dist.integrity` prints the same integrity for a version the workflow published.
 
-`release.json` describes the tarballs CI packed. A version published by hand from another machine can have a different integrity on npm, because gzip headers differ between systems. The Publish step warns about each such package, with both values.
+For a version that was already on npm with the same files, for example one published by hand, `release.json` has npm's size, integrity and shasum: the same files can be a different gzip on another machine.
 
 ## One-time setup on npmjs.com
 
@@ -81,24 +81,32 @@ The workflow uses [npm Trusted Publishing](https://docs.npmjs.com/trusted-publis
 3. Under allowed actions, allow `npm publish`. Trusted publishers created after 2026-09-03 start with staged publishing only, and this workflow publishes directly.
 4. After the first release from the workflow, consider setting Publishing access to "Require two-factor authentication and disallow tokens". Trusted Publishing keeps working.
 
-An `ENEEDAUTH` error in the Publish step means the trusted publisher doesn't match the repository, workflow filename or allowed actions.
+A new trusted publisher must complete its first successful publish within 2 days, or npm lets it expire; an expired one can't be used or edited, only deleted and created again. So add it on the day of the tag that first publishes that package from the workflow, at most 2 days before. Once it has published, it doesn't expire. If that run fails and is re-run more than 2 days later, delete the expired publisher and add it again first.
+
+An `ENEEDAUTH` error in the Publish step means the trusted publisher doesn't match the repository, workflow filename or allowed actions, or that it expired.
 
 `repository.url` in each `package.json` must stay `git+https://github.com/mikekuss/lazy-ease.git`; npm compares it with the repository the token comes from, and `pnpm check:release` checks it.
 
 ### First publish of a new package
 
-Up to 0.2 only `@lazy-ease/react` was on npm. `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server` don't exist there yet, so they can't have a trusted publisher, and a tag push fails at "Check that every package exists on npm" before anything is uploaded. Each new package needs one version published by hand first, with pnpm (only pnpm applies `publishConfig.exports` and replaces `workspace:*`), logged in to npm as the owner of the `@lazy-ease` scope with two-factor authentication.
+Up to 0.2 only `@lazy-ease/react` was on npm. `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server` don't exist there yet, so they can't have a trusted publisher, and a tag push fails at "Compare with npm" before anything is uploaded. Each new package needs one version published by hand first, from a tarball pnpm packed (only pnpm applies `publishConfig.exports` and replaces `workspace:*`), logged in to npm as the owner of the `@lazy-ease` scope with two-factor authentication.
 
-Two ways to do this; pick one before the first 0.3 tag:
+For 0.3.0 the four are published by hand at 0.3.0 itself, from the tarballs a dry run of the workflow packed, so npm gets the exact bytes CI checked:
 
-- **A bootstrap version (recommended).** Publish a pre-release of the four new packages by hand, for example `0.3.0-bootstrap.0` under the dist-tag `bootstrap` (set that version in every `packages/*/package.json` locally, `pnpm build`, `node scripts/pack.mjs .cache/bootstrap`, `pnpm publish <tarball> --tag bootstrap` for each, then discard the version change), add the trusted publishers, then tag `v0.3.0`. The workflow publishes all five packages at 0.3.0 with provenance, and the bootstrap versions can be deprecated with `npm deprecate`. The bootstrap versions stay visible on npm; npm restricts unpublishing after 72 hours. npm sets `latest` on a package's first publish even with `--tag bootstrap`, so until 0.3.0 is published, `npm i @lazy-ease/core` installs the bootstrap version. The tag workflow publishes 0.3.0 without `--tag`, which moves `latest` to it, so keep the time between the bootstrap publish and the `v0.3.0` tag short.
-- **The release itself by hand.** Publish `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server` at 0.3.0 by hand from the tarballs `node scripts/pack.mjs` writes, in that order, add their trusted publishers, then tag `v0.3.0`; the workflow skips the four and publishes `@lazy-ease/react`. Those four 0.3.0 versions have no provenance, and since `release.json` describes the tarballs CI packed, their integrity on npm may differ from it (the workflow warns).
+1. On the commit you will tag, run the workflow by hand (Release → Run workflow). It warns that the four packages are missing.
+2. Download its tarballs: `gh run download <run-id> --name tarballs --dir .cache/tarballs`.
+3. Logged in to npm as the owner of the `@lazy-ease` scope, publish them in dependency order: `npm publish .cache/tarballs/lazy-ease-core-0.3.0.tgz --access public`, then `testing`, `vanilla` and `server` the same way. npm asks for a two-factor code for each.
+
+These four 0.3.0 versions have no provenance; later versions from the workflow have it. When the tag runs, the workflow compares each of them file by file with the tarball it packs, skips them and publishes `@lazy-ease/react`. The 0.3.0 tag publishes none of the four through Trusted Publishing, so their trusted publishers are added before the 0.3.1 tag, the first one that does (see the 2-day limit above).
+
+A bootstrap pre-release (for example `0.3.0-bootstrap.0` under the dist-tag `bootstrap`) would give 0.3.0 provenance, but it stays visible on npm, and npm sets `latest` on a package's first publish even with `--tag`, so `npm i @lazy-ease/core` would install it until 0.3.0 is out.
 
 ### Rollout order for 0.3.0
 
-1. Merge the release preparation to `main` (all packages at 0.3.0, changelog section `## [0.3.0] - date`).
-2. Publish the four new packages by hand as chosen above: `@lazy-ease/core` and `@lazy-ease/testing` first, then `@lazy-ease/vanilla` and `@lazy-ease/server`, which depend on core.
-3. Add the trusted publisher for each of them, and check the existing one of `@lazy-ease/react`.
-4. Run the workflow by hand once (dry run): it should report no missing packages.
-5. Tag `v0.3.0` and push the tag. The workflow publishes core, react, server, testing and vanilla in that order (dependencies first) and creates the release with its assets.
-6. Check `npm view @lazy-ease/react@0.3.0 dependencies` (it needs `@lazy-ease/core` 0.3.0) and compare `dist.integrity` with `release.json`. A version published by hand from another machine may differ; the Publish step warned about it.
+1. Merge the release preparation to `main` (all packages at 0.3.0, changelog section `## [0.3.0] - date`) and run the local checks on it.
+2. Publish `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server` by hand from a dry run's tarballs, as above.
+3. Run the workflow by hand again (dry run): it should report the four as on npm and identical, and no missing packages.
+4. Check the trusted publisher of `@lazy-ease/react`. If it has never published, or isn't there, create it now, right before the tag.
+5. Tag `v0.3.0` and push the tag. The workflow skips the four, publishes `@lazy-ease/react` and creates the release with its assets.
+6. Check `npm view @lazy-ease/react@0.3.0 dependencies` (it needs `@lazy-ease/core` 0.3.0) and compare each `dist.integrity` with `release.json`.
+7. On the day of the 0.3.1 tag, at most 2 days before it, add the trusted publishers of `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server`.

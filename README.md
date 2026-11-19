@@ -108,7 +108,7 @@ export function App() {
 | `onLoad` | | | The React event of the first real load of the displayed source, called once. An image adopted after hydration gets no event; use `onStateChange`. Resolution upgrades aren't reported. |
 | `ref` | | | Forwarded to the `<img>`. |
 | `className`, `style` | | | Applied to the `<img>`. |
-| `wrapperClassName`, `wrapperStyle` | | | Applied to the box, the `<span>` around the `<img>`. Passing either keeps the box. |
+| `wrapperClassName`, `wrapperStyle` | | | Applied to the box, the `<span>` around the `<img>`. Passing either keeps the box. With `noScript`, the box is a grid that stacks the fallback on the placeholder; keep its `display` a grid (`grid` or `inline-grid`). |
 
 Any other `<img>` attribute (`crossOrigin`, `referrerPolicy`, `onError`, …) is passed through. `decoding` defaults to `"async"`.
 
@@ -480,12 +480,13 @@ Each request is admitted before any cache lookup: a canonical query with `w`, `f
 | Option | Default | |
 | --- | --- | --- |
 | `root` | required | Directory the source images are read from. |
-| `widths`, `ratios`, `qualities`, `formats` | the loader defaults | Must match the loader's. |
+| `widths`, `ratios`, `qualities`, `formats` | the loader defaults | Must match the loader's. Checked at construction: widths positive integers and ratios positive, both ascending, qualities integers from 1 to 100. |
 | `tenant` | `default` | Namespace for variant identity and crop tokens. |
+| `sourceNamespace` | the real path of `root` | Part of the variant identity. By default, apps with different roots never share a stored variant. Hosts that share one storage and serve the same sources set the same value, whatever their mount paths; different sources need different values. |
 | `policy`, `authorize`, `keys` | public, default revision and crops | Admission; see the [server README](packages/server#admission). |
 | `originals` | `['gif', 'svg']` | Types passed through unchanged. |
 | `maxFileSize`, `maxInputPixels` | 32 MB, 50 MP | Larger sources are a `413`. |
-| `timeout` | 10 s | Response deadline from admission, in ms; then a `504`. |
+| `timeout` | 10 s | Response deadline from admission, in ms, covering policy, authorization, storage and rendering; then a `504`. |
 | `concurrency`, `maxPending` | half the CPUs, 4 × `concurrency` | Renders running and waiting; beyond that a `503`. |
 | `storage` | `diskStorage()` | Where encoded variants are kept. |
 | `avifEffort` | 4 | AVIF encoder effort, `0` to `9`. |

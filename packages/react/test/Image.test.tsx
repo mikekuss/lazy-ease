@@ -411,6 +411,21 @@ describe('native images', () => {
       expect(targets).toHaveLength(1)
     })
   }
+
+  it('calls onLoad again for a new revision, and does not paint the placeholder back', () => {
+    const onLoad = vi.fn()
+    const { img, rerender } = mount({ width: 320, height: 240, loading: 'native', version: 'r1', onLoad })
+    load(img())
+    expect(img().style.backgroundColor).toBe('')
+    rerender({ placeholder: '#00ff00' })
+    expect(img().style.backgroundColor).toBe('')
+    rerender({ version: 'r2', placeholder: '#00ff00' })
+    expect(img().getAttribute('src')).toContain('v=r2')
+    // The displayed r1 image stays until r2 loads, so no placeholder comes back.
+    expect(img().style.backgroundColor).toBe('')
+    load(img())
+    expect(onLoad).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('lifecycle', () => {
@@ -486,6 +501,90 @@ describe('lifecycle', () => {
     load(img())
     await advance(1000)
     expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not replay onLoad when only sizes changes', async () => {
+    const onLoad = vi.fn()
+    const { img, rerender } = mount({ aspectRatio: 1.5, sizes: '320px', srcWidth: 2400, srcHeight: 1600, loading: 'eager', fadeDuration: 300, onLoad })
+    load(img())
+    await advance(400)
+    expect(onLoad).toHaveBeenCalledTimes(1)
+    // The same URLs under a new slot: the controller adopts them, no load event follows.
+    rerender({ sizes: '400px' })
+    await advance(400)
+    expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the placeholder until the fade ends through a rerender', async () => {
+    const { owner, img, rerender } = mount({ width: 320, height: 240, loading: 'eager', fadeDuration: 300, placeholder: '#00ff00' })
+    resize(owner(), 320, 240)
+    load(img())
+    await advance()
+    expect(img().style.opacity).toBe('1')
+    rerender({ alt: 'Fern, mid-fade' })
+    expect(owner().style.backgroundColor).toBe('rgb(0, 255, 0)')
+    await advance(300)
+    expect(owner().style.backgroundColor).toBe('')
+    rerender({ placeholder: '#0000ff' })
+    expect(owner().style.backgroundColor).toBe('')
+  })
+
+  it('starts a revision over that was left before it displayed', async () => {
+    const onLoad = vi.fn()
+    const props = { aspectRatio: 1.5, sizes: '320px', srcWidth: 2400, srcHeight: 1600, loading: 'eager' as const, fadeDuration: 0, onLoad }
+    const { owner, img, rerender } = mount({ ...props, version: 'r1', placeholder: '#ff0000' })
+    load(img())
+    await advance(100)
+    expect(onLoad).toHaveBeenCalledTimes(1)
+    // r2 with its own placeholder, left again before it loads.
+    rerender({ version: 'r2', placeholder: '#00ff00' })
+    expect(owner().style.backgroundColor).toBe('rgb(0, 255, 0)')
+    rerender({ version: 'r1', placeholder: '#ff0000' })
+    expect(owner().style.backgroundColor).toBe('rgb(255, 0, 0)')
+    load(img())
+    await advance(100)
+    expect(owner().dataset.state).toBe('loaded')
+    expect(owner().style.backgroundColor).toBe('')
+    expect(onLoad).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the author’s background over the placeholder when it attaches', () => {
+    const boxed = mount({ aspectRatio: 1.5, wrapperStyle: { backgroundColor: '#123456' } })
+    expect(boxed.owner().style.backgroundColor).toBe('rgb(18, 52, 86)')
+    const bare = mount({ aspectRatio: 1.5, fadeDuration: 0, style: { backgroundColor: '#123456' } })
+    expect(bare.owner()).toBe(bare.img())
+    expect(bare.img().style.backgroundColor).toBe('rgb(18, 52, 86)')
+  })
+
+  it('positions the no-JS fallback of a measured browser crop at the focal point', () => {
+    const props = { fill: true, srcWidth: 2400, srcHeight: 1600, focalPoint: { x: 90, y: 50 } }
+    const markup = renderToString(tree({ ...props, noScript: true }))
+    expect(markup).toContain('container-type:size')
+    expect(markup.match(/<noscript[^>]*>(.*?)<\/noscript>/)?.[1]).toContain('object-position:clamp(')
+  })
+
+  it('stacks the noScript fallback with the inert img in one grid cell', () => {
+    const markup = renderToString(tree({ width: 320, fadeDuration: 0, noScript: true }))
+    expect(markup).toContain('display:grid')
+    // The inert img, the noscript element and the fallback img.
+    expect(markup.match(/grid-area:1\/1/g)).toHaveLength(3)
+    expect(markup).not.toContain('position:absolute')
+  })
+
+  it('attaches to the new img when noScript is turned on after load', async () => {
+    const { container, img, rerender } = mount({ aspectRatio: 1.5, sizes: '320px', loading: 'eager', fadeDuration: 0 })
+    load(img())
+    await advance(100)
+    expect(img().dataset.state).toBe('loaded')
+    const before = img()
+    rerender({ noScript: true })
+    expect(container.querySelector('span')).not.toBeNull()
+    expect(img()).not.toBe(before)
+    expect(claimed(img())).toBe(true)
+    expect(img().getAttribute('src')).not.toBe(INERT)
+    load(img())
+    await advance(100)
+    expect(img().closest<HTMLElement>('[data-le]')!.dataset.state).toBe('loaded')
   })
 
   it('does not call onLoad when a re-attach adopts an image whose load it never saw', async () => {
@@ -566,6 +665,63 @@ describe('lifecycle', () => {
     expect(measured.owner().dataset.state).toBe('loaded')
   })
 
+  it('calls onLoad again for a new revision of the same src', async () => {
+    const onLoad = vi.fn()
+    const { owner, img, rerender } = mount({ width: 320, height: 240, version: 'r1', onLoad })
+    intersect(owner())
+    resize(owner(), 320, 240)
+    load(img())
+    await advance(400)
+    expect(onLoad).toHaveBeenCalledTimes(1)
+    rerender({ version: 'r2' })
+    expect(owner().dataset.state).toBe('idle')
+    intersect(owner())
+    resize(owner(), 320, 240)
+    expect(img().getAttribute('src')).toContain('v=r2')
+    load(img())
+    await advance(400)
+    expect(owner().dataset.state).toBe('loaded')
+    expect(onLoad).toHaveBeenCalledTimes(2)
+  })
+
+  it('calls onLoad again for new prepared URLs, not for an upgrade of a measured image', async () => {
+    const provider = { loader: createLoader({ formats: ['webp'], qualities: [50, 75] }) }
+    const onLoad = vi.fn()
+    const prepared = mount({ aspectRatio: 1.5, sizes: '320px', srcWidth: 2400, srcHeight: 1600, onLoad }, provider)
+    intersect(prepared.owner())
+    load(prepared.img())
+    await advance(400)
+    prepared.rerender({ quality: 50 })
+    intersect(prepared.owner())
+    load(prepared.img())
+    await advance(400)
+    expect(prepared.owner().dataset.state).toBe('loaded')
+    expect(onLoad).toHaveBeenCalledTimes(2)
+    prepared.unmount()
+
+    onLoad.mockClear()
+    const measured = mount({ width: 320, height: 240, onLoad }, provider)
+    intersect(measured.owner())
+    resize(measured.owner(), 320, 240)
+    load(measured.img())
+    await advance(400)
+    const url = measured.img().getAttribute('src')
+    // A larger slot and a new quality both upgrade the displayed image in place.
+    resize(measured.owner(), 640, 480)
+    await advance(400)
+    expect(measured.img().getAttribute('src')).not.toBe(url)
+    load(measured.img())
+    await advance(400)
+    measured.rerender({ quality: 50 })
+    intersect(measured.owner())
+    resize(measured.owner(), 640, 480)
+    expect(measured.img().getAttribute('src')).toContain('q=50')
+    load(measured.img())
+    await advance(400)
+    expect(measured.owner().dataset.state).toBe('loaded')
+    expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
   it('re-attaches for new picture sources with the same src', () => {
     const source = (src: string) => [{ media: '(min-width: 800px)', src, sizes: '50vw', srcWidth: 2400, srcHeight: 1600 }]
     const { owner, rerender } = mount({ aspectRatio: 1.5, sizes: '100vw', srcWidth: 2400, srcHeight: 1600, sources: source('/b.jpg') })
@@ -631,6 +787,23 @@ describe('placeholders', () => {
     expect(owner().style.backgroundPosition).toBe('center center')
   })
 
+  it('does not paint the placeholder back once the image is displayed, but does for a new source', async () => {
+    for (const fadeDuration of [undefined, 0]) {
+      const { owner, img, rerender, unmount } = mount({ width: 320, height: 240, version: 'r1', fadeDuration })
+      intersect(owner())
+      resize(owner(), 320, 240)
+      load(img())
+      await advance(400)
+      expect(owner().style.backgroundColor).toBe('')
+      rerender({ placeholder: '#00ff00' })
+      expect(owner().dataset.state).toBe('loaded')
+      expect(owner().style.backgroundColor).toBe('')
+      rerender({ placeholder: '#00ff00', version: 'r2' })
+      expect(owner().style.backgroundColor).toBe('rgb(0, 255, 0)')
+      unmount()
+    }
+  })
+
   it('moves an image placeholder with the focal point', () => {
     const style = mount({ width: 320, height: 240, placeholder: 'data:image/png;base64,AAAA', focalPoint: { x: 30, y: 60 } }).owner().style
     expect(style.backgroundPosition).toBe('30% 60%')
@@ -638,7 +811,7 @@ describe('placeholders', () => {
 })
 
 describe('no-JS fallback', () => {
-  const noscript = (props: Partial<ImageProps>) => renderToString(tree(props)).match(/<noscript>(.*?)<\/noscript>/)?.[1]
+  const noscript = (props: Partial<ImageProps>) => renderToString(tree(props)).match(/<noscript[^>]*>(.*?)<\/noscript>/)?.[1]
 
   it('is opt-in', () => {
     expect(noscript({ width: 320, height: 240 })).toBeUndefined()
@@ -649,8 +822,21 @@ describe('no-JS fallback', () => {
     expect(markup).toContain('sizes="320px"')
     expect(markup).toContain('384w')
     expect(markup).toContain('loading="lazy"')
-    expect(markup).toContain('position:absolute')
+    expect(markup).toContain('grid-area:1/1')
     expect(noscript({ src: 'https://other.site/a.jpg', width: 320, height: 240, noScript: true })).toContain('src="https://other.site/a.jpg"')
+  })
+
+  it('keeps a box for the fallback and stacks it on the placeholder img', () => {
+    for (const props of [
+      { width: 320, height: 240, fadeDuration: 0 },
+      { srcWidth: 2400, srcHeight: 1600, fadeDuration: 0 },
+      { width: 320, srcWidth: 2400, srcHeight: 1600 },
+      { width: 320, height: 240, sizes: '320px', fadeDuration: 0 },
+    ]) {
+      const markup = renderToString(tree({ ...props, noScript: true }))
+      expect(markup).toMatch(/^<span data-le="" data-le-auto="off" style="display:grid;grid-template-rows:100%;position:relative/)
+      expect(noscript({ ...props, noScript: true })).toContain('grid-area:1/1')
+    }
   })
 
   it('is never needed for a native image', () => {
