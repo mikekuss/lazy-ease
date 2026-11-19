@@ -34,6 +34,19 @@ test.describe('scripting disabled', () => {
     })
   }
 
+  test('with sources, the picture shares the slot of the fallback', async ({ page }) => {
+    await page.goto('/noscript')
+    const slot = page.locator('#picture')
+    const fallback = slot.locator('noscript img')
+    await expect.poll(() => fallback.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0)
+    const rect = (element: Element) => element.getBoundingClientRect().toJSON()
+    const box = await slot.locator('[data-le]').evaluate(rect)
+    expect(Math.round(box.height)).toBe(Math.round(320 / 1.5))
+    expect(await slot.locator('picture').evaluate(rect)).toEqual(box)
+    expect(await fallback.evaluate(rect)).toEqual(box)
+    expect((await page.locator('#after-picture').evaluate(rect)).top).toBeGreaterThanOrEqual(box.bottom)
+  })
+
   test('a fallback without a reserved height takes its own and covers nothing after it', async ({ page }) => {
     await page.goto('/noscript')
     const slot = page.locator('#unsized')

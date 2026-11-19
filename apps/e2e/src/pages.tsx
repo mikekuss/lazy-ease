@@ -181,6 +181,11 @@ function NoScriptFallbacks({ images: { photo } }: PageProps) {
           <Image src={photo.src} alt="Fallback" srcWidth={photo.width} srcHeight={photo.height} noScript {...props} />
         </div>
       ))}
+      {/* With sources, the picture holds the inert img: it shares the fallback's slot too. */}
+      <div id="picture" style={{ width: 320, flexShrink: 0 }}>
+        <Image src={photo.src} alt="Picture" aspectRatio={1.5} fadeDuration={0} sources={[{ media: '(min-width: 1px)', src: photo.src, aspectRatio: 1.5 }]} noScript />
+        <p id="after-picture">After the picture</p>
+      </div>
       {/* No height to reserve: the fallback must push the next paragraph down, not cover it. */}
       <div id="unsized" style={{ width: 320, flexShrink: 0 }}>
         <Image src="/tall.svg" alt="Tall" width={320} fadeDuration={0} noScript />

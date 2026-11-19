@@ -81,7 +81,7 @@ The workflow uses [npm Trusted Publishing](https://docs.npmjs.com/trusted-publis
 3. Under allowed actions, allow `npm publish`. Trusted publishers created after 2026-09-03 start with staged publishing only, and this workflow publishes directly.
 4. After the first release from the workflow, consider setting Publishing access to "Require two-factor authentication and disallow tokens". Trusted Publishing keeps working.
 
-A new trusted publisher must complete its first successful publish within 2 days, or npm lets it expire; an expired one can't be used or edited, only deleted and created again. So add it at most a day or so before the tag that first publishes that package from the workflow, not earlier. Once it has published, it doesn't expire.
+A new trusted publisher must complete its first successful publish within 2 days, or npm lets it expire; an expired one can't be used or edited, only deleted and created again. So add it on the day of the tag that first publishes that package from the workflow, at most 2 days before. Once it has published, it doesn't expire. If that run fails and is re-run more than 2 days later, delete the expired publisher and add it again first.
 
 An `ENEEDAUTH` error in the Publish step means the trusted publisher doesn't match the repository, workflow filename or allowed actions, or that it expired.
 
@@ -109,4 +109,4 @@ A bootstrap pre-release (for example `0.3.0-bootstrap.0` under the dist-tag `boo
 4. Check the trusted publisher of `@lazy-ease/react`. If it has never published, or isn't there, create it now, right before the tag.
 5. Tag `v0.3.0` and push the tag. The workflow skips the four, publishes `@lazy-ease/react` and creates the release with its assets.
 6. Check `npm view @lazy-ease/react@0.3.0 dependencies` (it needs `@lazy-ease/core` 0.3.0) and compare each `dist.integrity` with `release.json`.
-7. Before tagging 0.3.1, within 2 days of the tag, add the trusted publishers of `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server`.
+7. On the day of the 0.3.1 tag, at most 2 days before it, add the trusted publishers of `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server`.

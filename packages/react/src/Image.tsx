@@ -462,7 +462,8 @@ function ImageBox({
   const content = (
     <>
       {sources.length ? (
-        <picture>
+        // With a fallback, the picture is the grid item that holds the inert img.
+        <picture style={fallback ? { gridArea: '1/1' } : undefined}>
           {pictureSources.map((source) =>
             native ? (
               <source key={source.media} media={source.media} sizes={source.sizes} srcSet={source.srcSet} />
