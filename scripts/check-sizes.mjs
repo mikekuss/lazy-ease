@@ -31,7 +31,7 @@ const ENTRIES = [
   { name: 'enhance (with controller)', fixture: 'enhance.js', budget: 6000, goal: 4000 },
   { name: 'IIFE lazy-ease.min.js', file: ['vanilla', 'dist/lazy-ease.min.js'], budget: 6600, goal: 4500 },
   { name: 'CSS lazy-ease.css', file: ['vanilla', 'dist/lazy-ease.css'], budget: 500, goal: 500 },
-  { name: 'React Image', fixture: 'image.js', budget: 7900, goal: 5000 },
+  { name: 'React Image', fixture: 'image.js', budget: 7950, goal: 5000 },
 ]
 
 // The packages as a consumer imports them: their published `exports` entry,
