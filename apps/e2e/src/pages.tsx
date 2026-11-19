@@ -4,6 +4,7 @@ import * as thumbhash from 'thumbhash'
 // From source: the app depends on @lazy-ease/react only.
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { FOCUS } from './focus.js'
+import { NO_SCRIPT } from './noscript.js'
 
 export interface FixtureImage {
   src: string
@@ -162,15 +163,6 @@ function Focus({ images: { focus } }: PageProps) {
       </div>
     </>
   )
-}
-
-/** No-JS fallbacks: a hard swap needs no box of its own, intrinsic reserves the source ratio. */
-export const NO_SCRIPT = {
-  'hard-swap': { width: 320, height: 240, fadeDuration: 0 },
-  'hard-swap-prepared': { width: 320, height: 240, sizes: '320px', fadeDuration: 0 },
-  intrinsic: { width: 320, fadeDuration: 0 },
-  'intrinsic-fade': { width: 320 },
-  fade: { width: 320, height: 240 },
 }
 
 function NoScriptFallbacks({ images: { photo } }: PageProps) {

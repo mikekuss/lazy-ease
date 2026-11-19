@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NO_SCRIPT } from '../src/pages.js'
+import { NO_SCRIPT } from '../src/noscript.js'
 import { waitForHydration } from './helpers.js'
 
 // `noScript` with scripting disabled: the fallback img and the inert
