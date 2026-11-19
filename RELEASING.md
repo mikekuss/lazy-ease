@@ -81,7 +81,9 @@ The workflow uses [npm Trusted Publishing](https://docs.npmjs.com/trusted-publis
 3. Under allowed actions, allow `npm publish`. Trusted publishers created after 2026-09-03 start with staged publishing only, and this workflow publishes directly.
 4. After the first release from the workflow, consider setting Publishing access to "Require two-factor authentication and disallow tokens". Trusted Publishing keeps working.
 
-An `ENEEDAUTH` error in the Publish step means the trusted publisher doesn't match the repository, workflow filename or allowed actions.
+A new trusted publisher must complete its first successful publish within 2 days, or npm lets it expire; an expired one can't be used or edited, only deleted and created again. So add it at most a day or so before the tag that first publishes that package from the workflow, not earlier. Once it has published, it doesn't expire.
+
+An `ENEEDAUTH` error in the Publish step means the trusted publisher doesn't match the repository, workflow filename or allowed actions, or that it expired.
 
 `repository.url` in each `package.json` must stay `git+https://github.com/mikekuss/lazy-ease.git`; npm compares it with the repository the token comes from, and `pnpm check:release` checks it.
 
@@ -95,7 +97,7 @@ For 0.3.0 the four are published by hand at 0.3.0 itself, from the tarballs a dr
 2. Download its tarballs: `gh run download <run-id> --name tarballs --dir .cache/tarballs`.
 3. Logged in to npm as the owner of the `@lazy-ease` scope, publish them in dependency order: `npm publish .cache/tarballs/lazy-ease-core-0.3.0.tgz --access public`, then `testing`, `vanilla` and `server` the same way. npm asks for a two-factor code for each.
 
-These four 0.3.0 versions have no provenance; later versions from the workflow have it. When the tag runs, the workflow compares each of them file by file with the tarball it packs, skips them and publishes `@lazy-ease/react`.
+These four 0.3.0 versions have no provenance; later versions from the workflow have it. When the tag runs, the workflow compares each of them file by file with the tarball it packs, skips them and publishes `@lazy-ease/react`. The 0.3.0 tag publishes none of the four through Trusted Publishing, so their trusted publishers are added before the 0.3.1 tag, the first one that does (see the 2-day limit above).
 
 A bootstrap pre-release (for example `0.3.0-bootstrap.0` under the dist-tag `bootstrap`) would give 0.3.0 provenance, but it stays visible on npm, and npm sets `latest` on a package's first publish even with `--tag`, so `npm i @lazy-ease/core` would install it until 0.3.0 is out.
 
@@ -103,7 +105,8 @@ A bootstrap pre-release (for example `0.3.0-bootstrap.0` under the dist-tag `boo
 
 1. Merge the release preparation to `main` (all packages at 0.3.0, changelog section `## [0.3.0] - date`) and run the local checks on it.
 2. Publish `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server` by hand from a dry run's tarballs, as above.
-3. Add the trusted publisher for each of them, and check the existing one of `@lazy-ease/react`.
-4. Run the workflow by hand again (dry run): it should report the four as on npm and identical, and no missing packages.
+3. Run the workflow by hand again (dry run): it should report the four as on npm and identical, and no missing packages.
+4. Check the trusted publisher of `@lazy-ease/react`. If it has never published, or isn't there, create it now, right before the tag.
 5. Tag `v0.3.0` and push the tag. The workflow skips the four, publishes `@lazy-ease/react` and creates the release with its assets.
 6. Check `npm view @lazy-ease/react@0.3.0 dependencies` (it needs `@lazy-ease/core` 0.3.0) and compare each `dist.integrity` with `release.json`.
+7. Before tagging 0.3.1, within 2 days of the tag, add the trusted publishers of `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server`.

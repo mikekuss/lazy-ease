@@ -131,7 +131,10 @@ export async function withDeadline<T>(promise: Promise<T>, deadline: number): Pr
     cancel = atDeadline(deadline, () => reject(timedOut()))
   })
   try {
-    return await Promise.race([promise, expired])
+    const value = await Promise.race([promise, expired])
+    // Synchronous work can finish after the deadline before the timer gets to run.
+    if (Date.now() >= deadline) throw timedOut()
+    return value
   } finally {
     cancel()
   }

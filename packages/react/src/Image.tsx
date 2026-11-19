@@ -245,7 +245,8 @@ function ImageBox({
   const focused = focus && !measured ? focusStyles({ focus, crop: serverCrop, srcWidth, srcHeight }) : undefined
   const fallback = !native && noScript && prepared(sizes)
   // A box only where something needs it: fill, a fade, browser focal positioning, wrapper
-  // props or a no-JS fallback, which overlays the placeholder img in its slot.
+  // props or a no-JS fallback. The fallback shares one grid cell with the inert img: it
+  // covers it in a reserved slot and, where no height is reserved, takes its own.
   const boxed =
     fill || wrapperClassName !== undefined || wrapperStyle !== undefined || (!native && fadeMs > 0) || !!fallback || (measured ? !!focus : !!focused?.box.containerType)
 
@@ -295,9 +296,15 @@ function ImageBox({
   // removes it early. A native image keeps its displayed image under a new source.
   if (kept.shown && (native || kept.shown === identity)) paint = kept.paint
   else kept.paint = paint
-  const imgStyle: CSSProperties = boxed
-    ? { display: 'block', width: '100%', height: cover ? '100%' : 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...style }
-    : { display: 'block', ...slot, height: 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...paint, ...style }
+  // Boxed, the img fills the box (one grid cell with a fallback); bare, it is the slot and carries the placeholder.
+  const imgStyle: CSSProperties = {
+    display: 'block',
+    ...(boxed ? { gridArea: fallback ? '1/1' : undefined, width: '100%', height: cover ? '100%' : 'auto' } : { ...slot, height: 'auto' }),
+    objectFit: cover ? 'cover' : undefined,
+    ...focused?.img,
+    ...(boxed ? null : paint),
+    ...style,
+  }
 
   const imgWidth = fill ? undefined : (width ?? (mode === 'intrinsic' ? srcWidth : undefined))
   const imgHeight =
@@ -346,7 +353,12 @@ function ImageBox({
     const img = self.current!
     const state = latest.current
     // Destroying a displayed source removed the placeholder that React wrote for this new one.
-    if (state.shown !== identity) Object.assign(img.closest<HTMLElement>('[data-le]')!.style, paint)
+    if (state.shown !== identity) {
+      Object.assign(img.closest<HTMLElement>('[data-le]')!.style, paint)
+      // A deferred source left before it was displayed starts over, with its placeholder
+      // and onLoad, when it comes back.
+      if (!native) state.shown = ''
+    }
     // The SSR placeholder sets the background position, which the decoded image keeps.
     const thumbhash: ThumbHashDecoder | undefined =
       decoder &&
@@ -464,7 +476,8 @@ function ImageBox({
         img
       )}
       {fallback && (
-        <noscript>
+        // Without scripting, the noscript element is the grid item that holds the fallback.
+        <noscript style={{ gridArea: '1/1' }}>
           <img
             alt={alt}
             sizes={fallback.sizes}
@@ -475,7 +488,7 @@ function ImageBox({
             loading="lazy"
             decoding="async"
             className={className}
-            style={{ ...imgStyle, position: 'absolute', inset: 0 }}
+            style={imgStyle}
           />
         </noscript>
       )}
@@ -487,7 +500,7 @@ function ImageBox({
       data-le=""
       data-le-auto="off"
       className={wrapperClassName}
-      style={{ display: 'block', position: 'relative', ...slot, ...focused?.box, ...paint, ...wrapperStyle }}
+      style={{ display: fallback ? 'grid' : 'block', gridTemplateRows: fallback ? '100%' : undefined, position: 'relative', ...slot, ...focused?.box, ...paint, ...wrapperStyle }}
     >
       {content}
     </span>

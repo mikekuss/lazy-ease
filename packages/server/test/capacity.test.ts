@@ -185,6 +185,28 @@ describe('render capacity', () => {
     expect(render).not.toHaveBeenCalled()
   })
 
+  it('answers 504 when synchronous work finishes a storage hit after the deadline', async () => {
+    const storage = memoryStorage()
+    const app = createImageApp({
+      root: fixtures.root,
+      timeout: 35,
+      policy: () => ({ revision: 'r1' }),
+      storage: {
+        ...storage,
+        get: () => {
+          // Blocks the event loop past the deadline, so its timer has not run when this resolves.
+          const until = Date.now() + 70
+          while (Date.now() < until) {
+            // busy wait
+          }
+          return Promise.resolve(encoded)
+        },
+      },
+    })
+    const response = await app.request('/big.jpg?fmt=webp&q=75&v=r1&w=640')
+    expect(response.status).toBe(504)
+  })
+
   it('bounds hashing for content revisions, so a 503 also limits disk reads', async () => {
     const names = Array.from({ length: 8 }, (_, i) => `cold-${i}.jpg`)
     const bytes = Buffer.from('not decoded, render is mocked')

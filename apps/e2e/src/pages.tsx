@@ -181,6 +181,11 @@ function NoScriptFallbacks({ images: { photo } }: PageProps) {
           <Image src={photo.src} alt="Fallback" srcWidth={photo.width} srcHeight={photo.height} noScript {...props} />
         </div>
       ))}
+      {/* No height to reserve: the fallback must push the next paragraph down, not cover it. */}
+      <div id="unsized" style={{ width: 320, flexShrink: 0 }}>
+        <Image src="/tall.svg" alt="Tall" width={320} fadeDuration={0} noScript />
+        <p id="after">After the image</p>
+      </div>
     </div>
   )
 }

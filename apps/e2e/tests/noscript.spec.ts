@@ -33,6 +33,22 @@ test.describe('scripting disabled', () => {
       for (const img of await slot.locator('img').all()) expect(await img.evaluate(rect)).toEqual(area)
     })
   }
+
+  test('a fallback without a reserved height takes its own and covers nothing after it', async ({ page }) => {
+    await page.goto('/noscript')
+    const slot = page.locator('#unsized')
+    const fallback = slot.locator('noscript img')
+    await expect.poll(() => fallback.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0)
+    const box = await slot.locator('[data-le]').evaluate((element) => element.getBoundingClientRect().toJSON())
+    const image = await fallback.evaluate((element) => element.getBoundingClientRect().toJSON())
+    const inert = await slot.locator('img').first().evaluate((element) => element.getBoundingClientRect().toJSON())
+    const after = await page.locator('#after').evaluate((element) => element.getBoundingClientRect().toJSON())
+    expect({ width: image.width, height: image.height }).toEqual({ width: 320, height: 640 })
+    // One slot: the inert img lies under the fallback, at the top of the same box.
+    expect(inert.top).toBe(image.top)
+    expect(box.height).toBe(640)
+    expect(after.top).toBeGreaterThanOrEqual(image.bottom)
+  })
 })
 
 test('with scripting, the same page reserves the same slots and loads every image once', async ({ page }) => {
