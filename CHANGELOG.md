@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-19
+
 ### Added
 
 - `@lazy-ease/core` holds the framework-free logic: width and ratio ladders, canonical URL numbers, focal crop geometry, the reference loader and candidate selection. It imports nothing from React or Node, and only the controller uses the DOM. `outputSize()` gives the pixel size the reference backend encodes for a request, apart from the width in the URL.
@@ -92,6 +94,7 @@ First release, implementing the [v1 design spec](docs/design-spec.md).
 
 - Measured mode now sets `sizes` before `srcset`. WebKit selects a candidate as soon as `srcset` is set, so it used to fetch the `100vw` candidate first and then the right one.
 
-[Unreleased]: https://github.com/mikekuss/lazy-ease/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mikekuss/lazy-ease/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mikekuss/lazy-ease/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mikekuss/lazy-ease/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mikekuss/lazy-ease/releases/tag/v0.1.0
