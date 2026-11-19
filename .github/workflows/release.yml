@@ -180,7 +180,6 @@ jobs:
       # The tag on GitHub must still name the commit this run checked and packed:
       # a tag moved after the push would give npm and the release other code.
       - name: Check that the tag still points at this commit
-        if: github.event_name == 'push'
         run: |
           # An annotated tag lists its commit as the peeled ref (^{}), last.
           remote=$(git ls-remote origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}" | tail -n 1 | cut -f 1)
