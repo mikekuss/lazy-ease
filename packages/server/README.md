@@ -148,7 +148,7 @@ The least recently used variant goes first, at the byte cap, the entry cap and e
 | `root` | required | Directory the source images are read from. |
 | `widths`, `ratios`, `qualities`, `formats` | the loader defaults | Must match the loader's. Checked at startup, a `RangeError` otherwise: none may be empty; `widths` are positive integers and `ratios` positive numbers, both ascending without duplicates in their URL spelling; `qualities` are integers from 1 to 100 without duplicates; `formats` is any of `avif`, `webp`, `jpeg`. |
 | `tenant` | `default` | Namespace for the variant identity and crop tokens, `[A-Za-z0-9._~-]{1,64}`. |
-| `sourceNamespace` | the real path of `root` | Part of the variant identity and ETag, so apps with different roots never share a stored variant. When one storage is shared between hosts, give hosts that serve the same sources the same value and different sources different values. 1 to 1024 characters, no NUL. |
+| `sourceNamespace` | the real path of `root` | Part of the variant identity and ETag. By default, apps with different roots never share a stored variant. When one storage is shared between hosts, give hosts that serve the same sources the same value, whatever their mount paths, and different sources different values. 1 to 1024 characters, no NUL. |
 | `policy` | every source public, default revision and crops | See [Source policy](#source-policy). |
 | `keys` | none | Crop token keys by key id. An empty map is the same as none. |
 | `authorize` | none | Viewer check for private sources. |

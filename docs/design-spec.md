@@ -17,7 +17,7 @@ Measure each public import plus required core code with a pinned minifying bundl
 | enhance with controller | 6000 | 5960 | 4000 |
 | self-starting IIFE | 6600 | 6589 | 4500 |
 | CSS | 500 | 161 | 500 |
-| React Image | 7900 | 7859 | 5000 |
+| React Image | 7900 | 7895 | 5000 |
 
 Bytes after Brotli. Entries that measured over their original budget got the measured size rounded up to the next 100 B as their approved 0.3 budget; the others keep their original budget. The goals are the original targets, for the size pass that follows the 0.3 release.
 

@@ -270,8 +270,9 @@ function ImageBox({
   })
 
   // The logical source: a new one fires its own first onLoad and shows its placeholder.
-  // A measured image's src is its key, and its candidates upgrade in place.
-  const identity = JSON.stringify([version, real, pictureSources])
+  // A measured image's src is its key, and its candidates upgrade in place. Like the
+  // controller's, it is the URLs alone: a new `sizes` or `media` keeps the source.
+  const identity = JSON.stringify([version, real?.src, real?.srcSet, pictureSources.map((s) => s.srcSet)])
   const latest = useRef({
     onLoad,
     onStateChange,
@@ -283,13 +284,17 @@ function ImageBox({
     state: '',
     // The identity of the source last displayed, '' before the first display.
     shown: '',
+    // The placeholder styles React rendered for that source.
+    paint: {} as CSSProperties,
     hidden: false,
   })
-  Object.assign(latest.current, { onLoad, onStateChange, loader, decoder })
-  // The controller removes the placeholder on display; a rerender must not write it back.
-  // A native image keeps its displayed image under a new source, so it never returns.
-  const shown = latest.current.shown
-  if (shown && (native || shown === identity)) paint = {}
+  const kept = latest.current
+  Object.assign(kept, { onLoad, onStateChange, loader, decoder })
+  // The controller owns the placeholder from display on and removes it after the fade:
+  // a rerender renders the same styles again, so React neither writes it back nor
+  // removes it early. A native image keeps its displayed image under a new source.
+  if (kept.shown && (native || kept.shown === identity)) paint = kept.paint
+  else kept.paint = paint
   const imgStyle: CSSProperties = boxed
     ? { display: 'block', width: '100%', height: cover ? '100%' : 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...style }
     : { display: 'block', ...slot, height: 'auto', objectFit: cover ? 'cover' : undefined, ...focused?.img, ...paint, ...style }
@@ -384,8 +389,9 @@ function ImageBox({
       state.hidden = img.style.opacity === '0' && attachment.state === 'loading'
       attachment.destroy()
     }
-    // `options` is covered by its signature, which leaves out the root.
-  }, [signature, config.root])
+    // `options` is covered by its signature, which leaves out the root. A new box
+    // (`boxed`) renders a new img, which needs its own attachment.
+  }, [signature, config.root, boxed])
 
   // Mount-time development checks.
   useEffect(() => {
@@ -409,6 +415,8 @@ function ImageBox({
     // Checks the props the image mounted with; later changes are not re-checked.
   }, [])
 
+  // A native image has its real sources in the markup, a deferred one the inert pixel.
+  const html = native ? real : undefined
   const img = (
     <img
       {...imgProps}
@@ -417,9 +425,9 @@ function ImageBox({
       alt={alt}
       // React sets attributes in prop order, and WebKit selects a candidate as soon
       // as srcset is set: sizes must already be there.
-      sizes={real && native ? real.sizes : undefined}
-      src={real && native ? real.src : INERT}
-      srcSet={real && native ? real.srcSet : undefined}
+      sizes={html?.sizes}
+      src={html?.src ?? INERT}
+      srcSet={html?.srcSet}
       width={imgWidth}
       height={imgHeight}
       loading={native && !priority ? 'lazy' : undefined}

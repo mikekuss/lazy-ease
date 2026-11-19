@@ -128,6 +128,18 @@ jobs:
           retention-days: 7
           overwrite: true
 
+      # The tag on GitHub must still name the commit this run checked and packed:
+      # a tag moved after the push would give npm and the release other code.
+      - name: Check that the tag still points at this commit
+        if: github.event_name == 'push'
+        run: |
+          # An annotated tag lists its commit as the peeled ref (^{}), last.
+          remote=$(git ls-remote origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}" | tail -n 1 | cut -f 1)
+          if [ "$remote" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME points at ${remote:-nothing} on GitHub, not at $GITHUB_SHA, which this run checked"
+            exit 1
+          fi
+
       # Publishes the tarballs checked above, dependencies first (packed.json
       # is in publication order). Versions that are already on npm with the
       # same files are skipped, so a failed run can be re-run.
@@ -165,6 +177,17 @@ jobs:
         with:
           name: release-assets
           path: ${{ runner.temp }}/assets
+      # The tag on GitHub must still name the commit this run checked and packed:
+      # a tag moved after the push would give npm and the release other code.
+      - name: Check that the tag still points at this commit
+        if: github.event_name == 'push'
+        run: |
+          # An annotated tag lists its commit as the peeled ref (^{}), last.
+          remote=$(git ls-remote origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}" | tail -n 1 | cut -f 1)
+          if [ "$remote" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME points at ${remote:-nothing} on GitHub, not at $GITHUB_SHA, which this run checked"
+            exit 1
+          fi
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

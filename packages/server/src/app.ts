@@ -16,7 +16,7 @@ import {
   type OutputFormat,
 } from './contract.js'
 import { admitsCrop, createContentRevisions, revisionOf, type SourcePolicy, type SourceRef } from './policy.js'
-import { DEFAULT_AVIF_EFFORT, DEFAULT_MAX_INPUT_PIXELS, DEFAULT_TIMEOUT, createRenderQueue, mapSharpError, render, withTimeout, type Encoded } from './render.js'
+import { DEFAULT_AVIF_EFFORT, DEFAULT_MAX_INPUT_PIXELS, DEFAULT_TIMEOUT, createRenderQueue, mapSharpError, render, withDeadline, type Encoded } from './render.js'
 import { RENDER_TYPES, openSource, parseSourcePath, realRoot, type Source, type SourcePath } from './source.js'
 import { defaultStorage, defaultStorageDir, type VariantStorage } from './storage.js'
 import { REVISION_PATTERN, TENANT_PATTERN, verifyCropToken, type CropTokenKeys } from './token.js'
@@ -297,7 +297,10 @@ export function createImageApp({
 
   // One deadline from admission bounds the whole response. Work it abandons
   // (a slow policy, storage or render) runs on; a render keeps its slot.
-  app.get('/:path{.+}', (c) => withTimeout(serve(c, Date.now() + timeout), timeout))
+  app.get('/:path{.+}', (c) => {
+    const deadline = Date.now() + timeout
+    return withDeadline(serve(c, deadline), deadline)
+  })
 
   async function serve(c: Context, deadline: number): Promise<Response> {
     const url = new URL(c.req.url)

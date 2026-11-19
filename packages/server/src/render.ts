@@ -40,7 +40,7 @@ export interface RenderOptions {
    * In ms, rounded up to whole seconds for sharp's `timeout()` (a 504 through
    * `mapSharpError`), which stops decode and resize work but not an AVIF
    * encode that is already running. Bounding the response is up to the
-   * caller (`withTimeout`). Default 10 s.
+   * caller (`withDeadline`). Default 10 s.
    */
   timeout?: number
   /** AVIF encoder effort, 0 (fastest) to 9 (smallest). Default 4. */
@@ -105,18 +105,35 @@ export async function render(
 }
 
 /**
- * Rejects with a 504 when `promise` takes longer than `ms`. This bounds the
+ * Calls `expire` once `Date.now()` has reached `deadline`, never earlier
+ * (a timer can fire a millisecond early), and returns the cancel function.
+ * The response and the queue decide by the same clock, so a job is never
+ * started for a response that has already timed out.
+ */
+function atDeadline(deadline: number, expire: () => void): () => void {
+  let timer: ReturnType<typeof setTimeout>
+  const check = () => {
+    const left = deadline - Date.now()
+    if (left > 0) timer = setTimeout(check, left)
+    else expire()
+  }
+  check()
+  return () => clearTimeout(timer)
+}
+
+/**
+ * Rejects with a 504 at `deadline` (a `Date.now()` time). This bounds the
  * response; the work behind `promise` keeps running until it settles.
  */
-export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(timedOut()), ms)
+export async function withDeadline<T>(promise: Promise<T>, deadline: number): Promise<T> {
+  let cancel = () => {}
+  const expired = new Promise<never>((_, reject) => {
+    cancel = atDeadline(deadline, () => reject(timedOut()))
   })
   try {
-    return await Promise.race([promise, timeout])
+    return await Promise.race([promise, expired])
   } finally {
-    clearTimeout(timer)
+    cancel()
   }
 }
 
@@ -165,6 +182,8 @@ interface Job {
   reject(error: unknown): void
   started: boolean
   waiters: number
+  /** The latest deadline of its callers; a queued job is not started after it. */
+  deadline: number
 }
 
 export function createRenderQueue({ concurrency, maxPending, retryAfter = 1 }: RenderQueueOptions): RenderQueue {
@@ -186,14 +205,23 @@ export function createRenderQueue({ concurrency, maxPending, retryAfter = 1 }: R
     work.then(job.resolve, job.reject).finally(() => {
       active--
       if (jobs.get(job.key) === job) jobs.delete(job.key)
-      while (active < concurrency && waiting.length > 0) start(waiting.shift()!)
+      while (active < concurrency && waiting.length > 0) {
+        const next = waiting.shift()!
+        if (Date.now() < next.deadline) start(next)
+        else {
+          // Every caller is past its deadline, even if its timer has not run yet.
+          jobs.delete(next.key)
+          next.reject(timedOut())
+        }
+      }
     })
   }
 
   const wait = <T>(job: Job, deadline: number): Promise<T> =>
     new Promise<T>((resolve, reject) => {
       job.waiters++
-      const timer = setTimeout(() => {
+      job.deadline = Math.max(job.deadline, deadline)
+      const cancel = atDeadline(deadline, () => {
         job.waiters--
         if (!job.started && job.waiters === 0 && waiting.includes(job)) {
           // Nobody waits for it any more: drop it before it starts.
@@ -202,15 +230,15 @@ export function createRenderQueue({ concurrency, maxPending, retryAfter = 1 }: R
           job.reject(timedOut())
         }
         reject(timedOut())
-      }, Math.max(0, deadline - Date.now()))
+      })
       job.promise.then(
         (value) => {
-          clearTimeout(timer)
+          cancel()
           job.waiters--
           resolve(value as T)
         },
         (error: unknown) => {
-          clearTimeout(timer)
+          cancel()
           job.waiters--
           reject(error)
         },
@@ -231,7 +259,7 @@ export function createRenderQueue({ concurrency, maxPending, retryAfter = 1 }: R
         })
         // A job can settle with nobody waiting.
         promise.catch(() => {})
-        job = { key, task, promise, resolve, reject, started: false, waiters: 0 }
+        job = { key, task, promise, resolve, reject, started: false, waiters: 0, deadline }
         jobs.set(key, job)
         if (active < concurrency) start(job)
         else waiting.push(job)

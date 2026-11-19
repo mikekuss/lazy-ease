@@ -53,9 +53,9 @@ The test is not part of `pnpm test`, `pnpm e2e` or CI: it needs the demo servers
    git push origin vx.y.z
    ```
 
-5. Watch the Release run under Actions. When it is done, every package is on npm with a provenance badge and the GitHub Release exists with its assets.
+5. Watch the Release run under Actions. When it is done, every package is on npm and the GitHub Release exists with its assets. Versions the workflow published carry a provenance badge; a first version published by hand has none.
 
-The run fails before anything is published if the tag isn't `v` plus the shared version, if the changelog has no `## [x.y.z]` section, if a packed `package.json` still has a `source` export condition or needs a `@lazy-ease` package at another version, if one of the packages doesn't exist on npm yet (see [First publish of a new package](#first-publish-of-a-new-package)), or if a version that is already on npm has other files than the tarball packed in the run.
+The run fails before anything is published if the tag isn't `v` plus the shared version, if the changelog has no `## [x.y.z]` section, if a packed `package.json` still has a `source` export condition or needs a `@lazy-ease` package at another version, if one of the packages doesn't exist on npm yet (see [First publish of a new package](#first-publish-of-a-new-package)), if a version that is already on npm has other files than the tarball packed in the run, or if the tag on GitHub no longer points at the commit the run checked. The GitHub Release job checks the tag again before it creates or completes the release.
 
 The packages are published one by one in dependency order: `@lazy-ease/core`, then the packages that need it. If a run stops halfway, npm holds the dependencies but not yet the packages that need them, never the other way round. Re-running a failed run is safe: a version that is already on npm is downloaded and compared file by file with the tarball packed in the run, skipped if they match and a failure if they don't, and an existing GitHub Release for the tag only gets the assets it lacks (an asset that differs from the run fails it). Re-running only the GitHub Release job works while the `release-assets` artifact is kept (7 days); after that, re-run the whole workflow. To change the code of a release, bump the version instead; npm doesn't allow publishing a version twice.
 

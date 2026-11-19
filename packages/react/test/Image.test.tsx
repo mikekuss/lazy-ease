@@ -503,6 +503,48 @@ describe('lifecycle', () => {
     expect(onLoad).toHaveBeenCalledTimes(1)
   })
 
+  it('does not replay onLoad when only sizes changes', async () => {
+    const onLoad = vi.fn()
+    const { img, rerender } = mount({ aspectRatio: 1.5, sizes: '320px', srcWidth: 2400, srcHeight: 1600, loading: 'eager', fadeDuration: 300, onLoad })
+    load(img())
+    await advance(400)
+    expect(onLoad).toHaveBeenCalledTimes(1)
+    // The same URLs under a new slot: the controller adopts them, no load event follows.
+    rerender({ sizes: '400px' })
+    await advance(400)
+    expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the placeholder until the fade ends through a rerender', async () => {
+    const { owner, img, rerender } = mount({ width: 320, height: 240, loading: 'eager', fadeDuration: 300, placeholder: '#00ff00' })
+    resize(owner(), 320, 240)
+    load(img())
+    await advance()
+    expect(img().style.opacity).toBe('1')
+    rerender({ alt: 'Fern, mid-fade' })
+    expect(owner().style.backgroundColor).toBe('rgb(0, 255, 0)')
+    await advance(300)
+    expect(owner().style.backgroundColor).toBe('')
+    rerender({ placeholder: '#0000ff' })
+    expect(owner().style.backgroundColor).toBe('')
+  })
+
+  it('attaches to the new img when noScript is turned on after load', async () => {
+    const { container, img, rerender } = mount({ aspectRatio: 1.5, sizes: '320px', loading: 'eager', fadeDuration: 0 })
+    load(img())
+    await advance(100)
+    expect(img().dataset.state).toBe('loaded')
+    const before = img()
+    rerender({ noScript: true })
+    expect(container.querySelector('span')).not.toBeNull()
+    expect(img()).not.toBe(before)
+    expect(claimed(img())).toBe(true)
+    expect(img().getAttribute('src')).not.toBe(INERT)
+    load(img())
+    await advance(100)
+    expect(img().closest<HTMLElement>('[data-le]')!.dataset.state).toBe('loaded')
+  })
+
   it('does not call onLoad when a re-attach adopts an image whose load it never saw', async () => {
     const onLoad = vi.fn()
     const { img, rerender } = mount({ width: 320, height: 240, sizes: '320px', loading: 'eager', fadeDuration: 300, onLoad })

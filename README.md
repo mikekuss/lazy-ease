@@ -482,7 +482,7 @@ Each request is admitted before any cache lookup: a canonical query with `w`, `f
 | `root` | required | Directory the source images are read from. |
 | `widths`, `ratios`, `qualities`, `formats` | the loader defaults | Must match the loader's. Checked at construction: widths positive integers and ratios positive, both ascending, qualities integers from 1 to 100. |
 | `tenant` | `default` | Namespace for variant identity and crop tokens. |
-| `sourceNamespace` | the real path of `root` | Part of the variant identity, so apps with different roots never share a stored variant. Set it when one storage is shared between hosts. |
+| `sourceNamespace` | the real path of `root` | Part of the variant identity. By default, apps with different roots never share a stored variant. Hosts that share one storage and serve the same sources set the same value, whatever their mount paths; different sources need different values. |
 | `policy`, `authorize`, `keys` | public, default revision and crops | Admission; see the [server README](packages/server#admission). |
 | `originals` | `['gif', 'svg']` | Types passed through unchanged. |
 | `maxFileSize`, `maxInputPixels` | 32 MB, 50 MP | Larger sources are a `413`. |
