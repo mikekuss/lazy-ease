@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { createLoader, normalizeLoader, snapQuality, type ImageRequest } from '../src/loader.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { checkLadders, createLoader, normalizeLoader, snapQuality, type ImageRequest } from '../src/loader.js'
 import { DEFAULT_RATIOS } from '../src/ratios.js'
 import { buildSrcSet } from '../src/srcset.js'
 import { DEFAULT_WIDTHS } from '../src/widths.js'
@@ -91,6 +91,66 @@ describe('createLoader', () => {
     expect(custom.widths).toEqual([100, 200])
     expect(custom.ratios).toEqual([1, 2])
     expect(custom.qualities).toEqual([50, 80])
+  })
+})
+
+describe('checkLadders', () => {
+  const valid = { widths: [64, 128], ratios: [1, 1.5], qualities: [75, 50], formats: ['webp' as const] }
+
+  it('accepts the defaults and small custom ladders', () => {
+    const { widths, ratios, qualities } = createLoader()
+    expect(() => checkLadders({ widths, ratios, qualities, formats: ['avif', 'webp', 'jpeg'] })).not.toThrow()
+    expect(() => checkLadders(valid)).not.toThrow()
+  })
+
+  it.each([
+    [{ widths: [] }, 'widths must not be empty'],
+    [{ widths: [0] }, 'widths must be positive integers, not 0'],
+    [{ widths: [64.5] }, 'widths must be positive integers, not 64.5'],
+    [{ widths: [Number.NaN] }, 'widths must be positive integers, not NaN'],
+    [{ widths: ['64' as unknown as number] }, 'widths must be positive integers, not 64'],
+    [{ widths: [undefined as unknown as number] }, 'widths must be positive integers, not undefined'],
+    // A hole reads as undefined.
+    [{ widths: [64, , 128] as number[] }, 'widths must be positive integers, not undefined'],
+    [{ widths: [128, 64] }, 'widths must be ascending, without duplicates'],
+    [{ widths: [64, 64] }, 'widths must be ascending, without duplicates'],
+    [{ ratios: [] }, 'ratios must not be empty'],
+    [{ ratios: [0.0001] }, 'ratios must be positive numbers, not 0.0001'],
+    [{ ratios: [Infinity] }, 'ratios must be positive numbers, not Infinity'],
+    [{ ratios: [2, 1] }, 'ratios must be ascending, without duplicates'],
+    // Two values with one URL spelling would be one variant.
+    [{ ratios: [1.7777, 1.7778] }, 'ratios must be ascending, without duplicates'],
+    [{ qualities: [] }, 'qualities must not be empty'],
+    [{ qualities: [0] }, 'qualities must be integers from 1 to 100, not 0'],
+    [{ qualities: [101] }, 'qualities must be integers from 1 to 100, not 101'],
+    [{ qualities: [75, 75] }, 'qualities must not repeat a value'],
+    [{ formats: [] }, 'formats must be avif, webp or jpeg'],
+    [{ formats: ['png' as 'webp'] }, 'formats must be avif, webp or jpeg'],
+  ])('rejects %o', (ladders, message) => {
+    expect(() => checkLadders({ ...valid, ...ladders })).toThrow(new RangeError(message))
+  })
+})
+
+describe('createLoader ladder check', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+  })
+
+  it('throws for a ladder the backend would reject in development', () => {
+    expect(() => createLoader({ widths: [640, 320] })).toThrow(new RangeError('widths must be ascending, without duplicates'))
+    expect(() => createLoader({ qualities: [75, 75] })).toThrow(RangeError)
+    expect(() => createLoader({ formats: [] })).toThrow(RangeError)
+  })
+
+  it('skips the check in production and without a process global', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    expect(createLoader({ widths: [640, 320] }).widths).toEqual([640, 320])
+    vi.unstubAllEnvs()
+    vi.stubGlobal('process', undefined)
+    const loader = createLoader({ widths: [640, 320] })
+    vi.unstubAllGlobals()
+    expect(loader.widths).toEqual([640, 320])
   })
 })
 

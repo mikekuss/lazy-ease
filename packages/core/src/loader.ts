@@ -88,6 +88,41 @@ export function snapQuality(quality: number, allowed: readonly number[]): number
   return best
 }
 
+/** The ladders and formats a loader or backend is configured with. */
+export interface Ladders {
+  widths: readonly number[]
+  ratios: readonly number[]
+  qualities: readonly number[]
+  formats: readonly ImageFormat[]
+}
+
+// Throws unless `values` is non-empty, every value passes `valid`, and the URL
+// spellings are distinct (`sorted`: also ascending, as the candidate code assumes).
+function checkLadder(name: string, values: readonly number[], rule: string, valid: (n: number) => boolean, sorted?: boolean) {
+  if (!(values.length > 0)) throw new RangeError(`${name} must not be empty`)
+  // An index, not the value: an `undefined` entry or a hole is a bad value too.
+  const bad = values.findIndex((n) => typeof n != 'number' || !valid(n))
+  if (bad >= 0) throw new RangeError(`${name} must be ${rule}, not ${String(values[bad])}`)
+  const spelled = values.map((n) => Number(formatNumber(n)))
+  if (sorted ? spelled.some((n, i) => i && !(n > spelled[i - 1]!)) : new Set(spelled).size < spelled.length) {
+    throw new RangeError(sorted ? `${name} must be ascending, without duplicates` : `${name} must not repeat a value`)
+  }
+}
+
+/**
+ * Throws a RangeError unless every ladder is one the reference backend
+ * accepts: widths positive integers and ratios positive, both ascending
+ * without duplicate URL spellings; qualities unique integers from 1 to 100;
+ * formats a non-empty list of AVIF, WebP and JPEG.
+ */
+export function checkLadders({ widths, ratios, qualities, formats }: Ladders): void {
+  checkLadder('widths', widths, 'positive integers', (n) => Number.isSafeInteger(n) && n > 0, true)
+  checkLadder('ratios', ratios, 'positive numbers', (n) => Number.isFinite(n) && Number(formatNumber(n)) > 0, true)
+  // sharp takes quality 1 to 100 for AVIF, WebP and JPEG.
+  checkLadder('qualities', qualities, 'integers from 1 to 100', (n) => Number.isInteger(n) && n > 0 && n < 101)
+  if (!formats.length || formats.some((f) => !DEFAULT_FORMATS.includes(f))) throw new RangeError('formats must be avif, webp or jpeg')
+}
+
 export interface LoaderOptions {
   /** Where @lazy-ease/server is mounted. Defaults to `/_img`. */
   baseUrl?: string
@@ -106,6 +141,9 @@ export interface LoaderOptions {
 // Core compiles against es2023 only, without DOM or Node types. Every runtime
 // it targets has a WHATWG `URL`; this declares the one part `encodePath` uses.
 declare const URL: new (url: string, base: string) => { readonly pathname: string }
+
+// Read only by the development check in `createLoader`.
+declare const process: { env: { NODE_ENV?: string } }
 
 // Any absolute URL resolves against this unchanged; a path resolves onto it.
 const DUMMY_BASE = 'http://lazy-ease.invalid'
@@ -137,7 +175,8 @@ export function encodePath(src: string): string {
 /**
  * Loader for the reference backend. Emits the canonical URL from spec 6.1:
  * `{baseUrl}/{path}?ar=…&fmt=…&fx=…&fy=…&q=…&token=…&v=…&w=…`, parameters sorted, absent ones
- * omitted, numbers in canonical form.
+ * omitted, numbers in canonical form. Throws a RangeError for ladders the
+ * backend would reject (`checkLadders`).
  */
 export function createLoader({
   baseUrl = '/_img',
@@ -147,6 +186,18 @@ export function createLoader({
   formats = DEFAULT_FORMATS,
   params = {},
 }: LoaderOptions = {}): ResolvedLoader {
+  // A development check: bundlers replace `process.env.NODE_ENV`, so a
+  // production build folds it to `if (false)` and drops the whole statement.
+  // Without a bundler, reading `process` throws a ReferenceError (or a
+  // TypeError), which skips the check; only the check's RangeError escapes.
+  // A TypeError from the check itself (a ladder that isn't an array, which
+  // the types forbid) is swallowed too: keeping this one statement is what
+  // lets a production build drop it without a trace.
+  try {
+    if (process.env.NODE_ENV !== 'production') checkLadders({ widths, ratios, qualities, formats })
+  } catch (error) {
+    if (error instanceof RangeError) throw error
+  }
   const base = baseUrl.replace(/\/+$/, '')
   return {
     widths,

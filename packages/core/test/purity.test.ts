@@ -73,9 +73,20 @@ describe('import purity', () => {
     expect(touched).toEqual([])
   })
 
-  it('never names the Node process global', () => {
+  it('names the Node process global only in the guarded development check of createLoader', () => {
     const sources = import.meta.glob('../src/**/*.ts', { query: '?raw', import: 'default', eager: true })
     expect(Object.keys(sources).length).toBeGreaterThan(5)
-    for (const [file, code] of Object.entries(sources)) expect(code, file).not.toMatch(/process/)
+    const guard = "try {\n    if (process.env.NODE_ENV !== 'production') checkLadders("
+    for (const [file, code] of Object.entries(sources)) {
+      // Comments may name it; code may not, apart from the one guard (inside
+      // its try) and its declaration. Only whole comment lines and block
+      // comments are dropped, so a `//` inside a string hides nothing.
+      let rest = code.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
+      if (file.endsWith('/loader.ts')) {
+        expect(rest.split(guard).length, file).toBe(2)
+        rest = rest.replace(guard, '').replace('declare const process: { env: { NODE_ENV?: string } }', '')
+      }
+      expect(rest, file).not.toMatch(/\bprocess\b/)
+    }
   })
 })

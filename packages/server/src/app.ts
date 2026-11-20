@@ -10,6 +10,7 @@ import {
   DEFAULT_RATIOS,
   DEFAULT_WIDTHS,
   OUTPUT_FORMATS,
+  checkLadders,
   formatNumber,
   parseImageQuery,
   type ImageParams,
@@ -180,11 +181,7 @@ export function createImageApp({
   if ('cacheSize' in rest || 'cacheBytes' in rest) {
     throw new TypeError('cacheSize and cacheBytes were replaced by storage: memoryStorage({ maxEntries, maxBytes })')
   }
-  checkLadder('widths', widths, 'positive integers', (n) => Number.isSafeInteger(n) && n >= 1, true)
-  checkLadder('ratios', ratios, 'positive numbers', (n) => Number.isFinite(n) && Number(formatNumber(n)) > 0, true)
-  // sharp takes quality 1 to 100 for AVIF, WebP and JPEG.
-  checkLadder('qualities', qualities, 'integers from 1 to 100', (n) => Number.isInteger(n) && n >= 1 && n <= 100, false)
-  if (formats.length === 0 || formats.some((f) => !OUTPUT_FORMATS.includes(f))) throw new RangeError('formats must be avif, webp or jpeg')
+  checkLadders({ widths, ratios, qualities, formats })
   if (!TENANT_PATTERN.test(tenant)) throw new RangeError('tenant must be 1 to 64 URL-safe characters')
   if (sourceNamespace !== undefined && !(typeof sourceNamespace === 'string' && /^[^\0]{1,1024}$/.test(sourceNamespace))) {
     throw new RangeError('sourceNamespace must be 1 to 1024 characters without NUL')
@@ -429,21 +426,6 @@ export function createImageApp({
   }
 
   return app
-}
-
-/**
- * Throws unless `values` is a non-empty ladder of `rule` values whose URL
- * spellings are distinct and, when `sorted`, ascending: the loader's
- * candidate code assumes sorted width and ratio ladders.
- */
-function checkLadder(name: string, values: readonly number[], rule: string, valid: (n: number) => boolean, sorted: boolean) {
-  if (!(values.length > 0)) throw new RangeError(`${name} must not be empty`)
-  const bad = values.findIndex((n) => typeof n !== 'number' || !valid(n))
-  if (bad >= 0) throw new RangeError(`${name} must be ${rule}, not ${String(values[bad])}`)
-  const spelled = values.map((n) => Number(formatNumber(n)))
-  if (sorted ? spelled.some((n, i) => i > 0 && !(n > spelled[i - 1]!)) : new Set(spelled).size < spelled.length) {
-    throw new RangeError(sorted ? `${name} must be ascending, without duplicates` : `${name} must not repeat a value`)
-  }
 }
 
 /**

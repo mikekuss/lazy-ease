@@ -4,7 +4,7 @@ import { TOKEN_PATTERN } from './token.js'
 
 // The ladders, number spelling and crop geometry are shared with the client
 // through @lazy-ease/core, so both ends agree by construction (spec 3).
-export { cropWindow, DEFAULT_RATIOS, DEFAULT_WIDTHS, formatNumber, type CropWindow, type FocalPoint } from '@lazy-ease/core'
+export { checkLadders, cropWindow, DEFAULT_RATIOS, DEFAULT_WIDTHS, formatNumber, type CropWindow, type FocalPoint } from '@lazy-ease/core'
 
 export const DEFAULT_QUALITIES: readonly number[] = [75]
 

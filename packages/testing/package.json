@@ -1,6 +1,6 @@
 {
   "name": "@lazy-ease/testing",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Portable conformance fixtures for lazy-ease loaders and backends: JSON data for ladders, URLs, crops, encoded sizes and crop tokens",
   "license": "MIT",
   "author": "Mike Kuss",

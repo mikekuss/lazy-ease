@@ -1,6 +1,6 @@
 {
   "name": "@lazy-ease/server",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Image resize and optimization server for lazy-ease (Hono + sharp), with metadata tooling",
   "license": "MIT",
   "author": "Mike Kuss",
