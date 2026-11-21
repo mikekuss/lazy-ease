@@ -185,6 +185,19 @@ describe('prepared mode', () => {
     expect(out[0]!.duration).toEqual({ duration: 350, delay: 250, fill: 'forwards' })
   })
 
+  it('fades a transparent placeholder out in the plain window when the reveal throws', async () => {
+    const reveal = () => {
+      throw new Error('broken reveal')
+    }
+    const { img, box, attach } = setup({ reveal, fadeDuration: 1000, thumbhash: alphaHash })
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+    load(img)
+    await expect(flush()).rejects.toThrow('broken reveal')
+    expect(out[0]!.duration).toEqual({ duration: 400, delay: 400, fill: 'forwards' })
+  })
+
   it('cancels the placeholder fade-out when update or destroy cuts the fade short', async () => {
     for (const cut of ['update', 'destroy'] as const) {
       const { img, box, attach } = setup({ thumbhash: alphaHash })
@@ -880,7 +893,7 @@ describe('focus reveal', () => {
     }
   })
 
-  it('falls back to the plain fade transition when a reveal throws, and reports the error', async () => {
+  it('falls back to the plain fade when a reveal throws, and reports the error', async () => {
     const { img, box, attach } = setup({
       reveal: () => {
         throw new Error('broken reveal')
@@ -891,8 +904,8 @@ describe('focus reveal', () => {
     load(img)
     // Reported from a timer of its own, after the display.
     await expect(flush()).rejects.toThrow('broken reveal')
-    // The transition fades it in instead.
-    expect(animations).toEqual([])
+    // The fade it has without a reveal, animation and transition.
+    expect(animations).toMatchObject([{ keyframes: { opacity: [0, 1], easing: 'ease-out' }, duration: 400 }])
     expect(img.style.opacity).toBe('1')
     expect(img.style.transition).toBe('opacity 400ms ease-out')
     vi.advanceTimersByTime(400)
@@ -1041,6 +1054,150 @@ describe('callbacks that start the next generation', () => {
       expect(box.getAttribute('data-state')).toBe('loading')
     }
   })
+})
+
+describe('a callback of a generation leaves its successor alone', () => {
+  // An update starts generation B with the options of a row. Once, a callback of B starts the successor N: it
+  // updates the image, destroys it and attaches it again, or updates it and throws. Afterwards only N has written.
+  const N: AttachOptions = { url: '/n.webp', loading: 'eager', placeholder: 'red' }
+  const actions = ['update', 'destroy and attach', 'update and throw'] as const
+  type Fire = () => void
+  interface Row {
+    hook: string
+    /** Needs measured mode. */
+    measured?: boolean
+    /** The callback runs inside a call of the test, or its error is caught and reported from a timer, so it may throw. */
+    throws?: boolean
+    skip?: (typeof actions)[number]
+    /** Generation A, before B. Its state must differ from B's first, or B reports nothing. Default: deferred. */
+    a?: AttachOptions
+    config?: (fire: Fire) => LazyEaseConfig
+    options: (fire: Fire) => AttachOptions
+    /** Before the update to B. */
+    before?: (img: HTMLImageElement) => void
+    drive?: (img: HTMLImageElement, box: HTMLElement) => unknown
+  }
+  const b = (options: AttachOptions = {}) => () => ({ url: '/b.webp', ...options })
+  const eager = b({ loading: 'eager' })
+  const native = () => ({ loading: 'native' as const })
+  const measured = () => ({ src: '/b.jpg', loading: 'eager' as const })
+  const twoFormats = createLoader({ formats: ['webp', 'avif'] })
+  const settle = (img: HTMLImageElement) => loadAndDecode(img, '/b.webp')
+  const adopt = (naturalWidth: number) => (img: HTMLImageElement) => {
+    img.setAttribute('src', '/b.webp')
+    Object.assign(img, { complete: true, naturalWidth, currentSrc: '/b.webp' })
+  }
+  const on = (wanted: LoadState) => (fire: Fire) => ({ onStateChange: (state: LoadState) => void (state === wanted && fire()) })
+  const rows: Row[] = [
+    { hook: 'onStateChange idle', throws: true, a: { url: '/z.webp', loading: 'eager' }, config: on('idle'), options: b() },
+    { hook: 'onStateChange loading at start', throws: true, config: on('loading'), options: eager },
+    { hook: 'onStateChange loading when visible', throws: true, config: on('loading'), options: b(), drive: (_, box) => intersect(box) },
+    { hook: 'onStateChange loaded', config: on('loaded'), options: eager, drive: settle },
+    { hook: 'onStateChange error', config: on('error'), options: eager, drive: fail },
+    { hook: 'onStateChange loaded at adoption', throws: true, config: on('loaded'), options: native, before: adopt(100) },
+    { hook: 'onStateChange error at adoption', throws: true, config: on('error'), options: native, before: adopt(0) },
+    { hook: 'onDisplay', options: (fire) => ({ ...eager(), onDisplay: fire }), drive: settle },
+    { hook: 'onDisplay at adoption', throws: true, options: (fire) => ({ ...native(), onDisplay: fire }), before: adopt(100) },
+    { hook: 'reveal', throws: true, config: (fire) => ({ reveal: (edge) => (fire(), focusReveal(edge)) }), options: eager, drive: settle },
+    // The decoder runs twice. First while update() resolves B, before anything ends: B overtakes an update from it, as any update.
+    {
+      hook: 'ThumbHash decoder resolving the options',
+      throws: true,
+      skip: 'update',
+      config: (fire) => ({ thumbhash: () => (fire(), { style: { backgroundColor: 'blue' } }) }),
+      options: b({ placeholder: 'thumbhash:AAAA' }),
+    },
+    // Then as B starts, before it has listeners or a cleanup.
+    {
+      hook: 'ThumbHash decoder starting the generation',
+      throws: true,
+      config: (fire) => {
+        let calls = 0
+        return { thumbhash: () => (++calls === 2 && fire(), { style: { backgroundColor: 'blue' } }) }
+      },
+      options: b({ placeholder: 'thumbhash:AAAA' }),
+    },
+    {
+      hook: 'ThumbHash lazy decode',
+      throws: true,
+      config: (fire) => ({ thumbhash: () => ({ style: { backgroundColor: 'green' }, lazy: () => (fire(), { backgroundColor: 'blue' }) }) }),
+      options: b({ loading: 'eager', placeholder: 'thumbhash:AAAA' }),
+    },
+    {
+      hook: 'loader',
+      measured: true,
+      throws: true,
+      config: (fire) => ({ loader: (request) => (fire(), `/b-${request.width}.webp`), detectFormat: () => 'webp' }),
+      // A browser crop, so that B's focus would show as an object-position on the image.
+      options: () => ({ ...measured(), aspectRatio: 1, crop: 'browser' as const, srcWidth: 1000, srcHeight: 500, focalPoint: { x: 10, y: 10 } }),
+      drive: (_, box) => resize(box, 300, 300),
+    },
+    { hook: 'detectFormat returns', measured: true, throws: true, config: (fire) => ({ loader: twoFormats, detectFormat: () => (fire(), 'webp') }), options: measured },
+    { hook: 'detectFormat resolves', measured: true, throws: true, config: (fire) => ({ loader: twoFormats, detectFormat: async () => (fire(), 'webp' as const) }), options: measured },
+    {
+      hook: 'detectFormat rejects',
+      measured: true,
+      throws: true,
+      config: (fire) => ({
+        loader: twoFormats,
+        detectFormat: async () => {
+          fire()
+          throw new Error('no format')
+        },
+      }),
+      options: measured,
+    },
+  ]
+
+  for (const [name, create] of [['full', createLazyEase], ['prepared', createPrepared]] as const)
+    for (const row of rows)
+      for (const action of actions) {
+        if ((row.measured && name === 'prepared') || (action === 'update and throw' && !row.throws) || row.skip === action) continue
+        it(`${name}: ${row.hook}, ${action}`, async () => {
+          const { box, img } = boxed()
+          mockAnimate(img)
+          const errors: unknown[] = []
+          const step = async (callback: () => unknown) => {
+            try {
+              await callback()
+            } catch (error) {
+              errors.push(error)
+            }
+          }
+          let armed = false
+          let current: Attachment | undefined
+          const fire = () => {
+            if (!armed) return
+            armed = false
+            if (action === 'destroy and attach') {
+              current!.destroy()
+              // Back to the placeholder first, or N adopts what B displays.
+              img.setAttribute('src', INERT)
+              current = le.attach(img, N)
+            } else {
+              current!.update(N)
+              if (action === 'update and throw') throw new Error('boom')
+            }
+          }
+          const le = create({ ...row.config?.(fire) })
+          current = le.attach(img, row.a ?? { url: '/z.webp' })
+          row.before?.(img)
+          armed = true
+          await step(() => current!.update(row.options(fire)))
+          await step(() => row.drive?.(img, box))
+          await step(() => vi.advanceTimersByTimeAsync(1000))
+          expect(armed).toBe(false)
+          if (action === 'update and throw') expect(errors).toContainEqual(new Error('boom'))
+          expect(img.getAttribute('src')).toBe('/n.webp')
+          expect(box.style.backgroundColor).toBe('red')
+          expect(box.style.backgroundImage).toBe('')
+          expect(img.style.opacity).toBe('0')
+          expect(img.style.objectPosition).toBe('')
+          expect(box.getAttribute('data-state')).toBe('loading')
+          expect(current.state).toBe('loading')
+          expect(() => le.attach(img, { url: '/x.webp' })).toThrow('already attached')
+        })
+      }
 })
 
 describe('validation', () => {

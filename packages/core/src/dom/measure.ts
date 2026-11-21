@@ -60,6 +60,8 @@ const measure: Measure = (src, o, mode, focus, img, box, surface, live, later, c
       version: o.version,
       token: o.token,
     })
+    // The loader can update() or destroy().
+    if (!live()) return
     if (focus) {
       // A re-measure replaces the previous crop’s styles.
       unfocus()
