@@ -74,3 +74,54 @@ test('a loaded native data: URI image is adopted as loaded', async ({ page }) =>
   })
   expect(result).toEqual({ complete: true, naturalWidth: 20, state: 'loaded', displays: 1, event: false })
 })
+
+test('a load error stops watching the box edge for the reveal', async ({ page }) => {
+  // Counts the resizes delivered for each element.
+  await page.addInitScript(() => {
+    const seen = new Map<Element, number>()
+    ;(window as unknown as { __resizes: typeof seen }).__resizes = seen
+    const Native = window.ResizeObserver
+    window.ResizeObserver = class extends Native {
+      constructor(callback: ResizeObserverCallback) {
+        super((entries, observer) => {
+          for (const entry of entries) seen.set(entry.target, (seen.get(entry.target) ?? 0) + 1)
+          callback(entries, observer)
+        })
+      }
+    }
+  })
+  await open(page)
+  const result = await page.evaluate(async () => {
+    const { createLazyEase, focusReveal } = (window as unknown as { core: Core }).core
+    const seen = (window as unknown as { __resizes: Map<Element, number> }).__resizes
+    const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    const le = createLazyEase()
+    const make = (css: string) => {
+      const box = document.createElement('span')
+      box.setAttribute('data-le', '')
+      box.style.cssText = `display:block;width:180px;height:120px;${css}`
+      const img = new Image()
+      img.alt = ''
+      img.style.cssText = 'display:block;width:100%;height:100%'
+      box.append(img)
+      document.body.append(box)
+      return { box, img }
+    }
+    // Control: far below the fold, so it never loads and stays watched.
+    const waiting = make('margin-top:5000px')
+    le.attach(waiting.img, { url: '/_img/copy-1.jpg?fmt=webp&q=75&w=640', reveal: focusReveal })
+    const broken = make('')
+    await new Promise<void>((resolve) =>
+      le.attach(broken.img, { url: 'data:image/png;base64,AA==', loading: 'eager', reveal: focusReveal, onStateChange: (state) => state === 'error' && resolve() }),
+    )
+    await frames()
+    const before = [broken.box, waiting.box].map((box) => seen.get(box) ?? 0)
+    for (const { box } of [broken, waiting]) box.style.width = '200px'
+    await frames()
+    return { before, after: [broken.box, waiting.box].map((box) => seen.get(box) ?? 0), state: broken.box.dataset.state }
+  })
+  expect(result.state).toBe('error')
+  // The control box got the resize, the failed one did not.
+  expect(result.after[1]).toBeGreaterThan(result.before[1]!)
+  expect(result.after[0]).toBe(result.before[0])
+})

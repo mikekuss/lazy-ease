@@ -394,7 +394,11 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           const fail = () => {
             report('error')
             // The alt text or the browser's broken-image presentation, in the reserved area.
-            if (live) release()
+            // As at the display, the box edge is no longer watched.
+            if (live) {
+              if (fades) unwatch()
+              release()
+            }
           }
 
           on('load', (event) => {

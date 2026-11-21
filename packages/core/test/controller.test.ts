@@ -967,6 +967,15 @@ describe('focus reveal', () => {
     failed.attach({ url: '/missing.webp' })
     expect(failed.states).toEqual(['error'])
     expect(observed(failed.box)).toBe(false)
+
+    // A load error ends the watch too: the error is final.
+    resetObservers()
+    const broken = setup({ reveal: focusReveal })
+    broken.attach({ url: 'data:image/png;base64,AA==', loading: 'eager' })
+    expect(observed(broken.box)).toBe(true)
+    fail(broken.img)
+    expect(broken.states.at(-1)).toBe('error')
+    expect(observed(broken.box)).toBe(false)
   })
 
   it('stops observing the box when the generation ends', async () => {
