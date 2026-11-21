@@ -112,7 +112,9 @@ const filter = (std: number, alpha: boolean) =>
 
 /** Intrinsic size with the image ratio, two significant digits. */
 function ratio({ width, height }: Analysis): [number, number] {
-  return width >= height ? [100, Math.round((100 * height) / width)] : [Math.round((100 * width) / height), 100]
+  // The shorter edge stays positive: a ratio above 200:1 would round to 0, an empty viewBox.
+  const short = (edge: number) => Math.max(0.01, Number(edge.toPrecision(2)))
+  return width >= height ? [100, short((100 * height) / width)] : [short((100 * width) / height), 100]
 }
 
 /**
@@ -290,8 +292,6 @@ function tile(row: Row, name: string, style: Partial<CSSStyleDeclaration>, info:
   caption.innerHTML = `${name}<span>${info}</span>`
   figure.append(well, caption)
   if (!original) figure.addEventListener('click', () => show(figure, !figure.classList.contains('on')))
-  // A tile rebuilt while "Show images" is on starts revealed, its placeholder gone.
-  if (!original && document.body.classList.contains('reveal')) figure.classList.add('on', 'done')
   return figure
 }
 
@@ -387,6 +387,13 @@ async function render(row: Row) {
     }
   }
   if (run !== generation) return
+  // A row rebuilt while "Show images" is on starts revealed, its placeholders gone. Read once, here: the
+  // toggle can change while the tiles are built.
+  const on = document.body.classList.contains('reveal')
+  for (const figure of tiles.slice(1)) {
+    figure.classList.toggle('on', on)
+    figure.classList.toggle('done', on)
+  }
   row.element.querySelector('.tiles')!.replaceChildren(...tiles)
   if (row.source.big) filmstrip(row, smooth)
 }
