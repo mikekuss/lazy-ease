@@ -24,7 +24,8 @@ body[data-morph=focus] .frame img, body[data-morph=zoom] .frame img { filter:blu
 body[data-morph=zoom] .frame img { transform:scale(1.06) }
 /* A plain fade takes the whole duration, as the controller's. */
 body[data-morph=fade] .frame img { transition:opacity var(--fade) ease-out }
-.tile.original .frame img, .tile.on .frame img, body.reveal .tile .frame img { opacity:1; filter:blur(0); transform:none }
+/* Shown per tile: "Show images" switches every tile on, and a tile built while it is on starts on. */
+.tile.original .frame img, .tile.on .frame img { opacity:1; filter:blur(0); transform:none }
 .tile figcaption { font-size:12px; font-weight:600; margin-top:4px }
 .tile figcaption span { display:block; font:11px/1.4 ui-monospace, monospace; font-weight:400; color:#4b5563 }
 .error { color:#b91c1c; font-size:13px }
