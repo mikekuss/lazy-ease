@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, use, useMemo, type ReactNode } from 'react'
-import { createLoader, normalizeLoader, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader, type ThumbHashDecoder } from '@lazy-ease/core'
+import { createLoader, normalizeLoader, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader, type Reveal, type ThumbHashDecoder } from '@lazy-ease/core'
 
 /**
  * - `lazy`: load when the image comes within `rootMargin` of the root, with a fade
@@ -28,6 +28,8 @@ export interface LazyEaseConfig {
   placeholder: string
   /** Crossfade duration in ms. 0 swaps instantly. */
   fadeDuration: number
+  /** Keyframes for the fade instead of the crossfade: `focusReveal` from `@lazy-ease/core`. */
+  reveal?: Reveal
   /**
    * Enables `thumbhash:` placeholders: `thumbhashDecoder(thumbhash)` from
    * `@lazy-ease/core/thumbhash`, with the `thumbhash` package the app installs.
@@ -77,6 +79,7 @@ export function LazyEaseProvider({
   dwellTime,
   placeholder,
   fadeDuration,
+  reveal,
   thumbhash,
   thumbhashSsr,
 }: LazyEaseProviderProps) {
@@ -92,10 +95,11 @@ export function LazyEaseProvider({
       dwellTime: dwellTime ?? parent.dwellTime,
       placeholder: placeholder ?? parent.placeholder,
       fadeDuration: fadeDuration ?? parent.fadeDuration,
+      reveal: reveal ?? parent.reveal,
       thumbhash: thumbhash ?? parent.thumbhash,
       thumbhashSsr: thumbhashSsr ?? parent.thumbhashSsr,
     }),
-    [parent, loader, domains, quality, loading, root, rootMargin, dwellTime, placeholder, fadeDuration, thumbhash, thumbhashSsr],
+    [parent, loader, domains, quality, loading, root, rootMargin, dwellTime, placeholder, fadeDuration, reveal, thumbhash, thumbhashSsr],
   )
   return <LazyEaseContext value={value}>{children}</LazyEaseContext>
 }

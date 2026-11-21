@@ -27,11 +27,11 @@ const { values: args } = parseArgs({ options: { details: { type: 'boolean' }, pa
 // Approved 0.3 budgets, in Brotli bytes; `goal` is the target of the size pass after 0.3 (docs/design-spec.md).
 const ENTRIES = [
   { name: 'createLoader', fixture: 'create-loader.js', budget: 1000, goal: 1000 },
-  { name: 'attach (with controller)', fixture: 'attach.js', budget: 5400, goal: 3500 },
-  { name: 'enhance (with controller)', fixture: 'enhance.js', budget: 6000, goal: 4000 },
-  { name: 'IIFE lazy-ease.min.js', file: ['vanilla', 'dist/lazy-ease.min.js'], budget: 6600, goal: 4500 },
+  { name: 'attach (with controller)', fixture: 'attach.js', budget: 5600, goal: 3500 },
+  { name: 'enhance (with controller)', fixture: 'enhance.js', budget: 6200, goal: 4000 },
+  { name: 'IIFE lazy-ease.min.js', file: ['vanilla', 'dist/lazy-ease.min.js'], budget: 6800, goal: 4500 },
   { name: 'CSS lazy-ease.css', file: ['vanilla', 'dist/lazy-ease.css'], budget: 500, goal: 500 },
-  { name: 'React Image', fixture: 'image.js', budget: 7950, goal: 5000 },
+  { name: 'React Image', fixture: 'image.js', budget: 8200, goal: 5000 },
 ]
 
 // The packages as a consumer imports them: their published `exports` entry,

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `@lazy-ease/core`: `thumbhashDecoder()` draws the decoded image in an SVG with a Gaussian blur, so a ThumbHash placeholder looks soft instead of showing the steps of a 32 px PNG upscaled by the browser. The blur defaults to 8 % of the longer edge; `thumbhashDecoder(thumbhash, { blur })` changes it, and `blur: 0` paints the PNG as before.
+- `@lazy-ease/core`, `@lazy-ease/react`: a `reveal` option for the fade, off by default. `focusReveal` from `@lazy-ease/core` starts the image as blurred as a ThumbHash placeholder, makes it opaque after 45 % of the fade and sharpens it until the end. A reveal is a function from the box's longer edge to keyframes, so bundles that don't import `focusReveal` don't carry it; the edge comes from a ResizeObserver, so the reveal still reads no layout. A reveal that throws falls back to the plain fade and its error is reported. React has it as a prop and on the provider, calls it through the latest render, so another function takes effect at the next fade without a re-attach; `enhance()` takes it with the instance (`createLazyEase({ reveal: focusReveal })`). The self-starting `lazy-ease.min.js` has no reveal.
+
+### Fixed
+
+- `@lazy-ease/core`: a ThumbHash with alpha painted its average color under the decoded image, which tinted the transparent parts of the box. The decoded image now replaces the color, and stays transparent where the image is.
+- `@lazy-ease/core`: a placeholder stayed under a fading transparent image until the fade ended and then vanished at once. A ThumbHash with alpha now marks its placeholder `transparent` (a new flag on `Placeholder`), and the controller fades such a placeholder out while the image becomes opaque (40 to 80 % of the fade, 25 to 60 % with a `reveal`), so the image crossfades. React passes the flag as the new `transparent` attach option where it paints the decoded ThumbHash itself (`thumbhashSsr: 'image'`). Every other placeholder (colors, data URIs, opaque ThumbHashes, author CSS, no `placeholder` option) stays to the end as before, so it still covers the edges a blurring reveal leaves translucent on an opaque image. Browsers that don't interpolate background images (Firefox) drop the placeholder image half way through that window.
+
 ## [0.3.1] - 2026-11-20
 
 ### Added

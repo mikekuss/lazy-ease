@@ -13,6 +13,8 @@ export interface Placeholder {
   style: StyleRecord
   /** The decoded image, for once the image is about to load. */
   lazy?: () => StyleRecord
+  /** It stands for a transparent image, so it fades out with the fade instead of staying under the image. */
+  transparent?: boolean
 }
 
 /** Decodes the base64 part of a `thumbhash:` placeholder. Undefined for a malformed hash. */

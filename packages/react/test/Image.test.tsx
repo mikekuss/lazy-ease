@@ -4,7 +4,7 @@ import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import * as thumbhash from 'thumbhash'
 import { describe, expect, it, vi } from 'vitest'
-import { candidateSet, classicCandidates, createLazyEase, createLoader, fullLadder, measuredCandidates, snapRatio, type LoadState } from '@lazy-ease/core'
+import { candidateSet, classicCandidates, createLazyEase, createLoader, focusReveal, fullLadder, measuredCandidates, snapRatio, type LoadState } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { enhance } from '../../vanilla/src/index.js'
 import { LazyEaseProvider, type LazyEaseProviderProps } from '../src/context.js'
@@ -785,6 +785,99 @@ describe('placeholders', () => {
     intersect(owner())
     expect(owner().style.backgroundImage).toContain('data:image/png;base64,')
     expect(owner().style.backgroundPosition).toBe('center center')
+  })
+
+  it('paints a transparent ThumbHash image without its color, and removes it after the fade', async () => {
+    const rgba = new Uint8Array(16 * 16 * 4)
+    for (let i = 0; i < 256; i++) if (i % 16 < 8) rgba.set([0, 128, 255, 255], i * 4)
+    const half = `thumbhash:${btoa(String.fromCharCode(...thumbhash.rgbaToThumbHash(16, 16, rgba)))}`
+    const { owner, img } = mount({ width: 320, height: 240, placeholder: half, fadeDuration: 300 }, { thumbhash: decoder })
+    expect(owner().style.backgroundColor).toMatch(/^rgba\(/)
+    intersect(owner())
+    expect(owner().style.backgroundColor).toBe('')
+    expect(owner().style.backgroundImage).toContain('data:image/svg+xml')
+    expect(decodeURIComponent(owner().style.backgroundImage)).not.toContain('feFuncA')
+    resize(owner(), 320, 240)
+    load(img())
+    await advance(300)
+    expect(owner().style.backgroundImage).toBe('')
+  })
+
+  it('fades out a transparent ThumbHash during the fade, also one painted as its image on the server', async () => {
+    const animate = vi.fn(() => ({ cancel() {} }))
+    Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, value: animate })
+    // The box's fade-out: its inline decoded image animated to the inert pixel.
+    const fadesOut = () => animate.mock.calls.some((call: unknown[]) => String((call[0] as Keyframe).backgroundImage).includes('data:image/gif'))
+    try {
+      const rgba = new Uint8Array(16 * 16 * 4)
+      for (let i = 0; i < 256; i++) if (i % 16 < 8) rgba.set([0, 128, 255, 255], i * 4)
+      const half = `thumbhash:${btoa(String.fromCharCode(...thumbhash.rgbaToThumbHash(16, 16, rgba)))}`
+      for (const [placeholder, thumbhashSsr, expected] of [
+        [half, undefined, true],
+        [half, 'image', true],
+        [RED, undefined, false],
+        [RED, 'image', false],
+      ] as [string, 'image' | undefined, boolean][]) {
+        animate.mockClear()
+        const { owner, img, unmount } = mount({ width: 320, height: 240, placeholder, fadeDuration: 300 }, { thumbhash: decoder, thumbhashSsr })
+        intersect(owner())
+        resize(owner(), 320, 240)
+        load(img())
+        await advance()
+        expect(fadesOut()).toBe(expected)
+        unmount()
+      }
+    } finally {
+      delete (HTMLElement.prototype as { animate?: unknown }).animate
+    }
+  })
+
+  it('uses the latest reveal function without re-attaching', async () => {
+    const animate = vi.fn(() => ({ cancel() {} }))
+    Object.defineProperty(HTMLImageElement.prototype, 'animate', { configurable: true, value: animate })
+    try {
+      const first = vi.fn(() => [{ opacity: 0 }, { opacity: 1 }])
+      const second = vi.fn(() => [{ opacity: 0, transform: 'scale(1.1)' }, { opacity: 1 }])
+      const { owner, img, rerender } = mount({ width: 320, height: 240, fadeDuration: 300, reveal: first })
+      const before = img()
+      rerender({ reveal: second })
+      expect(img()).toBe(before)
+      intersect(owner())
+      resize(owner(), 320, 240)
+      load(img())
+      await advance()
+      expect(first).not.toHaveBeenCalled()
+      expect(second).toHaveBeenCalledWith(320)
+      expect(animate).toHaveBeenCalledWith([{ opacity: 0, transform: 'scale(1.1)' }, { opacity: 1 }], 300)
+    } finally {
+      delete (HTMLImageElement.prototype as { animate?: unknown }).animate
+    }
+  })
+
+  it('reveals with focus from the provider or the prop', async () => {
+    const animate = vi.fn(() => ({ cancel() {} }))
+    Object.defineProperty(HTMLImageElement.prototype, 'animate', { configurable: true, value: animate })
+    try {
+      for (const [props, provider] of [[{ reveal: focusReveal }, {}], [{}, { reveal: focusReveal }]] as [Partial<ImageProps>, Provider][]) {
+        animate.mockClear()
+        const { owner, img, unmount } = mount({ width: 320, height: 240, fadeDuration: 300, ...props }, provider)
+        intersect(owner())
+        resize(owner(), 320, 240)
+        load(img())
+        await advance()
+        expect(animate).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ filter: 'blur(25.6px)' })]), 300)
+        unmount()
+      }
+      const { owner, img } = mount({ width: 320, height: 240, fadeDuration: 300 })
+      animate.mockClear()
+      intersect(owner())
+      resize(owner(), 320, 240)
+      load(img())
+      await advance()
+      expect(animate).toHaveBeenCalledWith({ opacity: [0, 1], easing: 'ease-out' }, 300)
+    } finally {
+      delete (HTMLImageElement.prototype as { animate?: unknown }).animate
+    }
   })
 
   it('does not paint the placeholder back once the image is displayed, but does for a new source', async () => {

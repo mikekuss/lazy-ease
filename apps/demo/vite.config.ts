@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => ({
         lcp: page('lcp/index.html'),
         recipes: page('recipes/index.html'),
         // The controller cases need the demo server.
-        ...(mode === 'static' ? {} : { controller: page('controller.html') }),
+        ...(mode === 'static' ? {} : { controller: page('controller.html'), placeholders: page('placeholders/index.html') }),
       },
     },
   },

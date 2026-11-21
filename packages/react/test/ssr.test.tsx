@@ -120,8 +120,25 @@ describe('server output', () => {
 
   it('renders only the average color of a ThumbHash unless opted in', () => {
     expect(html(MODES['thumbhash measured']!)).not.toContain('background-image')
-    expect(html(MODES['thumbhash measured']!, { thumbhashSsr: 'image' })).toContain('background-image:url(&quot;data:image/png')
-    expect(html(MODES['thumbhash priority']!)).toContain('background-image:url(&quot;data:image/png')
+    // The decoded image, blurred in an SVG.
+    for (const markup of [html(MODES['thumbhash measured']!, { thumbhashSsr: 'image' }), html(MODES['thumbhash priority']!)]) {
+      expect(markup).toContain('background-image:url(&quot;data:image/svg+xml,')
+      expect(markup).toContain('feGaussianBlur')
+      expect(markup).toContain('data:image/png;base64,')
+    }
+  })
+
+  it('renders a transparent ThumbHash without a color under its image', () => {
+    // A purple disc on a transparent square.
+    const rgba = new Uint8Array(16 * 16 * 4)
+    for (let i = 0; i < 256; i++) if (Math.hypot((i % 16) - 7.5, Math.floor(i / 16) - 7.5) < 5) rgba.set([124, 58, 237, 255], i * 4)
+    const disc = `thumbhash:${btoa(String.fromCharCode(...thumbhash.rgbaToThumbHash(16, 16, rgba)))}`
+    // The color alone, translucent, until the image is decoded.
+    expect(html({ width: 320, height: 240, placeholder: disc })).toMatch(/background-color:rgba\(\d+, \d+, \d+, 0\.\d+\)/)
+    const image = html({ width: 320, height: 240, placeholder: disc }, { thumbhashSsr: 'image' })
+    expect(image).not.toContain('background-color')
+    expect(image).toContain('feGaussianBlur')
+    expect(image).not.toContain('feFuncA')
   })
 })
 

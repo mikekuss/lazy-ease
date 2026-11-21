@@ -1,0 +1,41 @@
+body { margin:0; font:15px/1.5 system-ui, sans-serif; color:#111827; background:#f3f4f6 }
+.bar { position:sticky; top:0; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; padding:10px 20px; background:#fff; border-bottom:1px solid #e5e7eb; font-size:14px }
+.bar label, .bar fieldset { display:flex; gap:6px; align-items:center }
+.bar fieldset { border:0; margin:0; padding:0 }
+.bar legend { float:left; margin-right:6px }
+.bar output { min-width:2.5em; font:12px ui-monospace, monospace }
+.note { margin:10px 20px; color:#4b5563; font-size:13px }
+main { padding:0 20px 64px }
+.row { margin:18px 0 28px }
+.row h2 { margin:0 0 6px; font-size:15px }
+.row h2 small { font-weight:400; color:#6b7280 }
+.tiles { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start }
+.tile { width:var(--tile, 300px); margin:0; cursor:pointer }
+.well { border-radius:10px; overflow:hidden; background:repeating-conic-gradient(#d1d5db 0 25%, #f9fafb 0 50%) 0 0 / 20px 20px }
+.row.big { --tile:560px }
+.row.big h2 { font-size:17px }
+.frame { position:relative; overflow:hidden; border-radius:10px; background-size:cover; background-position:50%; background-repeat:no-repeat }
+body { --fade:900ms; --blur:.08 }
+.frame img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0;
+  transition:opacity calc(var(--fade) * .45) ease-out, filter var(--fade) cubic-bezier(.2, .7, .2, 1), transform var(--fade) cubic-bezier(.2, .7, .2, 1) }
+/* Focus: the image arrives as blurred as the placeholder and sharpens. Opacity
+   finishes first, so the two blurs blend before any detail shows. */
+body[data-morph=focus] .frame img, body[data-morph=zoom] .frame img { filter:blur(calc(var(--long) * var(--blur))) }
+body[data-morph=zoom] .frame img { transform:scale(1.06) }
+.tile.original .frame img, .tile.on .frame img, body.reveal .tile .frame img { opacity:1; filter:blur(0); transform:none }
+.tile figcaption { font-size:12px; font-weight:600; margin-top:4px }
+.tile figcaption span { display:block; font:11px/1.4 ui-monospace, monospace; font-weight:400; color:#4b5563 }
+.error { color:#b91c1c; font-size:13px }
+.legend { padding-left:20px; margin-left:20px }
+.legend li { margin:2px 0 }
+.row.wide .tiles { display:block }
+.hero { position:relative; width:100%; max-width:1600px; border-radius:10px; overflow:hidden; --split:50% }
+.hero > div { position:absolute; inset:0; background-size:cover; background-position:50% }
+.hero > .after { clip-path:inset(0 0 0 var(--split)) }
+.hero::after { content:''; position:absolute; top:0; bottom:0; left:var(--split); width:2px; margin-left:-1px; background:#fff; box-shadow:0 0 6px rgb(0 0 0 / .5); pointer-events:none }
+.hero input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:ew-resize }
+.tile.done .frame { background:none !important }
+.strip { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px }
+.strip figure { width:150px; margin:0 }
+.strip figcaption { font:11px ui-monospace, monospace; color:#4b5563; margin-top:2px }
+.strip .frame img { position:absolute }

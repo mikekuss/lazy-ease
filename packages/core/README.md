@@ -56,9 +56,10 @@ handle.destroy() // releases listeners, observers, timers and the claim on the e
 | `width`, `height`, `aspectRatio`, `fill` | Layout, as in the HTML. Fixed and ratio boxes crop on the server at the snapped ratio. |
 | `crop` | `'browser'` or `'server'`. A fill image with both source dimensions defaults to browser crop: the uncropped source at the cover width, max(box width, box height × source ratio). |
 | `srcWidth`, `srcHeight`, `focalPoint`, `version`, `token`, `quality` | Source geometry, focus, revision, crop token and quality for the loader. The reference loader writes the token between `q` and `v`. |
-| `placeholder` | A color, a data URI, `thumbhash:…` (with a registered decoder) or `'none'`. Default: whatever the HTML paints on the box. |
+| `placeholder` | A color, a data URI, `thumbhash:…` (with a registered decoder) or `'none'`. Default: whatever the HTML paints on the box. It stays under the image until the fade ends, unless it is a ThumbHash with alpha, which fades out with it. |
+| `transparent` | The placeholder painted inline by the caller stands for a transparent image (a decoded ThumbHash with alpha), so it fades out with the fade. React sets it where it paints the decoded ThumbHash itself. |
 | `loading: 'eager'`, `root`, `rootMargin`, `dwellTime` | When to activate. Default: within 400px of the viewport, observed through one shared IntersectionObserver per root and margin. A root or margin the IntersectionObserver refuses throws and leaves the element as it was; on `update` the displayed image stays. |
-| `fadeDuration`, `onStateChange(state, img)`, `onDisplay(img, event?)` | A 400 ms fade after load and decode, skipped for reduced motion. It starts from explicit keyframes, so the controller reads no layout for it. `onDisplay` reports the first display of each source once, with the load event only when one was observed. |
+| `fadeDuration`, `reveal`, `onStateChange(state, img)`, `onDisplay(img, event?)` | A 400 ms fade after load and decode, skipped for reduced motion. `reveal` takes keyframes for the fade instead: `focusReveal` sharpens the image from a blur of 8 % of the box's longer edge, and any `(edge) => Keyframe[]` works; one that throws gets the plain fade. It starts from explicit keyframes and takes the box size from a ResizeObserver, so the controller reads no layout for it. `onDisplay` reports the first display of each source once, with the load event only when one was observed. |
 
 External URLs, SVG and GIF load directly. A loader with one format, without AVIF among its formats, or with `formats: 'auto'` needs no format probe; otherwise an AVIF decode test runs once, on first need, and WebP is the fallback. Measured images grow their candidates after a 200 ms trailing debounce and never shrink them; a failed upgrade keeps the image that is displayed. A failed first load or decode releases the placeholder and reports `error`. An element can be attached once; the claim is shared by every copy of the package on the page.
 
@@ -82,6 +83,8 @@ import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 
 const le = createLazyEase({ thumbhash: thumbhashDecoder(thumbhash) })
 ```
+
+The decoded image is drawn blurred in an SVG, by 8 % of its longer edge (`thumbhashDecoder(thumbhash, { blur })`, `0` for the raw PNG). A ThumbHash with alpha stays transparent.
 
 `@lazy-ease/vanilla`, `@lazy-ease/react` and `@lazy-ease/server` build on this package.
 

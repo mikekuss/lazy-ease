@@ -21,6 +21,7 @@ import {
   type ImageLoaderFunction,
   type LoadState,
   type ResolvedLoader,
+  type Reveal,
   type ThumbHashDecoder,
 } from '@lazy-ease/core'
 import { useLazyEaseConfig, type LoadingStrategy } from './context.js'
@@ -100,6 +101,8 @@ export interface ImageProps
   placeholder?: string
   /** Crossfade in ms. 0 swaps directly and needs no box. */
   fadeDuration?: number
+  /** Keyframes for the fade instead of the crossfade: `focusReveal` from `@lazy-ease/core`. Default: the provider's. */
+  reveal?: Reveal
   /** Loads `src` as is, without the loader. */
   unoptimized?: boolean
   loader?: ImageLoader | ImageLoaderFunction
@@ -187,6 +190,7 @@ function ImageBox({
   priority = false,
   placeholder,
   fadeDuration,
+  reveal,
   unoptimized = false,
   loader: loaderProp,
   sources = [],
@@ -280,6 +284,7 @@ function ImageBox({
     onStateChange,
     loader,
     decoder,
+    reveal,
     event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
     // The currentSrc the stored load event was for.
     eventSrc: '',
@@ -291,7 +296,8 @@ function ImageBox({
     hidden: false,
   })
   const kept = latest.current
-  Object.assign(kept, { onLoad, onStateChange, loader, decoder })
+  const revealer = reveal ?? config.reveal
+  Object.assign(kept, { onLoad, onStateChange, loader, decoder, reveal: revealer })
   // The controller owns the placeholder from display on and removes it after the fade:
   // a rerender renders the same styles again, so React neither writes it back nor
   // removes it early. A native image keeps its displayed image under a new source.
@@ -334,12 +340,14 @@ function ImageBox({
     return setRef(ref, node)
   }, [ref])
 
-  let options: AttachOptions = { loading: strategy === 'eager' ? 'eager' : undefined, rootMargin: rootMargin ?? config.rootMargin, dwellTime: config.dwellTime, fadeDuration: fadeMs }
+  let options: AttachOptions = { loading: strategy === 'eager' ? 'eager' : undefined, rootMargin: rootMargin ?? config.rootMargin, dwellTime: config.dwellTime, fadeDuration: fadeMs, reveal: revealer && ((edge) => kept.reveal?.(edge) ?? [{ opacity: 0, easing: 'ease-out' }, { opacity: 1 }]) }
   if (native) options = { ...options, loading: 'native', priority }
   else if (measured)
     options = { ...options, src, quality: q, width, height, aspectRatio, fill, crop, srcWidth, srcHeight, focalPoint: focus, version, token }
   else options = { ...options, srcset: real!.srcSet, sizes: real!.sizes, url: real!.src }
   // Only a ThumbHash shown as its color goes to the controller, which swaps in the image on activation.
+  // One painted here as its image only says whether it is transparent, so that it fades out with the fade.
+  options.transparent = parsed.transparent
   if (!native && parsed.lazy && !ssrImage) options.placeholder = requested ? (placeholder ?? config.placeholder) : config.placeholder
   // Equivalent config keeps the attachment: the loader and decoder are compared by
   // what they offer and called through `latest`, so inline ones don't re-attach.
@@ -348,7 +356,9 @@ function ImageBox({
   // in the img's own attributes, and a direct source must never reach the loader.
   const { widths, ratios, qualities, formats } = loader
   const probe = measured ? loader.url({ src, width: widths[0]!, quality: qualities[0]!, format: formats === 'auto' ? formats : formats[0]! }) : ''
-  const signature = JSON.stringify([options, pictureSources, config.domains, widths, ratios, qualities, formats, probe, !!decoder])
+  // A reveal is a function, so only whether there is one counts: it is called through `latest`,
+  // so another one takes effect at the next display without a re-attach.
+  const signature = JSON.stringify([options, pictureSources, config.domains, widths, ratios, qualities, formats, probe, !!decoder, !!options.reveal])
 
   useEffect(() => {
     const img = self.current!
@@ -367,7 +377,7 @@ function ImageBox({
       ((hash) => {
         const decoded = state.decoder?.(hash)
         const lazy = decoded?.lazy
-        return decoded && { style: decoded.style, lazy: lazy && (() => ({ ...lazy(), backgroundPosition: 'center' })) }
+        return decoded && { ...decoded, lazy: lazy && (() => ({ ...lazy(), backgroundPosition: 'center' })) }
       })
     const attachment = createLazyEase({ thumbhash, domains: config.domains }).attach(img, {
       ...options,

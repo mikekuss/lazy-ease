@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLazyEase, createLoader, whenVisible, type AttachOptions, type Attachment, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
+import { createLazyEase, createLoader, focusReveal, whenVisible, type AttachOptions, type Attachment, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
 import { chooseFormat, resetFormatDetection } from '../src/dom/format.js'
+import { thumbhashDecoder } from '../src/thumbhash.js'
 import { observeResize, resetObservers } from '../src/dom/observe.js'
 import { fail, fakeImage, flush, installDom, intersect, load, media, mockAnimate, MockIntersectionObserver, MockResizeObserver, probe, recordLayoutReads, resize } from './dom-mocks.js'
 
@@ -98,6 +99,116 @@ describe('prepared mode', () => {
     expect(box.style.backgroundColor).toBe('')
     expect(img.style.opacity).toBe('')
     expect(reads).toEqual([])
+  })
+
+  // A decoder whose placeholder stands for a transparent image, as `thumbhashDecoder()` returns for a hash with alpha.
+  const alphaHash = () => ({ style: {}, lazy: () => ({ backgroundImage: 'url("data:image/png;base64,AAAA")' }), transparent: true })
+
+  it('fades a transparent placeholder out while the image becomes opaque, so a transparent image crossfades', async () => {
+    const { img, box, attach } = setup({ thumbhash: alphaHash })
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+    expect(box.style.backgroundColor).toBe('')
+    await loadAndDecode(img)
+    // Only what it painted inline: the decoded image, no color.
+    expect(out).toMatchObject([{ keyframes: { backgroundImage: `url(${INERT})` }, duration: { duration: 160, delay: 160, fill: 'forwards' }, cancelled: false }])
+    expect(out[0]!.keyframes).not.toHaveProperty('backgroundColor')
+    // The placeholder is still painted underneath; the animation only covers it.
+    expect(box.style.backgroundImage).toContain('AAAA')
+    vi.advanceTimersByTime(400)
+    expect(out[0]!.cancelled).toBe(true)
+    expect(box.style.backgroundImage).toBe('')
+  })
+
+  it('fades out the inline placeholder the caller marks transparent', async () => {
+    const { img, box, attach } = setup()
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', transparent: true })
+    await loadAndDecode(img)
+    expect(out).toMatchObject([{ keyframes: { backgroundColor: 'transparent' } }])
+    expect(out[0]!.keyframes).not.toHaveProperty('backgroundImage')
+    vi.advanceTimersByTime(400)
+    expect(box.style.backgroundColor).toBe('')
+  })
+
+  it('keeps every other placeholder under the image until the fade ends', async () => {
+    const opaqueHash = () => ({ style: { backgroundColor: 'red' }, lazy: () => ({ backgroundImage: 'url("data:image/png;base64,AAAA")' }) })
+    // No placeholder option (what the HTML paints), a color, a data URI, 'none', an opaque ThumbHash; with and without a reveal.
+    for (const placeholder of [undefined, 'blue', 'data:image/png;base64,AAAA', 'none', 'thumbhash:AAAA']) {
+      for (const reveal of [undefined, focusReveal]) {
+        const { img, box, attach } = setup({ reveal, thumbhash: opaqueHash })
+        mockAnimate(img)
+        const out = mockAnimate(box)
+        attach({ url: '/a.webp', loading: 'eager', placeholder })
+        await loadAndDecode(img)
+        expect(out).toEqual([])
+        vi.advanceTimersByTime(400)
+        expect(box.style.backgroundColor).toBe('')
+      }
+    }
+  })
+
+  it('keeps a placeholder from author CSS under the image, and does not animate it', async () => {
+    const { img, box, attach } = setup()
+    box.removeAttribute('style')
+    box.className = 'frame'
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager' })
+    await loadAndDecode(img)
+    expect(out).toEqual([])
+  })
+
+  it('leaves a background from author CSS under a transparent placeholder alone', async () => {
+    const { img, box, attach } = setup({ thumbhash: alphaHash })
+    box.removeAttribute('style')
+    box.className = 'frame'
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+    await loadAndDecode(img)
+    // The CSS color is not animated away, so it does not jump back when the fade ends.
+    expect(out[0]!.keyframes).toEqual({ backgroundImage: `url(${INERT})` })
+    vi.advanceTimersByTime(400)
+    expect(box.getAttribute('style') ?? '').not.toContain('background-color')
+  })
+
+  it('fades a transparent placeholder out earlier with a reveal, before the image has sharpened', async () => {
+    const { img, box, attach } = setup({ reveal: focusReveal, fadeDuration: 1000, thumbhash: alphaHash })
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+    await loadAndDecode(img)
+    expect(out[0]!.duration).toEqual({ duration: 350, delay: 250, fill: 'forwards' })
+  })
+
+  it('cancels the placeholder fade-out when update or destroy cuts the fade short', async () => {
+    for (const cut of ['update', 'destroy'] as const) {
+      const { img, box, attach } = setup({ thumbhash: alphaHash })
+      mockAnimate(img)
+      const out = mockAnimate(box)
+      const handle = attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(200)
+      expect(out[0]!.cancelled).toBe(false)
+      if (cut === 'update') handle.update({ url: '/b.webp', placeholder: 'blue' })
+      else handle.destroy()
+      expect(out[0]!.cancelled).toBe(true)
+      expect(box.style.backgroundImage).toBe('')
+      if (cut === 'update') expect(box.style.backgroundColor).toBe('blue')
+      handle.destroy()
+    }
+  })
+
+  it('does not fade the placeholder when it swaps directly', async () => {
+    media.reducedMotion = true
+    const { img, box, attach } = setup()
+    const out = mockAnimate(box)
+    attach({ url: '/a.webp', loading: 'eager', transparent: true })
+    await loadAndDecode(img)
+    expect(out).toEqual([])
   })
 
   it('reads no style or layout through load, decode and reveal', async () => {
@@ -687,6 +798,138 @@ describe('generations', () => {
   }
 })
 
+describe('focus reveal', () => {
+  it('sharpens from 8 % of the longer edge while it fades in, and reads no layout', async () => {
+    const { img, box, attach } = setup({ reveal: focusReveal })
+    const animations = mockAnimate(img)
+    const reads = recordLayoutReads()
+    attach({ url: '/a.webp' })
+    resize(box, 320, 213)
+    intersect(box)
+    expect(img.style.opacity).toBe('0')
+    await loadAndDecode(img)
+    expect(animations).toMatchObject([
+      {
+        keyframes: [
+          { opacity: 0, filter: 'blur(25.6px)', easing: 'ease-out' },
+          { opacity: 1, offset: 0.45 },
+          { opacity: 1, filter: 'blur(0px)' },
+        ],
+        duration: 400,
+        cancelled: false,
+      },
+    ])
+    expect(box.style.backgroundColor).toBe(PLACEHOLDER)
+    vi.advanceTimersByTime(400)
+    // Released like a fade: the animation and its blur end, the placeholder goes.
+    expect(animations[0]!.cancelled).toBe(true)
+    expect(box.style.backgroundColor).toBe('')
+    expect(img.style.opacity).toBe('')
+    expect(img.style.filter).toBe('')
+    expect(reads).toEqual([])
+  })
+
+  it('takes reveal per image, and keeps the plain fade by default', async () => {
+    const plain = setup()
+    const plainAnimations = mockAnimate(plain.img)
+    plain.attach({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(plain.img)
+    expect(plainAnimations[0]!.keyframes).toEqual({ opacity: [0, 1], easing: 'ease-out' })
+
+    const focused = setup()
+    const animations = mockAnimate(focused.img)
+    focused.attach({ url: '/a.webp', loading: 'eager', reveal: focusReveal })
+    resize(focused.box, 200, 400)
+    await loadAndDecode(focused.img)
+    expect((animations[0]!.keyframes as Keyframe[])[0]!.filter).toBe('blur(32px)')
+  })
+
+  it('runs any reveal with the longer edge, a ResizeObserver reported', async () => {
+    const edges: number[] = []
+    const reveal = (edge: number) => (edges.push(edge), [{ opacity: 0, transform: 'scale(1.1)' }, { opacity: 1, transform: 'none' }])
+    const { img, box, attach } = setup({ reveal })
+    const animations = mockAnimate(img)
+    attach({ url: '/a.webp' })
+    resize(box, 300, 500)
+    intersect(box)
+    await loadAndDecode(img)
+    expect(edges).toEqual([500])
+    expect(animations[0]!.keyframes).toEqual([{ opacity: 0, transform: 'scale(1.1)' }, { opacity: 1, transform: 'none' }])
+  })
+
+  it('starts from a fixed blur when no size was reported', async () => {
+    const { img, attach } = setup({ reveal: focusReveal })
+    const animations = mockAnimate(img)
+    attach({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(img)
+    expect((animations[0]!.keyframes as Keyframe[])[0]!.filter).toBe('blur(24px)')
+  })
+
+  it('swaps directly with reduced motion or a zero fade', async () => {
+    for (const config of [{ fadeDuration: 0 }, {}]) {
+      media.reducedMotion = !('fadeDuration' in config)
+      const { img, box, attach } = setup({ reveal: focusReveal, ...config })
+      const animations = mockAnimate(img)
+      attach({ url: '/a.webp', loading: 'eager' })
+      resize(box, 320, 213)
+      await loadAndDecode(img)
+      expect(animations).toEqual([])
+      expect(img.style.opacity).toBe('')
+      expect(box.style.backgroundColor).toBe('')
+    }
+  })
+
+  it('falls back to the plain fade transition when a reveal throws, and reports the error', async () => {
+    const { img, box, attach } = setup({
+      reveal: () => {
+        throw new Error('broken reveal')
+      },
+    })
+    const animations = mockAnimate(img)
+    attach({ url: '/a.webp', loading: 'eager' })
+    load(img)
+    // Reported from a timer of its own, after the display.
+    await expect(flush()).rejects.toThrow('broken reveal')
+    // The transition fades it in instead.
+    expect(animations).toEqual([])
+    expect(img.style.opacity).toBe('1')
+    expect(img.style.transition).toBe('opacity 400ms ease-out')
+    vi.advanceTimersByTime(400)
+    expect(img.style.opacity).toBe('')
+    expect(box.style.backgroundColor).toBe('')
+  })
+
+  it('observes the box only when a fade can run', () => {
+    const observed = (box: Element) => MockResizeObserver.instances.some((o) => o.elements.has(box))
+    for (const [config, options, expected, reduced] of [
+      [{}, {}, true],
+      [{ fadeDuration: 0 }, {}, false],
+      [{}, { priority: true }, false],
+      [{}, {}, false, true],
+    ] as [LazyEaseConfig, AttachOptions, boolean, boolean?][]) {
+      resetObservers()
+      media.reducedMotion = !!reduced
+      const { box, attach } = setup({ reveal: focusReveal, ...config })
+      attach(options.priority ? options : { url: '/a.webp', ...options })
+      expect(observed(box)).toBe(expected)
+    }
+    // A bare img has no fade.
+    resetObservers()
+    document.body.innerHTML = `<img alt="" src="${INERT}">`
+    const img = document.querySelector('img')!
+    createLazyEase({ reveal: focusReveal }).attach(img, { url: '/a.webp' })
+    expect(observed(img)).toBe(false)
+  })
+
+  it('stops observing the box when the generation ends', async () => {
+    const { box, attach } = setup({ reveal: focusReveal })
+    const handle = attach({ url: '/a.webp' })
+    expect(MockResizeObserver.instances.some((o) => o.elements.has(box))).toBe(true)
+    handle.destroy()
+    expect(MockResizeObserver.instances.some((o) => o.elements.has(box))).toBe(false)
+  })
+})
+
 describe('validation', () => {
   it.each<[string, AttachOptions]>([
     ['measured and prepared', { src: '/a.jpg', srcset: '/a.webp 640w' }],
@@ -1237,5 +1480,27 @@ describe('placeholders', () => {
     intersect(box)
     expect(lazy).toHaveBeenCalledOnce()
     expect(box.style.backgroundImage).toContain('BBBB')
+  })
+
+  it('paints a transparent ThumbHash without its color, and removes it after the reveal', async () => {
+    const png = `data:image/png;base64,${btoa(String.fromCharCode(137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 32, 0, 0, 0, 32, 8, 6, 0, 0, 0))}`
+    const thumbhash = thumbhashDecoder({ thumbHashToAverageRGBA: () => ({ r: 0.5, g: 0, b: 1, a: 0.3 }), thumbHashToDataURL: () => png })
+    // A header with the alpha flag (bit 23) set.
+    const hash = btoa(String.fromCharCode(0, 0, 0x80, 0, 0, 0))
+    for (const reveal of [undefined, focusReveal]) {
+      const { img, box, attach } = setup({ thumbhash, reveal })
+      mockAnimate(img)
+      attach({ url: '/logo.webp', placeholder: `thumbhash:${hash}` })
+      expect(box.style.backgroundColor).toBe('rgba(128, 0, 255, 0.3)')
+      intersect(box)
+      // The blurred image alone: a color under it would tint the transparent parts.
+      expect(box.style.backgroundColor).toBe('')
+      expect(box.style.backgroundImage).toContain('data:image/svg+xml')
+      expect(decodeURIComponent(box.style.backgroundImage)).not.toContain('feFuncA')
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(400)
+      expect(box.style.backgroundImage).toBe('')
+      expect(img.style.opacity).toBe('')
+    }
   })
 })

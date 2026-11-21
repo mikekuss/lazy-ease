@@ -78,4 +78,54 @@ describe('thumbhashDecoder', () => {
     const decode = thumbhashDecoder(functions)
     for (const bad of ['', 'not base64!', 'AAAA', '////']) expect(decode(bad)).toBeUndefined()
   })
+
+  // A PNG data URI whose IHDR says 32 × 24; the pixels don't matter here.
+  const png = (() => {
+    const bytes = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 32, 0, 0, 0, 24, 8, 6, 0, 0, 0]
+    return `data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`
+  })()
+  const real = { ...functions, thumbHashToDataURL: () => png }
+  // The same hash with the alpha flag (bit 23) set.
+  const alphaHash = (() => {
+    const bytes = Uint8Array.from(atob(hash), (c) => c.charCodeAt(0))
+    bytes[2]! |= 0x80
+    return btoa(String.fromCharCode(...bytes))
+  })()
+  const svgOf = (style: Record<string, string | undefined>) => decodeURIComponent(/^url\("data:image\/svg\+xml,(.*)"\)$/.exec(style.backgroundImage!)![1]!)
+
+  it('draws the decoded image blurred in an SVG, opaque to its edges', () => {
+    const style = thumbhashDecoder(real)(hash)!.lazy!()
+    expect(style.backgroundColor).toBe('#ff8000')
+    expect(style.backgroundSize).toBe('cover')
+    const svg = svgOf(style)
+    expect(svg).toContain("viewBox='0 0 32 24'")
+    // 8 % of the longer edge.
+    expect(svg).toContain("stdDeviation='2.56'")
+    expect(svg).toContain("<feFuncA type='discrete' tableValues='1 1'/>")
+    expect(svg).toContain(`href='${png}'`)
+    // The only characters a data URI must escape are escaped.
+    expect(style.backgroundImage).not.toMatch(/#/)
+  })
+
+  it('keeps the alpha of a transparent image and paints no color under it', () => {
+    const decode = thumbhashDecoder({ ...real, thumbHashToAverageRGBA: () => ({ r: 0, g: 0, b: 1, a: 0.25 }) })
+    const placeholder = decode(alphaHash)!
+    // Before activation the translucent average stands in for the image.
+    expect(placeholder.style).toEqual({ backgroundColor: 'rgba(0, 0, 255, 0.25)' })
+    // It stands for a transparent image, so the controller fades it out with the fade.
+    expect(placeholder.transparent).toBe(true)
+    expect(thumbhashDecoder(real)(hash)!.transparent).toBe(false)
+    const style = placeholder.lazy!()
+    expect(style.backgroundColor).toBeUndefined()
+    const svg = svgOf(style)
+    expect(svg).toContain('feGaussianBlur')
+    expect(svg).not.toContain('feFuncA')
+  })
+
+  it('takes the blur in percent, and paints the PNG as is for 0', () => {
+    expect(svgOf(thumbhashDecoder(real, { blur: 25 })(hash)!.lazy!())).toContain("stdDeviation='8'")
+    expect(thumbhashDecoder(real, { blur: 0 })(hash)!.lazy!().backgroundImage).toBe(`url("${png}")`)
+    expect(thumbhashDecoder(real, { blur: 0 })(alphaHash)!.lazy!()).toEqual({ backgroundImage: `url("${png}")`, backgroundSize: 'cover' })
+    for (const blur of [-1, NaN, Infinity]) expect(() => thumbhashDecoder(real, { blur })).toThrow(RangeError)
+  })
 })

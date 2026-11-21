@@ -7,6 +7,7 @@ import { focusStyles, parsePlaceholder, type StyleRecord, type ThumbHashDecoder 
 import { measuredCandidates, snapWidth } from '../widths.js'
 import { chooseFormat } from './format.js'
 import { observeResize, whenVisible } from './observe.js'
+import type { Reveal } from './reveal.js'
 
 export type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
 
@@ -26,6 +27,8 @@ export interface LazyEaseConfig {
   dwellTime?: number
   /** Crossfade in ms. 0 swaps directly, as does `prefers-reduced-motion`. Default 400. */
   fadeDuration?: number
+  /** Keyframes for the fade instead of the crossfade, e.g. `focusReveal`. Default: none. */
+  reveal?: Reveal
   /** How long a loaded image may take to decode before it is shown anyway, in ms. Default 250. */
   decodeTimeout?: number
   /** Enables `thumbhash:` placeholders; see `@lazy-ease/core/thumbhash`. */
@@ -39,7 +42,7 @@ export interface LazyEaseConfig {
  * and/or `url` (prepared), or `priority` / `loading: 'native'`, which adopt
  * the sources already in the HTML.
  */
-export interface AttachOptions extends Pick<LazyEaseConfig, 'loader' | 'quality' | 'root' | 'rootMargin' | 'dwellTime' | 'fadeDuration' | 'onStateChange'> {
+export interface AttachOptions extends Pick<LazyEaseConfig, 'loader' | 'quality' | 'root' | 'rootMargin' | 'dwellTime' | 'fadeDuration' | 'reveal' | 'onStateChange'> {
   /** Logical source. The controller measures the slot and installs the loader's candidates. */
   src?: string
   /** Prepared candidate list, copied as is on activation. */
@@ -73,6 +76,12 @@ export interface AttachOptions extends Pick<LazyEaseConfig, 'loader' | 'quality'
   token?: string
   /** A CSS color, a data URI, `thumbhash:<base64>` or `'none'`, painted on the box. Default: what the HTML has. */
   placeholder?: string
+  /**
+   * The placeholder the caller painted inline stands for a transparent image,
+   * e.g. a decoded ThumbHash with alpha: it fades out during the fade instead
+   * of staying under the image to the end. A `placeholder` says it itself.
+   */
+  transparent?: boolean
   /**
    * First display of this source, once: after a load and decode, or when an
    * already displayed image is adopted. `event` is the load event when one
@@ -245,6 +254,7 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
         let hidden = false
         let good: (string | null)[] | undefined
         let fade: Animation | undefined
+        let fadeOut: Animation | undefined
         // The <source> elements this generation activated, with their attributes from before.
         const activated = new Map<Element, (string | null)[]>()
         let unfocus = () => {}
@@ -271,10 +281,16 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           Object.assign(surface.style, focus && style.backgroundImage ? { ...style, backgroundPosition: percentPosition(focus) } : style)
         }
         if (placeholder) paint(placeholder.style)
+        // No fade: none set, or reduced motion.
+        const still = () => fadeMs <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches
+        // The box size for a reveal, without a layout read at display.
+        let edge = 0
+        if (o.reveal && box && !native && !still()) cleanups.push(observeResize(box, (width, height) => (edge = width > height ? width : height)))
 
         // Shows the image and removes the placeholder, so transparent images don't show it. Ends a fade cut short.
         const release = () => {
           fade?.cancel()
+          fadeOut?.cancel()
           clearStyle(img, FADE)
           clearStyle(surface, PLACEHOLDER)
         }
@@ -282,13 +298,34 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           shown = true
           good = snapshot()
           report('loaded')
-          if (img.style.opacity !== '0' || fadeMs <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches) release()
+          if (img.style.opacity !== '0' || still()) release()
           else {
             // No style or layout flush (spec): an opacity 0 set in this frame is no start value for the transition,
             // so the animation's keyframes give the fade its start. Where it runs, the transition shows the same fade.
             // Without Web Animations (jsdom) only the transition is left.
-            fade = img.animate?.({ opacity: [0, 1], easing: 'ease-out' }, fadeMs)
+            try {
+              fade = img.animate?.(o.reveal ? o.reveal(edge) : { opacity: [0, 1], easing: 'ease-out' }, fadeMs)
+            } catch (error) {
+              // A reveal that throws leaves the transition below, a plain fade, and its error is reported.
+              setTimeout(() => {
+                throw error
+              })
+            }
             Object.assign(img.style, { transition: `opacity ${fadeMs}ms ease-out`, opacity: '1' })
+            // A placeholder known to stand for a transparent image (a ThumbHash with alpha, or `transparent`)
+            // fades out while the image becomes opaque, from 40 to 80 % of the fade, or 25 to 60 % with a
+            // reveal (`focusReveal` is opaque at 45 %), so the image crossfades instead of losing it at once
+            // at the end. Any other stays to the end, under the edges a blurring reveal leaves translucent.
+            // Only what is painted inline fades: release() clears that, so it does not come back, while a
+            // background from the author's CSS stays. Browsers that don't interpolate background images
+            // (Firefox) drop the image half way through.
+            const [from, to] = o.reveal ? [0.25, 0.6] : [0.4, 0.8]
+            const { backgroundImage, backgroundColor } = surface.style
+            if ((placeholder ?? o).transparent)
+              fadeOut = surface.animate?.(
+                { ...(backgroundImage && { backgroundImage: `url(${INERT})` }), ...(backgroundColor && { backgroundColor: 'transparent' }) },
+                { duration: (to - from) * fadeMs, delay: from * fadeMs, fill: 'forwards' },
+              )
             later(release, fadeMs)
           }
           o.onDisplay?.(img, event)

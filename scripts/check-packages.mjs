@@ -302,7 +302,7 @@ console.log('imported @lazy-ease/core without process or browser globals: ' + lo
 const thumbhash = await import('thumbhash')
 const placeholder = thumbhashDecoder(thumbhash)('1QcSHQRnh493V4dIh4eXh1h4kJUI')
 const image = placeholder?.lazy?.()
-if (!/^#[0-9a-f]{6}$/.test(placeholder?.style.backgroundColor ?? '') || !String(image?.backgroundImage).startsWith('url("data:image/png;base64,')) {
+if (!/^#[0-9a-f]{6}$/.test(placeholder?.style.backgroundColor ?? '') || !['url("data:image/svg+xml,', 'feGaussianBlur', "href='data:image/png;base64,"].every((part) => String(image?.backgroundImage).includes(part))) {
   throw new Error('thumbhashDecoder: ' + JSON.stringify({ style: placeholder?.style, image }))
 }
 console.log('@lazy-ease/core/thumbhash decoded a hash with thumbhash: ' + placeholder.style.backgroundColor)
