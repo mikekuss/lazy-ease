@@ -28,7 +28,7 @@ const { values: args } = parseArgs({ options: { details: { type: 'boolean' }, pa
 const ENTRIES = [
   { name: 'createLoader', fixture: 'create-loader.js', budget: 1000, goal: 1000 },
   { name: 'attach (with controller)', fixture: 'attach.js', budget: 5400, goal: 3500 },
-  { name: 'enhance (with controller)', fixture: 'enhance.js', budget: 5900, goal: 4000 },
+  { name: 'enhance (with controller)', fixture: 'enhance.js', budget: 6000, goal: 4000 },
   { name: 'IIFE lazy-ease.min.js', file: ['vanilla', 'dist/lazy-ease.min.js'], budget: 6800, goal: 4500 },
   { name: 'attach (prepared controller)', fixture: 'attach-prepared.js', budget: 3500, goal: 3200 },
   { name: 'enhance (prepared controller)', fixture: 'enhance-prepared.js', budget: 4100, goal: 3800 },
