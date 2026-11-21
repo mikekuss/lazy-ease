@@ -812,9 +812,9 @@ describe('focus reveal', () => {
     expect(animations).toMatchObject([
       {
         keyframes: [
-          { opacity: 0, filter: 'blur(25.6px)', maskImage: 'linear-gradient(#000,#000)', easing: 'ease-out' },
+          { opacity: 0, filter: 'blur(25.6px)', mask: 'linear-gradient(#000,#000)', webkitMask: 'linear-gradient(#000,#000)', easing: 'ease-out' },
           { opacity: 1, offset: 0.45 },
-          { opacity: 1, filter: 'blur(0px)', maskImage: 'linear-gradient(#000,#000)' },
+          { opacity: 1, filter: 'blur(0px)', mask: 'linear-gradient(#000,#000)', webkitMask: 'linear-gradient(#000,#000)' },
         ],
         duration: 400,
         cancelled: false,

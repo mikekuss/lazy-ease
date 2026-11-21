@@ -13,13 +13,15 @@ export type Reveal = (edge: number) => Keyframe[]
  * it until the end, so the placeholder seems to come into focus. The blur
  * stays inside the image's box, whether or not the wrapper clips: a mask of
  * the border box masks filter output. The image's own `clip-path` still
- * applies; a `mask` of its own is replaced during the reveal. A separate
- * export, so bundles without it don't carry it.
+ * applies; a `mask` of its own, longhands included, is replaced during the
+ * reveal (the shorthand resets them; `webkitMask` for Chromium before 120).
+ * A separate export, so bundles without it don't carry it.
  */
-const maskImage = 'linear-gradient(#000,#000)'
+const mask = 'linear-gradient(#000,#000)'
+const masks = { mask, webkitMask: mask }
 
 export const focusReveal: Reveal = (edge) => [
-  { opacity: 0, filter: `blur(${edge ? Math.round(edge * 0.8) / 10 : 24}px)`, maskImage, easing: 'ease-out' },
+  { opacity: 0, filter: `blur(${edge ? Math.round(edge * 0.8) / 10 : 24}px)`, ...masks, easing: 'ease-out' },
   { opacity: 1, offset: 0.45 },
-  { opacity: 1, filter: 'blur(0px)', maskImage },
+  { opacity: 1, filter: 'blur(0px)', ...masks },
 ]
