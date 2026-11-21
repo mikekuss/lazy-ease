@@ -51,7 +51,8 @@ const measure: Measure = (src, o, mode, focus, img, box, surface, live, later, c
       widths: candidates(slot),
       srcWidth,
       srcHeight,
-      loader,
+      // A call that ends the generation stops the calls for the other candidates.
+      loader: { url: (request) => (live() ? loader.url(request) : '') },
       src,
       aspectRatio: ratio,
       focalPoint: ratio ? focus : undefined,

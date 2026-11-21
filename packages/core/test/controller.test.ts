@@ -958,6 +958,15 @@ describe('focus reveal', () => {
     adopted.attach({ srcset: '/a.webp 640w', sizes: '640px' })
     expect(adopted.states).toEqual(['loaded'])
     expect(observed(adopted.box)).toBe(false)
+
+    // Already failed when attached: the error is final, nothing to watch either.
+    resetObservers()
+    const failed = setup({ reveal: focusReveal })
+    failed.img.setAttribute('src', '/missing.webp')
+    Object.assign(failed.img, { complete: true, naturalWidth: 0 })
+    failed.attach({ url: '/missing.webp' })
+    expect(failed.states).toEqual(['error'])
+    expect(observed(failed.box)).toBe(false)
   })
 
   it('stops observing the box when the generation ends', async () => {
@@ -1071,21 +1080,32 @@ describe('a callback of a generation leaves its successor alone', () => {
     skip?: (typeof actions)[number]
     /** Generation A, before B. Its state must differ from B's first, or B reports nothing. Default: deferred. */
     a?: AttachOptions
-    config?: (fire: Fire) => LazyEaseConfig
+    /** The element, if not a boxed img. */
+    markup?: string
+    /** `handle` is the current attachment, for a row that chains generations. */
+    config?: (fire: Fire, handle: () => Attachment) => LazyEaseConfig
     options: (fire: Fire) => AttachOptions
     /** Before the update to B. */
     before?: (img: HTMLImageElement) => void
     drive?: (img: HTMLImageElement, box: HTMLElement) => unknown
+    /** Further checks once N has taken over; `out` are the box's animations. */
+    after?: (img: HTMLImageElement, out: { cancelled: boolean }[]) => void
   }
   const b = (options: AttachOptions = {}) => () => ({ url: '/b.webp', ...options })
   const eager = b({ loading: 'eager' })
   const native = () => ({ loading: 'native' as const })
   const measured = () => ({ src: '/b.jpg', loading: 'eager' as const })
   const twoFormats = createLoader({ formats: ['webp', 'avif'] })
+  const ladder = createLoader({ widths: [100, 200, 400], formats: ['webp'] })
   const settle = (img: HTMLImageElement) => loadAndDecode(img, '/b.webp')
   const adopt = (naturalWidth: number) => (img: HTMLImageElement) => {
     img.setAttribute('src', '/b.webp')
     Object.assign(img, { complete: true, naturalWidth, currentSrc: '/b.webp' })
+  }
+  const activatedByN = (img: HTMLImageElement) => {
+    const source = img.parentElement!.querySelector('source')!
+    expect(source.getAttribute('srcset')).toBe('/wide.webp 1440w')
+    expect(source.hasAttribute('sizes')).toBe(false)
   }
   const on = (wanted: LoadState) => (fire: Fire) => ({ onStateChange: (state: LoadState) => void (state === wanted && fire()) })
   const rows: Row[] = [
@@ -1098,6 +1118,44 @@ describe('a callback of a generation leaves its successor alone', () => {
     { hook: 'onStateChange error at adoption', throws: true, config: on('error'), options: native, before: adopt(0) },
     { hook: 'onDisplay', options: (fire) => ({ ...eager(), onDisplay: fire }), drive: settle },
     { hook: 'onDisplay at adoption', throws: true, options: (fire) => ({ ...native(), onDisplay: fire }), before: adopt(100) },
+    // B started a reveal and the fade-out of its transparent placeholder: both end with it.
+    {
+      hook: 'onDisplay with a reveal and a transparent placeholder',
+      config: () => ({ reveal: focusReveal, thumbhash: () => ({ style: {}, lazy: () => ({ backgroundImage: 'url("data:image/png;base64,AAAA")' }), transparent: true }) }),
+      options: (fire) => ({ ...eager(), placeholder: 'thumbhash:AAAA', onDisplay: fire }),
+      drive: settle,
+      after: (_, out) => {
+        expect(out).toHaveLength(1)
+        expect(out[0]!.cancelled).toBe(true)
+      },
+    },
+    // B loads, its onStateChange starts a native generation that adopts B's image, and that one's onDisplay fires.
+    {
+      hook: 'onDisplay of a native generation that a loaded one started',
+      config: (fire, handle) => {
+        let chained = false
+        return { onStateChange: (state) => void (state === 'loaded' && !chained && ((chained = true), handle().update({ loading: 'native', onDisplay: fire }))) }
+      },
+      options: eager,
+      drive: settle,
+    },
+    // B activates the deferred sources of its picture; N, eager too, activates them once more.
+    {
+      hook: 'onStateChange loading of a picture',
+      throws: true,
+      markup: `<span data-le><picture><source media="(min-width:800px)" data-le-srcset="/wide.webp 1440w"><img alt="" src="${INERT}"></picture></span>`,
+      config: on('loading'),
+      options: eager,
+      after: activatedByN,
+    },
+    {
+      hook: 'onStateChange loaded of a picture',
+      markup: `<span data-le><picture><source media="(min-width:800px)" data-le-srcset="/wide.webp 1440w"><img alt="" src="${INERT}"></picture></span>`,
+      config: on('loaded'),
+      options: eager,
+      drive: settle,
+      after: activatedByN,
+    },
     { hook: 'reveal', throws: true, config: (fire) => ({ reveal: (edge) => (fire(), focusReveal(edge)) }), options: eager, drive: settle },
     // The decoder runs twice. First while update() resolves B, before anything ends: B overtakes an update from it, as any update.
     {
@@ -1132,6 +1190,22 @@ describe('a callback of a generation leaves its successor alone', () => {
       options: () => ({ ...measured(), aspectRatio: 1, crop: 'browser' as const, srcWidth: 1000, srcHeight: 500, focalPoint: { x: 10, y: 10 } }),
       drive: (_, box) => resize(box, 300, 300),
     },
+    (() => {
+      // A ladder of three candidates: the first call ends B, so the loader is not asked for the other two.
+      let calls = 0
+      return {
+        hook: 'loader of a candidate list',
+        measured: true,
+        throws: true,
+        config: (fire: Fire) => {
+          calls = 0
+          return { loader: { ...ladder, url: ({ width }: ImageRequest) => (calls++, fire(), `/b-${width}.webp`) } }
+        },
+        options: () => ({ ...measured(), srcWidth: 1000, srcHeight: 500 }),
+        drive: (_: HTMLImageElement, box: HTMLElement) => resize(box, 300, 150),
+        after: () => expect(calls).toBe(1),
+      }
+    })(),
     { hook: 'detectFormat returns', measured: true, throws: true, config: (fire) => ({ loader: twoFormats, detectFormat: () => (fire(), 'webp') }), options: measured },
     { hook: 'detectFormat resolves', measured: true, throws: true, config: (fire) => ({ loader: twoFormats, detectFormat: async () => (fire(), 'webp' as const) }), options: measured },
     {
@@ -1154,8 +1228,11 @@ describe('a callback of a generation leaves its successor alone', () => {
       for (const action of actions) {
         if ((row.measured && name === 'prepared') || (action === 'update and throw' && !row.throws) || row.skip === action) continue
         it(`${name}: ${row.hook}, ${action}`, async () => {
-          const { box, img } = boxed()
+          if (row.markup) document.body.innerHTML = row.markup
+          const { box, img } = row.markup ? { box: document.querySelector<HTMLElement>('[data-le]')!, img: document.querySelector('img')! } : boxed()
+          if (row.markup) fakeImage(img)
           mockAnimate(img)
+          const out = mockAnimate(box)
           const errors: unknown[] = []
           const step = async (callback: () => unknown) => {
             try {
@@ -1179,7 +1256,7 @@ describe('a callback of a generation leaves its successor alone', () => {
               if (action === 'update and throw') throw new Error('boom')
             }
           }
-          const le = create({ ...row.config?.(fire) })
+          const le = create({ ...row.config?.(fire, () => current!) })
           current = le.attach(img, row.a ?? { url: '/z.webp' })
           row.before?.(img)
           armed = true
@@ -1196,8 +1273,28 @@ describe('a callback of a generation leaves its successor alone', () => {
           expect(box.getAttribute('data-state')).toBe('loading')
           expect(current.state).toBe('loading')
           expect(() => le.attach(img, { url: '/x.webp' })).toThrow('already attached')
+          row.after?.(img, out)
         })
       }
+
+  it('stops asking the loader for candidates once a call ended the generation', () => {
+    const { box, img } = boxed()
+    const asked: number[] = []
+    let handle: Attachment | undefined
+    const loader = {
+      ...ladder,
+      url: ({ width }: ImageRequest) => {
+        asked.push(width)
+        handle!.update({ url: `/n${width}.webp`, loading: 'eager' })
+        return `/b-${width}.webp`
+      },
+    }
+    handle = createLazyEase({ loader }).attach(img, { src: '/b.jpg', loading: 'eager', srcWidth: 1000, srcHeight: 500 })
+    resize(box, 300, 150)
+    expect(asked).toEqual([100])
+    expect(img.getAttribute('src')).toBe('/n100.webp')
+    expect(img.hasAttribute('srcset')).toBe(false)
+  })
 })
 
 describe('validation', () => {

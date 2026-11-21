@@ -1,5 +1,6 @@
 import { act, render } from '@testing-library/react'
-import { StrictMode, createRef, type ReactNode, type SyntheticEvent } from 'react'
+import { StrictMode, createRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { flushSync } from 'react-dom'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import * as thumbhash from 'thumbhash'
@@ -753,6 +754,52 @@ describe('lifecycle', () => {
     unmount()
     expect(observed(box)).toBe(false)
     expect(claimed(element)).toBe(false)
+  })
+})
+
+describe('a callback that changes src synchronously', () => {
+  // A callback of the image for /a.jpg renders /b.jpg at once, with flushSync. B starts from its placeholder,
+  // and nothing of A's attachment writes to the box afterwards.
+  type Hooks = (fire: () => void) => Partial<ImageProps>
+  const rows: [string, Hooks][] = [
+    ['onStateChange loading', (fire) => ({ onStateChange: (state) => state === 'loading' && fire() })],
+    ['onStateChange loaded', (fire) => ({ onStateChange: (state) => state === 'loaded' && fire() })],
+    ['onLoad', (fire) => ({ onLoad: fire })],
+    ['reveal', (fire) => ({ reveal: (edge) => (fire(), focusReveal(edge)) })],
+  ]
+  it.each(rows)('%s', async (_, hooks) => {
+    let fired = 0
+    function Swap() {
+      const [src, set] = useState('/a.jpg')
+      const fire = () => src === '/a.jpg' && (fired++, flushSync(() => set('/b.jpg')))
+      return <Image src={src} alt="Fern" width={320} height={240} placeholder="#00ff00" {...hooks(fire)} />
+    }
+    const { container } = render(
+      <LazyEaseProvider loader={webp}>
+        <Swap />
+      </LazyEaseProvider>,
+    )
+    const img = () => container.querySelector('img')!
+    const owner = () => img().closest<HTMLElement>('[data-le]')!
+    const a = img()
+    intersect(owner())
+    resize(owner(), 320, 240)
+    load(img())
+    await advance(1000)
+    expect(fired).toBe(1)
+    expect(img()).not.toBe(a)
+    expect(claimed(a)).toBe(false)
+    expect(img().getAttribute('src')).toBe(INERT)
+    expect(owner().dataset.state).toBe('idle')
+    expect(owner().style.backgroundColor).toBe('rgb(0, 255, 0)')
+    intersect(owner())
+    resize(owner(), 320, 240)
+    expect(img().getAttribute('src')).toContain('/_img/b.jpg?')
+    expect(img().style.opacity).toBe('0')
+    expect(owner().dataset.state).toBe('loading')
+    await advance(1000)
+    expect(owner().dataset.state).toBe('loading')
+    expect(owner().style.backgroundColor).toBe('rgb(0, 255, 0)')
   })
 })
 

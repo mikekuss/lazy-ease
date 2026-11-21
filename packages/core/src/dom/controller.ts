@@ -489,8 +489,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           } else report(own ? 'loading' : 'idle')
           // A callback above destroyed or updated the image.
           if (!live) return
-          // Not for an image displayed at adoption, which reveals nothing.
-          if (fades && o.reveal && box && !native && !shown && !still())
+          // Not for an image displayed or failed at adoption, which reveals nothing.
+          if (fades && o.reveal && box && !native && !(own && img.complete) && !still())
             cleanups.push((unwatch = observeResize(box, (width, height) => (edge = width > height ? width : height))))
           if (native) {
             if (o.priority) {

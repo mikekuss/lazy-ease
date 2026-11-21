@@ -95,8 +95,9 @@ const channel = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 
  * drawn blurred, see `blur`.
  */
 export function thumbhashDecoder(functions: ThumbHashFunctions, options: ThumbHashDecoderOptions = {}): ThumbHashDecoder {
-  const blur = options.blur ?? 8
-  if (!(blur >= 0) || !Number.isFinite(blur)) throw new RangeError('[lazy-ease] thumbhash blur must be a finite number from 0')
+  // Only an absent blur takes the default; isFinite first, so no value throws a TypeError of its own.
+  const { blur = 8 } = options
+  if (!Number.isFinite(blur) || blur < 0) throw new RangeError('[lazy-ease] thumbhash blur must be a finite number from 0')
   const images = new Map<string, StyleRecord>()
   return (hash) => {
     const bytes = decode(hash)

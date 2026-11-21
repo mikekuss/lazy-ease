@@ -126,7 +126,9 @@ describe('thumbhashDecoder', () => {
     expect(svgOf(thumbhashDecoder(real, { blur: 25 })(hash)!.lazy!())).toContain("stdDeviation='8'")
     expect(thumbhashDecoder(real, { blur: 0 })(hash)!.lazy!().backgroundImage).toBe(`url("${png}")`)
     expect(thumbhashDecoder(real, { blur: 0 })(alphaHash)!.lazy!()).toEqual({ backgroundImage: `url("${png}")`, backgroundSize: 'cover' })
-    for (const blur of [-1, NaN, Infinity]) expect(() => thumbhashDecoder(real, { blur })).toThrow(RangeError)
+    for (const blur of [-1, NaN, Infinity, -Infinity, null, Symbol(), '8', {}]) expect(() => thumbhashDecoder(real, { blur: blur as number })).toThrow(RangeError)
+    // Only an absent blur takes the default.
+    expect(svgOf(thumbhashDecoder(real, { blur: undefined })(hash)!.lazy!())).toEqual(svgOf(thumbhashDecoder(real)(hash)!.lazy!()))
   })
 
   it('reads no PNG header for blur 0', () => {
