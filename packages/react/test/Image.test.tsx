@@ -1,5 +1,5 @@
 import { act, render } from '@testing-library/react'
-import { StrictMode, createRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { StrictMode, Suspense, createRef, startTransition, use, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
@@ -800,6 +800,92 @@ describe('a callback that changes src synchronously', () => {
     await advance(1000)
     expect(owner().dataset.state).toBe('loading')
     expect(owner().style.backgroundColor).toBe('rgb(0, 255, 0)')
+  })
+})
+
+describe('an update React has not committed', () => {
+  // A transition whose sibling suspends keeps the old props on screen, so the image keeps
+  // calling the committed hooks and painting the committed placeholder.
+  const never = new Promise<never>(() => {})
+  function Gate({ hold }: { hold: boolean }) {
+    if (hold) use(never)
+    return null
+  }
+  function harness(initial: Partial<ImageProps>) {
+    type Held = Partial<ImageProps> & { hold: boolean }
+    let update!: (props: Held) => void
+    let tweak!: (className: string) => void
+    function App() {
+      const [props, setProps] = useState<Held>({ ...initial, hold: false })
+      const [className, setClassName] = useState('a')
+      update = setProps
+      tweak = setClassName
+      const { hold, ...rest } = props
+      return (
+        <LazyEaseProvider loader={webp}>
+          <Suspense fallback={null}>
+            <Image src="/a.jpg" alt="Fern" width={320} height={240} fadeDuration={300} className={className} {...rest} />
+            <Gate hold={hold} />
+          </Suspense>
+        </LazyEaseProvider>
+      )
+    }
+    const { container } = render(<App />)
+    const img = () => container.querySelector('img')!
+    const owner = () => img().closest<HTMLElement>('[data-le]')!
+    return {
+      img,
+      owner,
+      // A transition held by the suspending sibling.
+      hold: (props: Partial<ImageProps>) => act(async () => startTransition(() => update({ ...props, hold: true }))),
+      // An urgent update, rendered on the committed props.
+      tweak: (className: string) => act(async () => tweak(className)),
+    }
+  }
+
+  type Hooks = (fn: () => void) => Partial<ImageProps>
+  const rows: [string, Hooks][] = [
+    ['reveal', (fn) => ({ reveal: (edge) => (fn(), focusReveal(edge)) })],
+    ['onLoad', (fn) => ({ onLoad: fn })],
+    ['onStateChange', (fn) => ({ onStateChange: (state) => state === 'loaded' && fn() })],
+    // Render probes the loader with its narrowest width; the controller asks for the box's.
+    ['loader', (fn) => ({ loader: ({ src, width }) => (width > 100 && fn(), `/x${src}?w=${width}`) })],
+  ]
+  it.each(rows)('%s', async (_, hooks) => {
+    const animate = vi.fn(() => ({ cancel() {} }))
+    Object.defineProperty(HTMLImageElement.prototype, 'animate', { configurable: true, value: animate })
+    try {
+      const a = vi.fn()
+      const b = vi.fn()
+      const { img, owner, hold } = harness(hooks(a))
+      intersect(owner())
+      await hold({ className: 'b', ...hooks(b) })
+      expect(img().className).toBe('a')
+      a.mockClear()
+      resize(owner(), 320, 240)
+      load(img())
+      await advance(400)
+      expect(img().className).toBe('a')
+      expect(a).toHaveBeenCalled()
+      expect(b).not.toHaveBeenCalled()
+    } finally {
+      delete (HTMLImageElement.prototype as { animate?: unknown }).animate
+    }
+  })
+
+  it('placeholder of a displayed image', async () => {
+    const { img, owner, hold, tweak } = harness({ placeholder: '#00ff00', version: 'r1' })
+    intersect(owner())
+    resize(owner(), 320, 240)
+    load(img())
+    await advance(400)
+    expect(owner().style.backgroundColor).toBe('')
+    // A new source under the same src, with its own placeholder.
+    await hold({ placeholder: '#ff0000', version: 'r2' })
+    expect(owner().style.backgroundColor).toBe('')
+    await tweak('c')
+    expect(img().className).toBe('c')
+    expect(owner().style.backgroundColor).toBe('')
   })
 })
 

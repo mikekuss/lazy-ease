@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, type CSSProperties, type ImgHTMLAttributes, type Ref, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type ImgHTMLAttributes, type Ref, type SyntheticEvent } from 'react'
 import { preload } from 'react-dom'
 import {
   candidateSet,
@@ -297,12 +297,15 @@ function ImageBox({
   })
   const kept = latest.current
   const revealer = reveal ?? config.reveal
-  Object.assign(kept, { onLoad, onStateChange, loader, decoder, reveal: revealer })
   // The controller owns the placeholder from display on and removes it after the fade:
   // a rerender renders the same styles again, so React neither writes it back nor
   // removes it early. A native image keeps its displayed image under a new source.
   if (kept.shown && (native || kept.shown === identity)) paint = kept.paint
-  else kept.paint = paint
+  // The controller calls the hooks of the committed render, and a render renders the
+  // placeholder it committed: a render React discards or holds back changes neither.
+  useLayoutEffect(() => {
+    Object.assign(kept, { onLoad, onStateChange, loader, decoder, reveal: revealer, paint })
+  })
   // Boxed, the img fills the box (one grid cell with a fallback); bare, it is the slot and carries the placeholder.
   const imgStyle: CSSProperties = {
     display: 'block',
