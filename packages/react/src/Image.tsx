@@ -285,8 +285,6 @@ function ImageBox({
     loader,
     decoder,
     reveal,
-    // The attachment the committed render asks for, whose hooks these are.
-    id: '',
     event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
     // The currentSrc the stored load event was for.
     eventSrc: '',
@@ -305,9 +303,8 @@ function ImageBox({
   if (kept.shown && (native || kept.shown === identity)) paint = kept.paint
   // The controller calls the hooks of the committed render, and a render renders the
   // placeholder it committed: a render React discards or holds back changes neither.
-  // An older attachment still alive after the commit reaches none of its hooks.
   useLayoutEffect(() => {
-    Object.assign(kept, { id: signature, onLoad, onStateChange, loader, decoder, reveal: revealer, paint })
+    Object.assign(kept, { onLoad, onStateChange, loader, decoder, reveal: revealer, paint })
   })
   // Boxed, the img fills the box (one grid cell with a fallback); bare, it is the slot and carries the placeholder.
   const imgStyle: CSSProperties = {
@@ -367,7 +364,10 @@ function ImageBox({
   // A new box (`boxed`) renders a new img, which needs its own attachment.
   const signature = JSON.stringify([options, pictureSources, config.domains, widths, ratios, qualities, formats, probe, !!decoder, !!options.reveal, boxed])
 
-  useEffect(() => {
+  // In the commit, like the hooks: the layout cleanup ends the old attachment before the new
+  // render's hooks are published, so the old source's load, decode or reveal reaches none
+  // of them, and a removed image's events reach no onLoad. Attaching reads no layout.
+  useLayoutEffect(() => {
     const img = self.current!
     const state = latest.current
     // Destroying a displayed source removed the placeholder that React wrote for this new one.
@@ -391,12 +391,11 @@ function ImageBox({
       loader: { widths, ratios, qualities, formats, url: (params) => state.loader.url(params) },
       root: config.root,
       onStateChange(next) {
-        if (state.id !== signature || state.state === next) return
+        if (state.state === next) return
         state.state = next
         state.onStateChange?.(next, img)
       },
       onDisplay(_, event) {
-        if (state.id !== signature) return
         // A native image calls onLoad from its React handler.
         if (state.shown === identity || native) {
           if (!event) state.shown = identity

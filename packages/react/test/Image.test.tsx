@@ -967,6 +967,128 @@ describe('a new source committed before the old one is destroyed', () => {
   })
 })
 
+describe('an old attachment in the commit that replaces it', () => {
+  // A sibling's layout effect runs in the same commit as the new render, before passive
+  // effects: the old source finishing there reaches neither the new hooks nor its own.
+  async function inRoot(run: (root: ReturnType<typeof createRoot>, container: HTMLElement, tick: () => Promise<unknown>) => Promise<void>) {
+    vi.useRealTimers()
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    const previous = env.IS_REACT_ACT_ENVIRONMENT
+    env.IS_REACT_ACT_ENVIRONMENT = false
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    try {
+      await run(root, container, () => new Promise((resolve) => setTimeout(resolve, 50)))
+    } finally {
+      root.unmount()
+      container.remove()
+      env.IS_REACT_ACT_ENVIRONMENT = previous
+    }
+  }
+  function Kick({ run }: { run?: () => void }) {
+    useLayoutEffect(() => run?.())
+    return null
+  }
+
+  it('runs no reveal of a new version for the old one, whose decode ends in a transition', () =>
+    inRoot(async (root, container, tick) => {
+      let finish!: () => void
+      vi.spyOn(HTMLImageElement.prototype, 'decode').mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)))
+      const revealed: string[] = []
+      const reveal = (edge: number) => (revealed.push(container.querySelector('img')!.currentSrc), focusReveal(edge))
+      const view = (version: string, run?: () => void) => (
+        <LazyEaseProvider loader={webp}>
+          <Image src="/a.jpg" version={version} alt="Fern" width={320} height={240} fadeDuration={300} reveal={version === 'r2' ? reveal : focusReveal} />
+          <Kick run={run} />
+        </LazyEaseProvider>
+      )
+      root.render(view('r1'))
+      await tick()
+      const img = container.querySelector('img')!
+      const owner = img.closest<HTMLElement>('[data-le]')!
+      core.intersect(owner)
+      core.resize(owner, 320, 240)
+      await tick()
+      expect(img.getAttribute('src')).toContain('v=r1')
+      core.load(img)
+      startTransition(() => root.render(view('r2', () => finish())))
+      await tick()
+      expect(revealed).toEqual([])
+      expect(img.style.opacity).not.toBe('1')
+    }))
+
+  it('calls no onLoad of a removed source, whose load ends as the new one commits', () =>
+    inRoot(async (root, container, tick) => {
+      const connected: boolean[] = []
+      const onLoad = (event: SyntheticEvent<HTMLImageElement>) => connected.push(event.currentTarget.isConnected)
+      const view = (src: string, run?: () => void) => (
+        <LazyEaseProvider loader={webp}>
+          <Image src={src} alt="Fern" width={320} height={240} fadeDuration={0} onLoad={onLoad} />
+          <Kick run={run} />
+        </LazyEaseProvider>
+      )
+      root.render(view('/a.jpg'))
+      await tick()
+      const old = container.querySelector('img')!
+      const owner = old.closest<HTMLElement>('[data-le]')!
+      core.intersect(owner)
+      core.resize(owner, 320, 240)
+      await tick()
+      let finish!: () => void
+      vi.spyOn(HTMLImageElement.prototype, 'decode').mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)))
+      core.load(old)
+      startTransition(() => root.render(view('/b.jpg', () => finish())))
+      await tick()
+      expect(old.isConnected).toBe(false)
+      expect(connected).toEqual([])
+    }))
+})
+
+describe('a Suspense boundary that hides the image', () => {
+  // Hiding ends the attachment with the layout effects; showing it again attaches anew.
+  it('loads it once it shows again, with one onLoad', async () => {
+    let resume!: () => void
+    const gate = new Promise<void>((resolve) => (resume = resolve))
+    function Gate({ hold }: { hold: boolean }) {
+      if (hold) use(gate)
+      return null
+    }
+    let hold!: (value: boolean) => void
+    const onLoad = vi.fn()
+    const states: LoadState[] = []
+    function App() {
+      const [held, setHeld] = useState(false)
+      hold = setHeld
+      return (
+        <LazyEaseProvider loader={webp}>
+          <Suspense fallback={null}>
+            <Image src="/a.jpg" alt="Fern" width={320} height={240} fadeDuration={300} onLoad={onLoad} onStateChange={(state) => states.push(state)} />
+            <Gate hold={held} />
+          </Suspense>
+        </LazyEaseProvider>
+      )
+    }
+    const { container } = render(<App />)
+    const img = container.querySelector('img')!
+    const owner = img.closest<HTMLElement>('[data-le]')!
+    intersect(owner)
+    resize(owner, 320, 240)
+    expect(img.getAttribute('src')).toContain('w=640')
+    await act(async () => hold(true))
+    expect(claimed(img)).toBe(false)
+    await act(async () => resume())
+    expect(container.querySelector('img')).toBe(img)
+    expect(claimed(img)).toBe(true)
+    load(img)
+    await advance(400)
+    expect(img.style.opacity).toBe('')
+    expect(owner.style.backgroundColor).toBe('')
+    expect(onLoad).toHaveBeenCalledTimes(1)
+    expect(states.filter((state) => state === 'loaded')).toHaveLength(1)
+  })
+})
+
 describe('placeholders', () => {
   it('paints a color, a covering data URI or nothing', () => {
     expect(mount({ width: 320, height: 240, placeholder: '#5b6c8f' }).owner().style.backgroundColor).toBe('rgb(91, 108, 143)')
