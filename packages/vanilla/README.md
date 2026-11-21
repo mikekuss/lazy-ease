@@ -52,7 +52,7 @@ const enhanced = enhance(le, document.body)
 enhanced.destroy()
 ```
 
-`detectFormat: detectAvif` requests AVIF where the browser decodes it; without it, measured images take the best declared format other than AVIF. Without `data-le-src` images, `createLazyEase` from `@lazy-ease/core/prepared` leaves measured mode out of the bundle.
+`detectFormat: detectAvif` requests AVIF where the browser decodes it; without it, measured images take the best declared format other than AVIF. A loader that declares only AVIF gets AVIF without a warning, and a single declared format never calls the detector. Without `data-le-src` images, `createLazyEase` from `@lazy-ease/core/prepared` leaves measured mode out of the bundle.
 
 `enhance(le, root)` takes a document, an element or a shadow root, the root itself included, and returns a handle whose `destroy()` releases what this call attached. It skips elements another call, instance or bundle already owns, so enhancing an area again after adding content is safe. The instance's `root` (the scrolling element) is separate from the area you enhance.
 

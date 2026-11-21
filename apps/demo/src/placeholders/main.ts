@@ -290,6 +290,8 @@ function tile(row: Row, name: string, style: Partial<CSSStyleDeclaration>, info:
   caption.innerHTML = `${name}<span>${info}</span>`
   figure.append(well, caption)
   if (!original) figure.addEventListener('click', () => show(figure, !figure.classList.contains('on')))
+  // A tile rebuilt while "Show images" is on starts revealed, its placeholder gone.
+  if (!original && document.body.classList.contains('reveal')) figure.classList.add('on', 'done')
   return figure
 }
 

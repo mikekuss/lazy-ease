@@ -22,6 +22,8 @@ body { --fade:900ms; --blur:.08 }
    finishes first, so the two blurs blend before any detail shows. */
 body[data-morph=focus] .frame img, body[data-morph=zoom] .frame img { filter:blur(calc(var(--long) * var(--blur))) }
 body[data-morph=zoom] .frame img { transform:scale(1.06) }
+/* A plain fade takes the whole duration, as the controller's. */
+body[data-morph=fade] .frame img { transition:opacity var(--fade) ease-out }
 .tile.original .frame img, .tile.on .frame img, body.reveal .tile .frame img { opacity:1; filter:blur(0); transform:none }
 .tile figcaption { font-size:12px; font-weight:600; margin-top:4px }
 .tile figcaption span { display:block; font:11px/1.4 ui-monospace, monospace; font-weight:400; color:#4b5563 }
