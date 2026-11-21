@@ -128,4 +128,12 @@ describe('thumbhashDecoder', () => {
     expect(thumbhashDecoder(real, { blur: 0 })(alphaHash)!.lazy!()).toEqual({ backgroundImage: `url("${png}")`, backgroundSize: 'cover' })
     for (const blur of [-1, NaN, Infinity]) expect(() => thumbhashDecoder(real, { blur })).toThrow(RangeError)
   })
+
+  it('reads no PNG header for blur 0', () => {
+    const lazy = thumbhashDecoder(real, { blur: 0 })(hash)!.lazy!
+    const atob = vi.spyOn(globalThis, 'atob')
+    expect(lazy().backgroundImage).toBe(`url("${png}")`)
+    expect(atob).not.toHaveBeenCalled()
+    atob.mockRestore()
+  })
 })

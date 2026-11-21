@@ -922,6 +922,31 @@ describe('focus reveal', () => {
     expect(observed(img)).toBe(false)
   })
 
+  it('stops watching the box edge after the first display, and never watches it for an adopted image', async () => {
+    const observed = (box: Element) => MockResizeObserver.instances.some((o) => o.elements.has(box))
+    const { img, box, attach } = setup({ reveal: focusReveal })
+    attach({ url: '/a.webp', loading: 'eager' })
+    expect(observed(box)).toBe(true)
+    await loadAndDecode(img)
+    expect(observed(box)).toBe(false)
+
+    // Measured images keep their own subscription for candidate upgrades.
+    resetObservers()
+    const measured = setup({ reveal: focusReveal })
+    measured.attach({ src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(measured.box, 100, 100)
+    await loadAndDecode(measured.img)
+    expect(MockResizeObserver.instances.flatMap((o) => [...o.elements]).filter((element) => element === measured.box)).toHaveLength(1)
+
+    // Already displayed when attached: nothing to reveal, nothing to watch.
+    resetObservers()
+    const adopted = setup({ reveal: focusReveal }, 'srcset="/a.webp 640w" sizes="640px"')
+    Object.assign(adopted.img, { complete: true, naturalWidth: 100 })
+    adopted.attach({ srcset: '/a.webp 640w', sizes: '640px' })
+    expect(adopted.states).toEqual(['loaded'])
+    expect(observed(adopted.box)).toBe(false)
+  })
+
   it('stops observing the box when the generation ends', async () => {
     const { box, attach } = setup({ reveal: focusReveal })
     const handle = attach({ url: '/a.webp' })

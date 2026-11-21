@@ -2,6 +2,7 @@ import { normalizeFocalPoint, percentPosition, type FocalPoint } from '../focal.
 import type { ImageLoader, ImageLoaderFunction } from '../loader.js'
 import { isDirect } from '../source.js'
 import { parsePlaceholder, type StyleRecord, type ThumbHashDecoder } from '../styles.js'
+import { fades } from './fades.js'
 import type { FormatDetector } from './format.js'
 import { observeResize, whenVisible } from './observe.js'
 import type { Reveal } from './reveal.js'
@@ -315,19 +316,20 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
         if (placeholder) paint(placeholder.style)
         // No fade: none set, or reduced motion.
         const still = () => fadeMs <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches
-        // The box size for a reveal, without a layout read at display.
+        // The box size for a reveal, without a layout read at display: watched until the first display.
         let edge = 0
-        if (o.reveal && box && !native && !still()) cleanups.push(observeResize(box, (width, height) => (edge = width > height ? width : height)))
+        let unwatch = () => {}
 
         // Shows the image and removes the placeholder, so transparent images don't show it. Ends a fade cut short.
         const release = () => {
           fade?.cancel()
-          fadeOut?.cancel()
+          if (fades) fadeOut?.cancel()
           clearStyle(img, FADE)
           clearStyle(surface, PLACEHOLDER)
         }
         const display = (event?: Event) => {
           shown = true
+          if (fades) unwatch()
           good = snapshot()
           report('loaded')
           // A callback above or below can update() or destroy(): then the element belongs to the next generation.
@@ -337,16 +339,18 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
             // No style or layout flush (spec): an opacity 0 set in this frame is no start value for the transition,
             // so the animation's keyframes give the fade its start. Where it runs, the transition shows the same fade.
             // Without Web Animations (jsdom) only the transition is left.
-            try {
-              const keyframes = o.reveal ? o.reveal(edge) : { opacity: [0, 1], easing: 'ease-out' }
-              if (live) fade = img.animate?.(keyframes, fadeMs)
-            } catch (error) {
-              // A reveal that throws leaves the transition below, a plain fade, and its error is reported.
-              setTimeout(() => {
-                throw error
-              })
-            }
-            if (!live) return
+            if (fades && o.reveal) {
+              try {
+                const keyframes = o.reveal(edge)
+                if (live) fade = img.animate?.(keyframes, fadeMs)
+              } catch (error) {
+                // A reveal that throws leaves the transition below, a plain fade, and its error is reported.
+                setTimeout(() => {
+                  throw error
+                })
+              }
+              if (!live) return
+            } else fade = img.animate?.({ opacity: [0, 1], easing: 'ease-out' }, fadeMs)
             Object.assign(img.style, { transition: `opacity ${fadeMs}ms ease-out`, opacity: '1' })
             // A placeholder known to stand for a transparent image (a ThumbHash with alpha, or `transparent`)
             // fades out while the image becomes opaque, from 40 to 80 % of the fade, or 25 to 60 % with a
@@ -355,13 +359,14 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
             // Only what is painted inline fades: release() clears that, so it does not come back, while a
             // background from the author's CSS stays. Browsers that don't interpolate background images
             // (Firefox) drop the image half way through.
-            const [from, to] = o.reveal ? [0.25, 0.6] : [0.4, 0.8]
-            const { backgroundImage, backgroundColor } = surface.style
-            if ((placeholder ?? o).transparent)
+            if (fades && (placeholder ?? o).transparent) {
+              const [from, to] = o.reveal ? [0.25, 0.6] : [0.4, 0.8]
+              const { backgroundImage, backgroundColor } = surface.style
               fadeOut = surface.animate?.(
                 { ...(backgroundImage && { backgroundImage: `url(${INERT})` }), ...(backgroundColor && { backgroundColor: 'transparent' }) },
                 { duration: (to - from) * fadeMs, delay: from * fadeMs, fill: 'forwards' },
               )
+            }
             later(release, fadeMs)
           }
           o.onDisplay?.(img, event)
@@ -436,6 +441,9 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           if (img.naturalWidth > 0) display()
           else fail()
         } else report(own ? 'loading' : 'idle')
+        // Not for an image displayed at adoption, which reveals nothing.
+        if (fades && o.reveal && box && !native && !shown && !still())
+          cleanups.push((unwatch = observeResize(box, (width, height) => (edge = width > height ? width : height))))
 
         const end = (next?: Options) => {
           live = false

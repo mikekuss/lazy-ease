@@ -63,8 +63,8 @@ function pngSize(url: string): [number, number] | undefined {
  * transparent.
  */
 function blurred(png: string, blur: number, alpha: boolean): string {
-  const size = pngSize(png)
-  if (!size || !(blur > 0)) return png
+  const size = blur > 0 && pngSize(png)
+  if (!size) return png
   const [w, h] = size
   const svg =
     `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${w} ${h}'>` +
