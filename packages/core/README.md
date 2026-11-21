@@ -73,7 +73,7 @@ Measured images grow their candidates after a 200 ms trailing debounce and never
 
 ### Without measured mode
 
-`createLazyEase` from `@lazy-ease/core/prepared` is the same controller without measured mode, for pages whose templates write every candidate list or URL, or native sources: about 1.9 kB less after Brotli. Prepared, native and direct sources (external URLs, SVG, GIF) work as above; a `src` that the loader would build URLs for throws `src needs createLazyEase from @lazy-ease/core` before the element is touched.
+`createLazyEase` from `@lazy-ease/core/prepared` is the same controller without measured mode, for pages whose templates write every candidate list or URL, or native sources: about 1.8 to 1.9 kB less after Brotli. Prepared, native and direct sources (external URLs, SVG, GIF) work as above; a `src` that the loader would build URLs for throws `src needs createLazyEase from @lazy-ease/core` before the element is touched.
 
 ```ts
 import { createLazyEase } from '@lazy-ease/core/prepared'

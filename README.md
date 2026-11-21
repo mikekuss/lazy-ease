@@ -167,7 +167,7 @@ These combinations throw in development: `height` without `width`; `fill` with `
 | `reveal` | none | `focusReveal` sharpens every deferred image from a placeholder-like blur during its fade. |
 | `thumbhash` | none | The decoder for `thumbhash:` placeholders, `thumbhashDecoder(thumbhash)` from `@lazy-ease/core/thumbhash`. See [Placeholders](#placeholders). |
 | `thumbhashSsr` | `'color'` | `'image'` puts decoded ThumbHash images in the server HTML instead of only their average color. |
-| `detectFormat` | none | Picks the format of measured images: `detectAvif` from `@lazy-ease/core` requests AVIF where the browser decodes it. Without it they take the best declared format other than AVIF, WebP first. See [Loading modes](#loading-modes). |
+| `detectFormat` | none | Picks the format of measured images: `detectAvif` from `@lazy-ease/core` requests AVIF where the browser decodes it. Without it they take the best declared format other than AVIF, WebP first. Pass a stable function: a new one reattaches every image. See [Loading modes](#loading-modes). |
 
 ## Loading modes
 

@@ -332,7 +332,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           if (fades) unwatch()
           good = snapshot()
           report('loaded')
-          // A callback above or below can update() or destroy(): then the element belongs to the next generation.
+          // A callback above or below can update() or destroy(): then the element belongs to the next generation,
+          // and this generation's onDisplay doesn't run.
           if (!live) return
           if (img.style.opacity !== '0' || still()) release()
           else {
