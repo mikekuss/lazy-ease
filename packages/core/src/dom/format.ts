@@ -1,5 +1,11 @@
 import { DEFAULT_FORMATS as PREFERENCE, type ImageFormat } from '../loader.js'
 
+/**
+ * Picks the format to request from a loader that declares several, e.g.
+ * `detectAvif`. Called only for a list, never for `formats: 'auto'`.
+ */
+export type FormatDetector = (formats: readonly ImageFormat[]) => ImageFormat | Promise<ImageFormat>
+
 // 1×1 white pixels, encoded with sharp.
 const AVIF =
   'data:image/avif;base64,AAAAHGZ0eXBhdmlmAAAAAG1pZjFhdmlmbWlhZgAAANZtZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAAA+gABAAAAAAAAACAAAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABhdjAxAAAAAA5waXRtAAAAAAABAAAAVmlwcnAAAAA4aXBjbwAAAAxhdjFDgQAMAAAAABRpc3BlAAAAAAAAAAEAAAABAAAAEHBpeGkAAAAAAwgICAAAABZpcG1hAAAAAAAAAAEAAQOBAgMAAAAobWRhdBIACggYAAbICGg0IDISHseHhVnAACwAACCQNZO/nkyA'
@@ -21,23 +27,24 @@ const decodesAvif = (): Promise<ImageFormat> =>
     img.src = AVIF
   })
 
-/** The best format both the browser (`best` and anything older) and the loader support. */
-export function pickFormat(best: ImageFormat, formats: readonly ImageFormat[]): ImageFormat {
+/**
+ * The best format both the browser (`best` and anything older) and the
+ * loader support. With the default, what an instance without a detector requests.
+ */
+export function pickFormat(formats: readonly ImageFormat[], best: ImageFormat = 'webp'): ImageFormat {
   return PREFERENCE.slice(PREFERENCE.indexOf(best)).find((format) => formats.includes(format)) ?? formats[0] ?? best
 }
 
 /**
- * The format to request from a loader that declares `formats`. `'auto'` and
- * a single format need no probe, nor do formats without AVIF. Otherwise the AVIF decode test runs
- * once per page, on first need, and an image waits for it at most 200 ms
- * before taking WebP.
+ * The `detectFormat` of a controller that requests AVIF where the browser
+ * decodes it. A single format, or formats without AVIF, need no probe.
+ * Otherwise the AVIF decode test runs once per page, on first need, and an
+ * image waits for it at most 200 ms before taking WebP.
  */
-export function chooseFormat(formats: readonly ImageFormat[] | 'auto'): ImageFormat | 'auto' | Promise<ImageFormat> {
-  if (formats === 'auto') return formats
-  if (formats.length < 2) return formats[0] ?? 'webp'
-  // Only AVIF needs a probe, and only when the loader declares it.
-  if (!formats.includes('avif')) return pickFormat('webp', formats)
-  if (detected) return pickFormat(detected, formats)
+export const detectAvif: FormatDetector = (formats) => {
+  // Only AVIF needs a probe, and only when the loader declares it besides another format.
+  if (formats.length < 2 || !formats.includes('avif')) return pickFormat(formats)
+  if (detected) return pickFormat(formats, detected)
   detection ??= decodesAvif().then((best) => (detected = best))
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<ImageFormat>((resolve) => {
@@ -45,7 +52,7 @@ export function chooseFormat(formats: readonly ImageFormat[] | 'auto'): ImageFor
   })
   return Promise.race([detection, timeout]).then((best) => {
     clearTimeout(timer)
-    return pickFormat(best, formats)
+    return pickFormat(formats, best)
   })
 }
 

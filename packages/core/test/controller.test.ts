@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLazyEase, createLoader, whenVisible, type AttachOptions, type Attachment, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
-import { chooseFormat, resetFormatDetection } from '../src/dom/format.js'
+import { createLazyEase, createLoader, detectAvif, whenVisible, type AttachOptions, type Attachment, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
+import { createLazyEase as createPrepared } from '../src/prepared.js'
+import { resetFormatDetection } from '../src/dom/format.js'
 import { observeResize, resetObservers } from '../src/dom/observe.js'
 import { fail, fakeImage, flush, installDom, intersect, load, media, mockAnimate, MockIntersectionObserver, MockResizeObserver, probe, recordLayoutReads, resize } from './dom-mocks.js'
 
@@ -728,8 +729,8 @@ describe('ownership', () => {
 
   it('is shared by separate copies of the package', async () => {
     // A second module instance, as a second bundle on the page would have.
-    const path = '../src/dom/controller.js?copy'
-    const copy = (await import(/* @vite-ignore */ path)) as typeof import('../src/dom/controller.js')
+    const path = '../src/dom/measure.js?copy'
+    const copy = (await import(/* @vite-ignore */ path)) as typeof import('../src/dom/measure.js')
     expect(copy.createLazyEase).not.toBe(createLazyEase)
     const { img, box } = setup()
     const handle = createLazyEase().attach(img, { url: '/a.webp' })
@@ -1083,8 +1084,26 @@ describe('formats', () => {
     expect(img.getAttribute('src')).toBe('/cdn/a.jpg?w=200&f=auto')
   })
 
+  it('requests the best declared format other than AVIF without a detector, and warns once in development', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    for (let i = 0; i < 2; i++) {
+      const { img, box } = boxed()
+      createLazyEase({ loader: createLoader() }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+      // Synchronous: the first size installs at once.
+      resize(box, 100, 100)
+      expect(img.getAttribute('src')).toContain('fmt=webp')
+    }
+    const other = boxed()
+    createLazyEase({ loader: createLoader({ formats: ['avif', 'jpeg'] }) }).attach(other.img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(other.box, 100, 100)
+    expect(other.img.getAttribute('src')).toContain('fmt=jpeg')
+    expect(probe.created).toBe(0)
+    expect(warn).toHaveBeenCalledOnce()
+    expect(warn.mock.calls[0]![0]).toMatch(/detectAvif/)
+  })
+
   it('probes once on first need and takes the best declared format', async () => {
-    const le = createLazyEase({ loader: createLoader() })
+    const le = createLazyEase({ loader: createLoader(), detectFormat: detectAvif })
     expect(probe.created).toBe(0)
     const { img, box } = boxed()
     le.attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
@@ -1095,10 +1114,11 @@ describe('formats', () => {
   })
 
   it('decides without a probe when AVIF is not declared', () => {
-    expect(chooseFormat(['webp', 'jpeg'])).toBe('webp')
-    expect(chooseFormat(['jpeg', 'webp'])).toBe('webp')
+    expect(detectAvif(['webp', 'jpeg'])).toBe('webp')
+    expect(detectAvif(['jpeg', 'webp'])).toBe('webp')
+    expect(detectAvif(['avif'])).toBe('avif')
     const { img, box } = boxed()
-    createLazyEase({ loader: createLoader({ formats: ['webp', 'jpeg'] }) }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    createLazyEase({ loader: createLoader({ formats: ['webp', 'jpeg'] }), detectFormat: detectAvif }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     // Synchronous: the first size installs at once.
     resize(box, 100, 100)
     expect(img.getAttribute('src')).toContain('fmt=webp')
@@ -1108,7 +1128,7 @@ describe('formats', () => {
   it('falls back to WebP when detection takes longer than 200 ms', async () => {
     probe.hang = true
     const { img, box } = boxed()
-    createLazyEase({ loader: createLoader() }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    createLazyEase({ loader: createLoader(), detectFormat: detectAvif }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     await vi.advanceTimersByTimeAsync(200)
     resize(box, 100, 100)
     expect(img.getAttribute('src')).toContain('fmt=webp')
@@ -1117,15 +1137,42 @@ describe('formats', () => {
   it('takes WebP, or the next declared format, when the browser does not decode AVIF', async () => {
     probe.avif = false
     const { img, box } = boxed()
-    createLazyEase({ loader: createLoader() }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    createLazyEase({ loader: createLoader(), detectFormat: detectAvif }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     await flush()
     resize(box, 100, 100)
     expect(img.getAttribute('src')).toContain('fmt=webp')
     const other = boxed()
-    createLazyEase({ loader: createLoader({ formats: ['avif', 'jpeg'] }) }).attach(other.img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    createLazyEase({ loader: createLoader({ formats: ['avif', 'jpeg'] }), detectFormat: detectAvif }).attach(other.img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     resize(other.box, 100, 100)
     expect(other.img.getAttribute('src')).toContain('fmt=jpeg')
     expect(probe.created).toBe(1)
+  })
+})
+
+describe('without measured mode (@lazy-ease/core/prepared)', () => {
+  it('loads prepared, native and direct sources as the full controller does', async () => {
+    const { img, box } = boxed()
+    const handle = createPrepared().attach(img, { srcset: '/sq-750.webp 750w', sizes: '100vw', loading: 'eager' })
+    expect(img.getAttribute('srcset')).toBe('/sq-750.webp 750w')
+    expect(box.getAttribute('data-state')).toBe('loading')
+    await loadAndDecode(img, '/sq-750.webp')
+    expect(handle.state).toBe('loaded')
+    handle.update({ src: '/logo.svg', loading: 'eager' })
+    expect(img.getAttribute('src')).toBe('/logo.svg')
+    expect(img.hasAttribute('srcset')).toBe(false)
+  })
+
+  it('rejects a source the loader would build, with or without a loader', () => {
+    for (const config of [{}, { loader: webpLoader }]) {
+      const { img, box } = boxed()
+      const before = document.body.innerHTML
+      expect(() => createPrepared(config).attach(img, { src: '/a.jpg', loading: 'eager' })).toThrow('[lazy-ease] src needs createLazyEase from @lazy-ease/core')
+      expect(document.body.innerHTML).toBe(before)
+      expect(box.hasAttribute('data-state')).toBe(false)
+    }
+    const { img } = boxed()
+    const handle = createPrepared({ loader: webpLoader }).attach(img, { url: '/a.webp' })
+    expect(() => handle.update({ src: '/a.jpg' })).toThrow(/src needs createLazyEase/)
   })
 })
 

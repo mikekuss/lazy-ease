@@ -25,7 +25,8 @@
   "type": "module",
   "sideEffects": [
     "*.css",
-    "./dist/lazy-ease.min.js"
+    "./dist/lazy-ease.min.js",
+    "./dist/lazy-ease.prepared.min.js"
   ],
   "exports": {
     ".": {
@@ -39,7 +40,8 @@
       "default": "./dist/css.js"
     },
     "./lazy-ease.css": "./dist/lazy-ease.css",
-    "./lazy-ease.min.js": "./dist/lazy-ease.min.js"
+    "./lazy-ease.min.js": "./dist/lazy-ease.min.js",
+    "./lazy-ease.prepared.min.js": "./dist/lazy-ease.prepared.min.js"
   },
   "files": [
     "dist"
@@ -56,7 +58,8 @@
         "default": "./dist/css.js"
       },
       "./lazy-ease.css": "./dist/lazy-ease.css",
-      "./lazy-ease.min.js": "./dist/lazy-ease.min.js"
+      "./lazy-ease.min.js": "./dist/lazy-ease.min.js",
+      "./lazy-ease.prepared.min.js": "./dist/lazy-ease.prepared.min.js"
     }
   },
   "scripts": {

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `@lazy-ease/core/prepared` exports `createLazyEase` without measured mode, for pages whose templates write every candidate list or URL, or native sources: about 1.9 kB less after Brotli than the controller of `@lazy-ease/core` (3.2 kB instead of 5.1 kB for attach, 3.8 kB instead of 5.6 kB with `enhance`). Prepared, native and direct sources work the same; a `src` the loader would build URLs for throws `src needs createLazyEase from @lazy-ease/core` before the element is touched.
+- `@lazy-ease/vanilla/lazy-ease.prepared.min.js` is the self-starting script on that controller, without the loader: about 4.0 kB after Brotli instead of 6.7 kB. It reports `data-base-url` and every `data-le-src` image that would need the loader on the console and ignores them.
+- `detectFormat` in the controller config and on the React provider picks the format of measured images when the loader declares several. `detectAvif` from `@lazy-ease/core` is the AVIF probe that used to be built in.
+
+### Changed
+
+- **Behavior change:** AVIF detection is opt-in. Without `detectFormat`, a measured image requests the best format the loader declares other than AVIF (WebP first), with no probe; a development build warns once when the loader declares AVIF. Pass `detectFormat: detectAvif` to `createLazyEase` (or `detectFormat={detectAvif}` to `LazyEaseProvider`) to keep requesting AVIF where the browser decodes it. Bundles without it are about 300 B smaller after Brotli (attach 5.1 kB instead of 5.4 kB, React `Image` 7.7 kB instead of 7.9 kB). `lazy-ease.min.js` keeps detecting AVIF for `data-le-src` images.
+
 ## [0.3.1] - 2026-11-20
 
 ### Added

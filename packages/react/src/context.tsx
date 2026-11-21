@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, use, useMemo, type ReactNode } from 'react'
-import { createLoader, normalizeLoader, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader, type ThumbHashDecoder } from '@lazy-ease/core'
+import { createLoader, normalizeLoader, type FormatDetector, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader, type ThumbHashDecoder } from '@lazy-ease/core'
 
 /**
  * - `lazy`: load when the image comes within `rootMargin` of the root, with a fade
@@ -35,6 +35,12 @@ export interface LazyEaseConfig {
   thumbhash?: ThumbHashDecoder
   /** `'image'` renders decoded ThumbHash images on the server instead of only their average color. */
   thumbhashSsr: 'color' | 'image'
+  /**
+   * Picks the format of measured images when the loader declares several:
+   * `detectAvif` from `@lazy-ease/core` requests AVIF where the browser
+   * decodes it. Default: the best declared format other than AVIF, WebP first.
+   */
+  detectFormat?: FormatDetector
 }
 
 let defaultLoader: ResolvedLoader | undefined
@@ -79,6 +85,7 @@ export function LazyEaseProvider({
   fadeDuration,
   thumbhash,
   thumbhashSsr,
+  detectFormat,
 }: LazyEaseProviderProps) {
   const parent = useLazyEaseConfig()
   const value = useMemo<LazyEaseConfig>(
@@ -94,8 +101,9 @@ export function LazyEaseProvider({
       fadeDuration: fadeDuration ?? parent.fadeDuration,
       thumbhash: thumbhash ?? parent.thumbhash,
       thumbhashSsr: thumbhashSsr ?? parent.thumbhashSsr,
+      detectFormat: detectFormat ?? parent.detectFormat,
     }),
-    [parent, loader, domains, quality, loading, root, rootMargin, dwellTime, placeholder, fadeDuration, thumbhash, thumbhashSsr],
+    [parent, loader, domains, quality, loading, root, rootMargin, dwellTime, placeholder, fadeDuration, thumbhash, thumbhashSsr, detectFormat],
   )
   return <LazyEaseContext value={value}>{children}</LazyEaseContext>
 }
