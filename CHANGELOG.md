@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-20
+
+### Added
+
+- `@lazy-ease/core` exports `checkLadders({ widths, ratios, qualities, formats })`, the ladder check `@lazy-ease/server` runs when the app is created: widths positive integers and ratios positive, both ascending without two values of one URL spelling, qualities unique integers from 1 to 100, formats a non-empty list of AVIF, WebP and JPEG. The server now calls it from core, with the same messages.
+
+### Changed
+
+- `@lazy-ease/core`: `createLoader()` runs `checkLadders()` and throws a `RangeError` for a ladder the reference backend refuses to start with (a descending ladder, a fractional width, a duplicate quality, an empty format list), instead of returning a loader no backend can match. The check runs wherever `process.env.NODE_ENV` isn't `"production"`, which includes Node without `NODE_ENV` set, so a server that renders with such a ladder now throws there. Production bundles drop the check, so the bundle sizes stay the same; a browser import without a bundler skips it.
+
 ## [0.3.0] - 2026-11-19
 
 ### Added
@@ -94,7 +104,8 @@ First release, implementing the [v1 design spec](docs/design-spec.md).
 
 - Measured mode now sets `sizes` before `srcset`. WebKit selects a candidate as soon as `srcset` is set, so it used to fetch the `100vw` candidate first and then the right one.
 
-[Unreleased]: https://github.com/mikekuss/lazy-ease/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mikekuss/lazy-ease/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/mikekuss/lazy-ease/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mikekuss/lazy-ease/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mikekuss/lazy-ease/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mikekuss/lazy-ease/releases/tag/v0.1.0

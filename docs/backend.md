@@ -1,6 +1,6 @@
 # Implementing a lazy-ease backend
 
-Target: 0.3.0. The [specification](design-spec.md) defines the wire contract. A compatible backend can be a PHP template reading a build manifest, a single Node process, or a CDN with regional rendering workers.
+This guide covers 0.3. The [specification](design-spec.md) defines the wire contract. A compatible backend can be a PHP template reading a build manifest, a single Node process, or a CDN with regional rendering workers.
 
 ## Smallest working deployment
 

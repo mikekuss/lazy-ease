@@ -17,6 +17,8 @@ outputSize(1200, 400, { width: 640, aspectRatio: 1 })
 // { requestWidth: 640, width: 400, height: 400 }: the backend never upscales
 ```
 
+`createLoader()` checks its ladders wherever `process.env.NODE_ENV` isn't `"production"` and throws a `RangeError` for any the reference backend would reject: widths must be positive integers and ratios positive numbers, both ascending without two values of one URL spelling; qualities unique integers from 1 to 100; formats a non-empty list of `avif`, `webp` and `jpeg`. So it also runs in Node without `NODE_ENV` set. Production bundles, where the bundler replaces it with `"production"`, drop it, and a browser import without a bundler skips it. `checkLadders({ widths, ratios, qualities, formats })` runs the same check everywhere; `@lazy-ease/server` calls it when the app is created.
+
 `candidateSet()` turns request widths into the srcset a browser chooses from, labeled with the width the backend actually encodes and merged where two requests encode the same pixels:
 
 ```js
