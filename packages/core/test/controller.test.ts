@@ -1757,13 +1757,16 @@ describe('formats', () => {
     expect(probe.created).toBe(0)
   })
 
-  it('falls back to WebP when detection takes longer than 200 ms', async () => {
+  it('falls back to WebP, or the next declared format, when detection takes longer than 200 ms', async () => {
     probe.hang = true
     const { img, box } = boxed()
     createLazyEase({ loader: createLoader(), detectFormat: detectAvif }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     await vi.advanceTimersByTimeAsync(200)
     resize(box, 100, 100)
     expect(img.getAttribute('src')).toContain('fmt=webp')
+    const jpeg = detectAvif(['avif', 'jpeg'])
+    await vi.advanceTimersByTimeAsync(200)
+    await expect(jpeg).resolves.toBe('jpeg')
   })
 
   it('takes WebP, or the next declared format, when the browser does not decode AVIF', async () => {

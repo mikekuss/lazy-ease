@@ -10,7 +10,7 @@ export type FormatDetector = (formats: readonly ImageFormat[]) => ImageFormat | 
 const AVIF =
   'data:image/avif;base64,AAAAHGZ0eXBhdmlmAAAAAG1pZjFhdmlmbWlhZgAAANZtZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAAA+gABAAAAAAAAACAAAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABhdjAxAAAAAA5waXRtAAAAAAABAAAAVmlwcnAAAAA4aXBjbwAAAAxhdjFDgQAMAAAAABRpc3BlAAAAAAAAAAEAAAABAAAAEHBpeGkAAAAAAwgICAAAABZpcG1hAAAAAAAAAAEAAQOBAgMAAAAobWRhdBIACggYAAbICGg0IDISHseHhVnAACwAACCQNZO/nkyA'
 
-/** How long an image waits for detection before it falls back to WebP. */
+/** How long an image waits for detection before it falls back to the best declared format other than AVIF. */
 export const DETECTION_TIMEOUT = 200
 
 let detection: Promise<ImageFormat> | undefined
@@ -39,7 +39,8 @@ export function pickFormat(formats: readonly ImageFormat[], best: ImageFormat = 
  * The `detectFormat` of a controller that requests AVIF where the browser
  * decodes it. A single format, or formats without AVIF, need no probe.
  * Otherwise the AVIF decode test runs once per page, on first need, and an
- * image waits for it at most 200 ms before taking WebP.
+ * image waits for it at most 200 ms before taking the best declared format
+ * other than AVIF: WebP if declared, otherwise JPEG.
  */
 export const detectAvif: FormatDetector = (formats) => {
   // Only AVIF needs a probe, and only when the loader declares it besides another format.
