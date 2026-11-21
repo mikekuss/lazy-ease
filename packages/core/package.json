@@ -29,6 +29,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./prepared": {
+      "source": "./src/prepared.ts",
+      "types": "./dist/prepared.d.ts",
+      "default": "./dist/prepared.js"
+    },
     "./thumbhash": {
       "source": "./src/thumbhash.ts",
       "types": "./dist/thumbhash.d.ts",
@@ -44,6 +49,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./prepared": {
+        "types": "./dist/prepared.d.ts",
+        "default": "./dist/prepared.js"
       },
       "./thumbhash": {
         "types": "./dist/thumbhash.d.ts",

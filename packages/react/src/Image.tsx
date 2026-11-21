@@ -379,7 +379,7 @@ function ImageBox({
         const lazy = decoded?.lazy
         return decoded && { ...decoded, lazy: lazy && (() => ({ ...lazy(), backgroundPosition: 'center' })) }
       })
-    const attachment = createLazyEase({ thumbhash, domains: config.domains }).attach(img, {
+    const attachment = createLazyEase({ thumbhash, domains: config.domains, detectFormat: config.detectFormat }).attach(img, {
       ...options,
       loader: { widths, ratios, qualities, formats, url: (params) => state.loader.url(params) },
       root: config.root,
@@ -413,9 +413,9 @@ function ImageBox({
       state.hidden = img.style.opacity === '0' && attachment.state === 'loading'
       attachment.destroy()
     }
-    // `options` is covered by its signature, which leaves out the root. A new box
-    // (`boxed`) renders a new img, which needs its own attachment.
-  }, [signature, config.root, boxed])
+    // `options` is covered by its signature, which leaves out the root and the format
+    // detector. A new box (`boxed`) renders a new img, which needs its own attachment.
+  }, [signature, config.root, config.detectFormat, boxed])
 
   // Mount-time development checks.
   useEffect(() => {

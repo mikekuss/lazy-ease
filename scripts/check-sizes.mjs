@@ -24,12 +24,15 @@ if (version !== ESBUILD) {
 }
 const { values: args } = parseArgs({ options: { details: { type: 'boolean' }, packed: { type: 'boolean' }, json: { type: 'string' } } })
 
-// Approved 0.3 budgets, in Brotli bytes; `goal` is the target of the size pass after 0.3 (docs/design-spec.md).
+// Approved budgets, in Brotli bytes; `goal` is the target of the size pass after 0.3 (docs/design-spec.md).
 const ENTRIES = [
   { name: 'createLoader', fixture: 'create-loader.js', budget: 1000, goal: 1000 },
   { name: 'attach (with controller)', fixture: 'attach.js', budget: 5600, goal: 3500 },
   { name: 'enhance (with controller)', fixture: 'enhance.js', budget: 6200, goal: 4000 },
   { name: 'IIFE lazy-ease.min.js', file: ['vanilla', 'dist/lazy-ease.min.js'], budget: 6800, goal: 4500 },
+  { name: 'attach (prepared controller)', fixture: 'attach-prepared.js', budget: 3200, goal: 3200 },
+  { name: 'enhance (prepared controller)', fixture: 'enhance-prepared.js', budget: 3800, goal: 3800 },
+  { name: 'IIFE lazy-ease.prepared.min.js', file: ['vanilla', 'dist/lazy-ease.prepared.min.js'], budget: 4000, goal: 4000 },
   { name: 'CSS lazy-ease.css', file: ['vanilla', 'dist/lazy-ease.css'], budget: 500, goal: 500 },
   { name: 'React Image', fixture: 'image.js', budget: 8200, goal: 5000 },
 ]
@@ -58,11 +61,14 @@ if (args.packed) {
   for (const name of ['core', 'vanilla', 'react']) packages[name] = { dir: path.join(root, 'packages', name) }
 }
 const manifestOf = (name) => JSON.parse(readFileSync(path.join(packages[name].dir, 'package.json'), 'utf8'))
+// Every JavaScript entry, subpaths too: an alias for a package name alone would also rewrite its subpaths.
 const alias = Object.fromEntries(
-  Object.keys(packages).map((name) => {
+  Object.keys(packages).flatMap((name) => {
     const manifest = manifestOf(name)
-    const entry = manifest.publishConfig?.exports?.['.'] ?? manifest.exports['.']
-    return [manifest.name, path.join(packages[name].dir, entry.default)]
+    const exports = manifest.publishConfig?.exports ?? manifest.exports
+    return Object.entries(exports)
+      .filter(([, target]) => typeof target === 'object' && target.default.endsWith('.js'))
+      .map(([subpath, target]) => [manifest.name + subpath.slice(1), path.join(packages[name].dir, target.default)])
   }),
 )
 const brotli = (bytes) => brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }).length

@@ -1,4 +1,5 @@
 import { createLoader, LazyEaseProvider, type ImageLoader } from '@lazy-ease/react'
+import { detectAvif } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as thumbhash from 'thumbhash'
@@ -126,6 +127,7 @@ export function App() {
     <LazyEaseProvider
       loader={loader}
       thumbhash={decoder}
+      detectFormat={detectAvif}
       loading={settings.loading}
       rootMargin={`${settings.rootMargin}px`}
       dwellTime={settings.dwellTime}

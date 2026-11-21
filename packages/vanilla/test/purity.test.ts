@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Importing the ESM entries must not touch the DOM; only the self-starting
-// script (src/auto.ts) does, by design. scripts/check-packages.mjs repeats
+// scripts (src/auto.ts, src/auto-prepared.ts, through src/boot.ts) do, by design. scripts/check-packages.mjs repeats
 // this on the packed package without a process global.
 
 declare global {
@@ -41,7 +41,7 @@ describe('import purity', () => {
 
   it('never names the Node process global', () => {
     const sources = import.meta.glob('../src/**/*.ts', { query: '?raw', import: 'default', eager: true })
-    expect(Object.keys(sources)).toHaveLength(3)
+    expect(Object.keys(sources)).toHaveLength(5)
     for (const [file, code] of Object.entries(sources)) expect(code, file).not.toMatch(/process/)
   })
 })

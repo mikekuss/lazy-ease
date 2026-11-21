@@ -12,7 +12,7 @@ import { Image } from '@lazy-ease/react'
 
 What it does:
 
-1. **Less data.** Every image is delivered at the size it is rendered at (× device pixel ratio, capped at 2), in AVIF or WebP, cropped by the server or the browser.
+1. **Less data.** Every image is delivered at the size it is rendered at (× device pixel ratio, capped at 2), in WebP or, with the opt-in detection, AVIF, cropped by the server or the browser.
 2. **No layout shift.** Fixed sizes, aspect ratios, fill boxes and known source dimensions reserve the space before the image arrives.
 3. **No unnecessary loads.** Deferred images aren't requested until they come near the viewport. Measured images hidden with `display: none` are never requested.
 4. **A placeholder on first paint.** A color, a data URI or a [ThumbHash](https://evanw.github.io/thumbhash/) as an inline style in the server HTML, with no extra request.
@@ -167,6 +167,7 @@ These combinations throw in development: `height` without `width`; `fill` with `
 | `reveal` | none | `focusReveal` sharpens every deferred image from a placeholder-like blur during its fade. |
 | `thumbhash` | none | The decoder for `thumbhash:` placeholders, `thumbhashDecoder(thumbhash)` from `@lazy-ease/core/thumbhash`. See [Placeholders](#placeholders). |
 | `thumbhashSsr` | `'color'` | `'image'` puts decoded ThumbHash images in the server HTML instead of only their average color. |
+| `detectFormat` | none | Picks the format of measured images: `detectAvif` from `@lazy-ease/core` requests AVIF where the browser decodes it. Without it they take the best declared format other than AVIF, WebP first. See [Loading modes](#loading-modes). |
 
 ## Loading modes
 
@@ -181,7 +182,7 @@ Where the URLs come from and when the image shows are separate choices:
 
 `loading="lazy"` (the default) activates a deferred image when it comes within `rootMargin` of the root, through one shared `IntersectionObserver` per root and margin. `loading="eager"` activates it right after hydration, still with the fade.
 
-**Measured images** grow their candidates when the box grows (after a 200 ms trailing debounce) and never shrink them, so resizing only downloads anything when a larger ladder step is needed. The browser keeps the displayed image during an upgrade. The format is the best one the browser decodes among the loader's `formats`: AVIF is probed once, when the first measured image activates, and WebP is taken if that takes longer than 200 ms. In development, the component warns when a deferred image is already in the first viewport when it mounts.
+**Measured images** grow their candidates when the box grows (after a 200 ms trailing debounce) and never shrink them, so resizing only downloads anything when a larger ladder step is needed. The browser keeps the displayed image during an upgrade. The format is the best one the loader declares other than AVIF, WebP first. AVIF detection is opt-in, so apps that don't use it don't ship it: with `detectFormat={detectAvif}` (from `@lazy-ease/core`) on the provider, the format is the best one the browser decodes among the loader's `formats`; AVIF is probed once, when the first measured image activates, and WebP is taken if that takes longer than 200 ms. A development build warns once when the loader declares AVIF and no detector is set. In development, the component warns when a deferred image is already in the first viewport when it mounts.
 
 **Prepared and native candidates** are built before anything is known about the browser, so they use WebP (or JPEG, if the loader has no WebP). A known `width` gives the 1× and 2× widths, snapped to the ladder; without `width`, `sizes` offers the full ladder. `sizes` defaults to `{width}px` or `100vw`.
 

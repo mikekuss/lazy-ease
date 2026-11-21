@@ -39,18 +39,18 @@ const packages = [
     clientFiles: [],
     sideEffects: false,
     ...built,
-    required: [...built.required, 'dist/thumbhash.js', 'dist/thumbhash.d.ts', 'dist/dom/controller.js'],
+    required: [...built.required, 'dist/thumbhash.js', 'dist/thumbhash.d.ts', 'dist/prepared.js', 'dist/prepared.d.ts', 'dist/dom/controller.js'],
     smoke: smokeCore,
   },
   {
     dir: 'packages/vanilla',
     clientFiles: [],
-    sideEffects: ['*.css', './dist/lazy-ease.min.js'],
+    sideEffects: ['*.css', './dist/lazy-ease.min.js', './dist/lazy-ease.prepared.min.js'],
     ...built,
-    required: [...built.required, 'dist/css.js', 'dist/css.d.ts', 'dist/lazy-ease.css', 'dist/lazy-ease.min.js'],
+    required: [...built.required, 'dist/css.js', 'dist/css.d.ts', 'dist/lazy-ease.css', 'dist/lazy-ease.min.js', 'dist/lazy-ease.prepared.min.js'],
     smoke: smokeVanilla,
-    // A stylesheet and a classic script: neither has types to resolve.
-    attw: ['--exclude-entrypoints', './lazy-ease.css', './lazy-ease.min.js'],
+    // A stylesheet and classic scripts: none has types to resolve.
+    attw: ['--exclude-entrypoints', './lazy-ease.css', './lazy-ease.min.js', './lazy-ease.prepared.min.js'],
   },
   { dir: 'packages/react', clientFiles: ['dist/Image.js', 'dist/context.js'], sideEffects: false, ...built, smoke: smokeReact },
   { dir: 'packages/server', clientFiles: [], sideEffects: false, ...built, smoke: smokeServer },
@@ -233,15 +233,17 @@ const file = (path) => readFileSync(fileURLToPath(import.meta.resolve('@lazy-eas
 if (file('lazy-ease.css') !== cssText) throw new Error('lazy-ease.css differs from cssText')
 const { JSDOM } = (await import(${JSON.stringify(pathToFileURL(jsdom).href)})).default
 const inert = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
-const page = new JSDOM('<section data-le-auto><span data-le id="in"><img alt="" src="' + inert + '" data-le-srcset="/a.webp 640w" data-le-sizes="50vw"></span></section>' +
-  '<span data-le id="out"><img alt="" src="' + inert + '" data-le-url="/b.webp"></span>', { runScripts: 'outside-only' })
-page.window.eval(file('lazy-ease.min.js'))
-const doc = page.window.document
-// Like a deferred script, it waits until the document is parsed.
-if (doc.readyState === 'loading') await new Promise((resolve) => doc.addEventListener('DOMContentLoaded', resolve))
-if (doc.querySelector('#in img').getAttribute('srcset') !== '/a.webp 640w' || doc.querySelector('#in').dataset.state !== 'loading') throw new Error('the script did not enhance the opted-in area')
-if (doc.querySelector('#out').hasAttribute('data-state')) throw new Error('the script enhanced outside data-le-auto')
-console.log('imported @lazy-ease/vanilla without browser globals; the packed script enhanced its area')
+for (const script of ['lazy-ease.min.js', 'lazy-ease.prepared.min.js']) {
+  const page = new JSDOM('<section data-le-auto><span data-le id="in"><img alt="" src="' + inert + '" data-le-srcset="/a.webp 640w" data-le-sizes="50vw"></span></section>' +
+    '<span data-le id="out"><img alt="" src="' + inert + '" data-le-url="/b.webp"></span>', { runScripts: 'outside-only' })
+  page.window.eval(file(script))
+  const doc = page.window.document
+  // Like a deferred script, it waits until the document is parsed.
+  if (doc.readyState === 'loading') await new Promise((resolve) => doc.addEventListener('DOMContentLoaded', resolve))
+  if (doc.querySelector('#in img').getAttribute('srcset') !== '/a.webp 640w' || doc.querySelector('#in').dataset.state !== 'loading') throw new Error(script + ' did not enhance the opted-in area')
+  if (doc.querySelector('#out').hasAttribute('data-state')) throw new Error(script + ' enhanced outside data-le-auto')
+}
+console.log('imported @lazy-ease/vanilla without browser globals; both packed scripts enhanced their area')
 `,
     )
     if (!ran) return false
@@ -256,13 +258,15 @@ console.log('imported @lazy-ease/vanilla without browser globals; the packed scr
       ok = false
     } else console.log(`✓ import '@lazy-ease/vanilla/lazy-ease.css': the whole sheet is in the production CSS (${app.css.length} B)`)
 
-    // The self-starting script is kept when imported for its side effect.
-    const script = readFileSync(join(dir, 'node_modules/@lazy-ease/vanilla/dist/lazy-ease.min.js'), 'utf8')
-    const started = await bundle(dir, `import '@lazy-ease/vanilla/lazy-ease.min.js'`)
-    if (started.js.length < script.length * 0.9) {
-      console.error(`✗ @lazy-ease/vanilla: import '@lazy-ease/vanilla/lazy-ease.min.js' left ${started.js.length} B of ${script.length} B`)
-      ok = false
-    } else console.log(`✓ import '@lazy-ease/vanilla/lazy-ease.min.js': kept in a production bundle (${started.js.length} B)`)
+    // The self-starting scripts are kept when imported for their side effect.
+    for (const name of ['lazy-ease.min.js', 'lazy-ease.prepared.min.js']) {
+      const script = readFileSync(join(dir, 'node_modules/@lazy-ease/vanilla/dist', name), 'utf8')
+      const started = await bundle(dir, `import '@lazy-ease/vanilla/${name}'`)
+      if (started.js.length < script.length * 0.9) {
+        console.error(`✗ @lazy-ease/vanilla: import '@lazy-ease/vanilla/${name}' left ${started.js.length} B of ${script.length} B`)
+        ok = false
+      } else console.log(`✓ import '@lazy-ease/vanilla/${name}': kept in a production bundle (${started.js.length} B)`)
+    }
     return ok
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -272,7 +276,7 @@ console.log('imported @lazy-ease/vanilla without browser globals; the packed scr
 /**
  * Imports the packed @lazy-ease/core in plain Node the way a browser bundle
  * would see it: no process global, and every browser global a trap. Importing
- * both entry points and creating an instance must touch none of them and
+ * every entry point and creating an instance must touch none of them and
  * build no ladder. The optional decoder then runs with the real `thumbhash`
  * package, and a production bundle drops both entries when they are unused.
  */
@@ -291,11 +295,13 @@ let computed = 0
 Number.prototype.toFixed = function (digits) { computed++; return toFixed.call(this, digits) }
 const core = await import('@lazy-ease/core')
 const { thumbhashDecoder } = await import('@lazy-ease/core/thumbhash')
+const prepared = await import('@lazy-ease/core/prepared')
 core.createLazyEase({ rootMargin: '200px' })
+prepared.createLazyEase({ rootMargin: '200px' })
 const loaded = Object.keys(core).length
 Number.prototype.toFixed = toFixed
 if (touched.length || computed) throw new Error('import touched ' + touched.join(', ') + ', toFixed calls: ' + computed)
-if (typeof thumbhashDecoder !== 'function' || core.DEFAULT_RATIOS.length !== 73) throw new Error('exports')
+if (typeof thumbhashDecoder !== 'function' || typeof core.detectAvif !== 'function' || core.DEFAULT_RATIOS.length !== 73) throw new Error('exports')
 console.log('imported @lazy-ease/core without process or browser globals: ' + loaded + ' exports')
 
 // The optional decoder with the package an application installs.
@@ -308,7 +314,7 @@ if (!/^#[0-9a-f]{6}$/.test(placeholder?.style.backgroundColor ?? '') || !['url("
 console.log('@lazy-ease/core/thumbhash decoded a hash with thumbhash: ' + placeholder.style.backgroundColor)
 `,
     )
-    return ran && (await bundlesToNothing(dir, '@lazy-ease/core', ['@lazy-ease/core', '@lazy-ease/core/thumbhash']))
+    return ran && (await bundlesToNothing(dir, '@lazy-ease/core', ['@lazy-ease/core', '@lazy-ease/core/thumbhash', '@lazy-ease/core/prepared']))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

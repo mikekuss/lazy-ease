@@ -4,7 +4,7 @@ import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import * as thumbhash from 'thumbhash'
 import { describe, expect, it, vi } from 'vitest'
-import { candidateSet, classicCandidates, createLazyEase, createLoader, focusReveal, fullLadder, measuredCandidates, snapRatio, type LoadState } from '@lazy-ease/core'
+import { candidateSet, classicCandidates, createLazyEase, createLoader, detectAvif, focusReveal, fullLadder, measuredCandidates, snapRatio, type LoadState } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { enhance } from '../../vanilla/src/index.js'
 import { LazyEaseProvider, type LazyEaseProviderProps } from '../src/context.js'
@@ -301,8 +301,8 @@ describe('deferred images', () => {
     expect(img().getAttribute('src')).toBe('/_img/a.jpg?ar=1&fmt=webp&q=75&token=1.k1.abc&v=r7&w=256')
   })
 
-  it('detects the format only once a measured image activates', async () => {
-    const { owner, img } = mount({ aspectRatio: 1 }, { loader: createLoader() })
+  it('detects the format with the provider’s detector only once a measured image activates', async () => {
+    const { owner, img } = mount({ aspectRatio: 1 }, { loader: createLoader(), detectFormat: detectAvif })
     await advance(1000)
     expect(img().getAttribute('src')).toBe(INERT)
     intersect(owner())

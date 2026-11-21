@@ -1,6 +1,7 @@
 import {
   createLazyEase,
   createLoader,
+  detectAvif,
   type AttachOptions,
   type Attachment,
   type LazyEaseConfig,
@@ -215,7 +216,7 @@ export function runCase(
       return createLoader({ ...options, params })
     },
     lazyEase(config = {}) {
-      const le = createLazyEase({ thumbhash: decoder, ...config })
+      const le = createLazyEase({ thumbhash: decoder, detectFormat: detectAvif, ...config })
       // Cases below the fold must not wait for scrolling; the scroll-root cases stay lazy.
       const loading = config.root ? undefined : ('eager' as const)
       return {

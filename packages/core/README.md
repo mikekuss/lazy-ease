@@ -61,7 +61,26 @@ handle.destroy() // releases listeners, observers, timers and the claim on the e
 | `loading: 'eager'`, `root`, `rootMargin`, `dwellTime` | When to activate. Default: within 400px of the viewport, observed through one shared IntersectionObserver per root and margin. A root or margin the IntersectionObserver refuses throws and leaves the element as it was; on `update` the displayed image stays. |
 | `fadeDuration`, `reveal`, `onStateChange(state, img)`, `onDisplay(img, event?)` | A 400 ms fade after load and decode, skipped for reduced motion. `reveal` takes keyframes for the fade instead: `focusReveal` sharpens the image from a blur of 8 % of the box's longer edge, and any `(edge) => Keyframe[]` works; one that throws gets the plain fade. It starts from explicit keyframes and takes the box size from a ResizeObserver, so the controller reads no layout for it. `onDisplay` reports the first display of each source once, with the load event only when one was observed. |
 
-External URLs, SVG and GIF load directly. A loader with one format, without AVIF among its formats, or with `formats: 'auto'` needs no format probe; otherwise an AVIF decode test runs once, on first need, and WebP is the fallback. Measured images grow their candidates after a 200 ms trailing debounce and never shrink them; a failed upgrade keeps the image that is displayed. A failed first load or decode releases the placeholder and reports `error`. An element can be attached once; the claim is shared by every copy of the package on the page.
+External URLs, SVG and GIF load directly. A measured image requests the best format its loader declares other than AVIF, WebP first, or `'auto'` for `formats: 'auto'`. For AVIF, pass `detectFormat: detectAvif` in the config: with AVIF and another format declared, an AVIF decode test then runs once per page, on first need, and WebP is taken if it takes longer than 200 ms. Without it a loader that declares AVIF never gets an AVIF request, which a development build reports once on the console. Any `(formats) => format | Promise<format>` works as `detectFormat`; it is left out of a bundle that does not import it.
+
+```ts
+import { createLazyEase, createLoader, detectAvif } from '@lazy-ease/core'
+
+const le = createLazyEase({ loader: createLoader(), detectFormat: detectAvif })
+```
+
+Measured images grow their candidates after a 200 ms trailing debounce and never shrink them; a failed upgrade keeps the image that is displayed. A failed first load or decode releases the placeholder and reports `error`. An element can be attached once; the claim is shared by every copy of the package on the page.
+
+### Without measured mode
+
+`createLazyEase` from `@lazy-ease/core/prepared` is the same controller without measured mode, for pages whose templates write every candidate list or URL, or native sources: about 1.9 kB less after Brotli. Prepared, native and direct sources (external URLs, SVG, GIF) work as above; a `src` that the loader would build URLs for throws `src needs createLazyEase from @lazy-ease/core` before the element is touched.
+
+```ts
+import { createLazyEase } from '@lazy-ease/core/prepared'
+
+const le = createLazyEase()
+le.attach(document.querySelector<HTMLImageElement>('#card img')!, { srcset: '/a-640.webp 640w, /a-1280.webp 1280w', sizes: '50vw' })
+```
 
 `whenVisible(element, { root, rootMargin, dwellTime }, callback)` is the visibility primitive on its own, for decorative backgrounds; it returns a function that cancels. `le.config` is the config the instance was created with, so an adapter can watch backgrounds against the same root and margin as the images.
 

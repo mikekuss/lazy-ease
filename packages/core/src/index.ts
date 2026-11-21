@@ -45,11 +45,6 @@ export { imageSet, type ImageSetOptions } from './imageset.js'
 export { whenVisible, type WhenVisibleOptions } from './dom/observe.js'
 export { focusReveal, type Reveal } from './dom/reveal.js'
 export { checkLadders, type Ladders } from './loader.js'
-export {
-  createLazyEase,
-  type AttachOptions,
-  type Attachment,
-  type LazyEase,
-  type LazyEaseConfig,
-  type LoadState,
-} from './dom/controller.js'
+export { type AttachOptions, type Attachment, type LazyEase, type LazyEaseConfig, type LoadState } from './dom/controller.js'
+export { createLazyEase } from './dom/measure.js'
+export { detectAvif, type FormatDetector } from './dom/format.js'

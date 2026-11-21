@@ -1,11 +1,8 @@
-import { candidateSet } from '../candidates.js'
 import { normalizeFocalPoint, percentPosition, type FocalPoint } from '../focal.js'
-import { normalizeLoader, snapQuality, type ImageFormat, type ImageLoader, type ImageLoaderFunction } from '../loader.js'
-import { snapRatio } from '../ratios.js'
+import type { ImageLoader, ImageLoaderFunction } from '../loader.js'
 import { isDirect } from '../source.js'
-import { focusStyles, parsePlaceholder, type StyleRecord, type ThumbHashDecoder } from '../styles.js'
-import { measuredCandidates, snapWidth } from '../widths.js'
-import { chooseFormat } from './format.js'
+import { parsePlaceholder, type StyleRecord, type ThumbHashDecoder } from '../styles.js'
+import type { FormatDetector } from './format.js'
 import { observeResize, whenVisible } from './observe.js'
 import type { Reveal } from './reveal.js'
 
@@ -33,6 +30,12 @@ export interface LazyEaseConfig {
   decodeTimeout?: number
   /** Enables `thumbhash:` placeholders; see `@lazy-ease/core/thumbhash`. */
   thumbhash?: ThumbHashDecoder
+  /**
+   * Picks the format of measured images when the loader declares several.
+   * `detectAvif` requests AVIF where the browser decodes it. Default: the
+   * best declared format other than AVIF, WebP first.
+   */
+  detectFormat?: FormatDetector
   /** Every state change of an attached image. */
   onStateChange?: (state: LoadState, img: HTMLImageElement) => void
 }
@@ -114,20 +117,43 @@ const PLACEHOLDER = ['backgroundColor', 'backgroundImage', 'backgroundSize', 'ba
 const FADE = ['opacity', 'transition']
 const ATTRIBUTES = ['sizes', 'srcset', 'src']
 
-type Options = LazyEaseConfig & AttachOptions
-type Timer = ReturnType<typeof setTimeout>
+/** Attach options over the instance's config over the defaults. */
+export type Options = LazyEaseConfig & AttachOptions
+export type Timer = ReturnType<typeof setTimeout>
+
+export type Mode = 'fill' | 'fixed' | 'ratio' | 'intrinsic'
+
+/**
+ * Measured mode, for one generation: watches the slot of `src` and installs
+ * the loader's candidates for it. Returns what removes the focal styles it
+ * set. Positional, because an object of these costs bytes in every bundle.
+ */
+export type Measure = (
+  src: string,
+  o: Options,
+  mode: Mode,
+  /** The normalized focal point, for every mode but intrinsic. */
+  focus: FocalPoint | undefined,
+  img: HTMLImageElement,
+  box: HTMLElement | undefined,
+  /** The box, or the img without one: the element that is measured. */
+  surface: HTMLElement,
+  /** Whether the generation still runs. */
+  live: () => boolean,
+  /** A timeout the end of the generation clears. */
+  later: (callback: () => void, ms: number) => Timer,
+  /** Clears a timeout from `later` early. */
+  cancel: (timer?: Timer) => void,
+  /** Called when the generation ends. */
+  cleanups: (() => void)[],
+  /** Activates candidates: sizes, srcset and src, a missing src keeping the placeholder's. */
+  install: (srcset?: string, sizes?: string, src?: string) => void,
+) => () => void
 
 // Camel-case properties, as StyleRecord has them; '' removes a declaration.
 const styleOf = (element: HTMLElement) => element.style as unknown as Record<string, string>
 const clearStyle = (element: HTMLElement, properties: readonly string[]) => {
   for (const property of properties) styleOf(element)[property] = ''
-}
-/** Sets `styles` on `element` and returns what puts the replaced values back. */
-const assign = (element: HTMLElement, styles: StyleRecord) => {
-  const before: Record<string, string> = {}
-  for (const property in styles) before[property] = styleOf(element)[property]!
-  Object.assign(element.style, styles)
-  return () => Object.assign(element.style, before)
 }
 const isNative = (o: Options) => o.priority || o.loading === 'native'
 /** The logical source of deferred options and picture sources: what an image displayed under them shows. */
@@ -135,11 +161,12 @@ const identity = (o: Options, sources: Iterable<Element>) =>
   JSON.stringify([o.src, o.srcset, o.url, o.version, ...[...sources].map((source) => source.getAttribute('data-le-srcset'))])
 
 /**
- * A controller instance. Creating it does nothing: observers and format
- * detection start on first need. Several instances, and several copies of
- * the package, can share one page.
+ * A controller instance, with measured mode when `measure` is given;
+ * `noSrc` is the error for a `src` it cannot load. Creating it does nothing:
+ * observers and format detection start on first need. Several instances,
+ * and several copies of the package, can share one page.
  */
-export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
+export function createController(config: LazyEaseConfig, measure?: Measure, noSrc = 'src needs a loader'): LazyEase {
   /** Attach options over the instance's config over the defaults, validated; with `img` (update) also against the observer. */
   const resolve = (options: AttachOptions, img?: HTMLImageElement): Options => {
     const o: Options = { rootMargin: '400px', fadeDuration: 400, decodeTimeout: 250, quality: 75, ...config }
@@ -154,8 +181,8 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
         ? 'needs exactly one of src, srcset/url or native'
         : o.sizes !== undefined && o.srcset === undefined
           ? 'sizes needs srcset'
-          : o.src !== undefined && !o.loader && !isDirect(o.src, o.domains)
-            ? 'src needs a loader'
+          : o.src !== undefined && !(measure && o.loader) && !isDirect(o.src, o.domains)
+            ? noSrc
             : o.height !== undefined && (o.width === undefined || o.aspectRatio !== undefined)
               ? 'height needs width and no aspectRatio'
               : o.fill && (o.width ?? o.height) !== undefined
@@ -268,13 +295,17 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           timers.add(timer)
           return timer
         }
+        const cancel = (timer?: Timer) => {
+          clearTimeout(timer)
+          timers.delete(timer!)
+        }
         const on = (type: string, listener: (event: Event) => void) => {
           img.addEventListener(type, listener)
           cleanups.push(() => img.removeEventListener(type, listener))
         }
         const fadeMs = o.fadeDuration!
         const placeholder = o.placeholder === undefined ? undefined : parsePlaceholder(o.placeholder, o.thumbhash)
-        const mode = o.fill ? 'fill' : o.height !== undefined ? 'fixed' : o.aspectRatio !== undefined ? 'ratio' : 'intrinsic'
+        const mode: Mode = o.fill ? 'fill' : o.height !== undefined ? 'fixed' : o.aspectRatio !== undefined ? 'ratio' : 'intrinsic'
         const focus = mode === 'intrinsic' ? undefined : normalizeFocalPoint(o.focalPoint)
         const paint = (style: StyleRecord) => {
           clearStyle(surface, PLACEHOLDER)
@@ -387,80 +418,11 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           restore(values)
         }
 
-        const measure = (src: string) => {
-          const loader = normalizeLoader(o.loader!)
-          const quality = snapQuality(o.quality!, loader.qualities)
-          const { srcWidth, srcHeight } = o
-          const declared = mode === 'fixed' ? o.width! / o.height! : o.aspectRatio
-          const sourceRatio = srcWidth && srcHeight ? srcWidth / srcHeight : undefined
-          const browserCrop =
-            mode !== 'intrinsic' && (o.crop ? o.crop === 'browser' : mode === 'fill' && declared === undefined && !!sourceRatio)
-          const candidates = (slot: number) => measuredCandidates({ measuredWidth: slot, ladder: loader.widths, srcWidth })
-          // The candidate a browser at this DPR takes for a slot.
-          const selected = (slot: number) => Math.min(snapWidth(slot * (devicePixelRatio || 1), loader.widths), candidates(slot).at(-1)!)
-          let current: { slot: number; ratio?: number } | undefined
-          let format: ImageFormat | 'auto'
-          let timer: Timer | undefined
-
-          const resize = (width: number, height: number) => {
-            // Hidden or collapsed slots stay as they are until they get a size.
-            if (!live || !(width > 0) || (mode === 'fill' && !(height > 0))) return
-            // Without a declared ratio a server-cropped fill takes the box's.
-            const ratio = browserCrop || mode === 'intrinsic' ? undefined : snapRatio(declared ?? width / height, loader.ratios)
-            const served = browserCrop ? sourceRatio : ratio
-            // The cover width: the image is wider than the box when the box is relatively taller.
-            let slot = Math.ceil(served ? Math.max(width, height * served) : width)
-            if (current) {
-              if (ratio === current.ratio && !(slot > current.slot && selected(slot) > selected(current.slot))) return
-              slot = Math.max(slot, current.slot)
-            }
-            current = { slot, ratio }
-            const set = candidateSet({
-              widths: candidates(slot),
-              srcWidth,
-              srcHeight,
-              loader,
-              src,
-              aspectRatio: ratio,
-              focalPoint: ratio ? focus : undefined,
-              quality,
-              format,
-              version: o.version,
-              token: o.token,
-            })
-            if (focus) {
-              // A re-measure replaces the previous crop’s styles.
-              unfocus()
-              const styles = focusStyles({ focus, crop: ratio, srcWidth, srcHeight })
-              const undo = [assign(img, styles.img), box && assign(box, styles.box)]
-              unfocus = () => undo.forEach((callback) => callback?.())
-            }
-            install(set.srcset, `${slot}px`, set.srcset ? undefined : set.src)
-          }
-
-          const start = (chosen: ImageFormat | 'auto') => {
-            if (!live) return
-            format = chosen
-            cleanups.push(
-              observeResize(surface, (width, height) => {
-                // The first size counts at once; later ones once a resize settles.
-                if (!current) return resize(width, height)
-                clearTimeout(timer)
-                timers.delete(timer!)
-                timer = later(() => resize(width, height), 200)
-              }),
-            )
-          }
-          const chosen = chooseFormat(loader.formats)
-          if (typeof chosen == 'string') start(chosen)
-          else void chosen.then(start)
-        }
-
         const activate = () => {
           if (placeholder?.lazy && !shown) paint(placeholder.lazy())
           if (o.src === undefined) install(o.srcset, o.sizes, o.url)
           else if (isDirect(o.src, o.domains)) install(undefined, undefined, o.src)
-          else measure(o.src)
+          else unfocus = measure!(o.src, o, mode, focus, img, box, surface, () => live, later, cancel, cleanups, install)
         }
 
         // Adoption: an image that already has its target is not reloaded.

@@ -8,5 +8,5 @@
     "noEmit": true
   },
   "include": ["src"],
-  "exclude": ["src/dom", "src/index.ts"]
+  "exclude": ["src/dom", "src/index.ts", "src/prepared.ts"]
 }
