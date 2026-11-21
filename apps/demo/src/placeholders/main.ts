@@ -382,6 +382,20 @@ const FRAMES = 9
 const STRIP = 150
 
 /**
+ * focusReveal's timing, started from the settings the tiles start from (the
+ * Blur slider as `--blur`, the zoom of placeholders.css), so both agree.
+ */
+function reveal(edge: number, zoom: boolean): Keyframe[] {
+  const [first, ...rest] = focusReveal(edge)
+  const last = rest.at(-1)!
+  return [
+    { ...first, filter: `blur(${(edge * settings().blur) / 100}px)`, transform: zoom ? 'scale(1.06)' : 'none' },
+    ...rest.slice(0, -1),
+    { ...last, transform: 'none' },
+  ]
+}
+
+/**
  * The reveal of B frame by frame, with the controller's animations paused at
  * fixed times: the image by the chosen morph, the placeholder of a transparent
  * image fading out in the same window as the controller. The last frame is after the release.
@@ -417,7 +431,7 @@ function filmstrip(row: Row, placeholder: Record<string, string | undefined>) {
     cell.append(well, label)
     if (i < FRAMES - 1) {
       Object.assign(frame.style, placeholder)
-      const keyframes = morph === 'fade' ? { opacity: [0, 1], easing: 'ease-out' } : focusReveal(edge)
+      const keyframes = morph === 'fade' ? { opacity: [0, 1], easing: 'ease-out' } : reveal(edge, morph === 'zoom')
       const pause = (animation: Animation) => {
         animation.pause()
         animation.currentTime = t

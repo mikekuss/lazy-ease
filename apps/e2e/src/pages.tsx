@@ -104,11 +104,15 @@ function Fade({ images: { photo } }: PageProps) {
   )
 }
 
-/** A wide focus reveal with a long fade, in white space the blur must not paint over. */
+/**
+ * A wide focus reveal with a long fade, in white space the blur must not paint over,
+ * and a round avatar whose own clip-path the reveal keeps.
+ */
 function Reveal({ images: { photo } }: PageProps) {
   return (
     <div className="reveal-page">
       <Image src={photo.src} alt="" width={1000} height={400} srcWidth={photo.width} srcHeight={photo.height} reveal={focusReveal} fadeDuration={20_000} wrapperClassName="reveal-box" />
+      <Image src={photo.src} alt="" width={400} height={400} srcWidth={photo.width} srcHeight={photo.height} reveal={focusReveal} fadeDuration={20_000} placeholder="none" style={{ clipPath: 'circle(40%)' }} wrapperClassName="reveal-avatar" wrapperStyle={{ marginTop: 80 }} />
     </div>
   )
 }

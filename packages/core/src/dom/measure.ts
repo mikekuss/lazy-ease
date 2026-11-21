@@ -98,6 +98,8 @@ const measure: Measure = (src, o, mode, focus, img, box, surface, live, later, c
     start(pickFormat(formats as ImageFormat[]))
   }
   if (formats === 'auto') start(formats)
+  // A single format needs no detector, so none that hangs can hold the image back.
+  else if (!formats[1]) start(formats[0]!)
   else
     try {
       const chosen = (o.detectFormat ?? pickFormat)(formats)

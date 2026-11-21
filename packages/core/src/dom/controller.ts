@@ -437,15 +437,6 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           else unfocus = measure!(o.src, o, mode, focus, img, box, surface, () => live, later, cancel, cleanups, install)
         }
 
-        // Adoption: an image that already has its target is not reloaded.
-        if (own && img.complete) {
-          if (img.naturalWidth > 0) display()
-          else fail()
-        } else report(own ? 'loading' : 'idle')
-        // Not for an image displayed at adoption, which reveals nothing.
-        if (fades && o.reveal && box && !native && !shown && !still())
-          cleanups.push((unwatch = observeResize(box, (width, height) => (edge = width > height ? width : height))))
-
         const end = (next?: Options) => {
           live = false
           cleanups.forEach((cleanup) => cleanup())
@@ -465,8 +456,18 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           }
         }
 
-        // Before what can throw, so that start() can end the generation.
+        // Before the first report and what can throw, so that a callback's destroy() and start() end this generation.
         stop = end
+        // Adoption: an image that already has its target is not reloaded.
+        if (own && img.complete) {
+          if (img.naturalWidth > 0) display()
+          else fail()
+        } else report(own ? 'loading' : 'idle')
+        // A callback above destroyed or updated the image.
+        if (!live) return
+        // Not for an image displayed at adoption, which reveals nothing.
+        if (fades && o.reveal && box && !native && !shown && !still())
+          cleanups.push((unwatch = observeResize(box, (width, height) => (edge = width > height ? width : height))))
         if (native) {
           if (o.priority) {
             img.setAttribute('fetchpriority', 'high')

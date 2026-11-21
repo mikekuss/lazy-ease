@@ -812,9 +812,9 @@ describe('focus reveal', () => {
     expect(animations).toMatchObject([
       {
         keyframes: [
-          { opacity: 0, filter: 'blur(25.6px)', clipPath: 'inset(0)', easing: 'ease-out' },
+          { opacity: 0, filter: 'blur(25.6px)', maskImage: 'linear-gradient(#000,#000)', easing: 'ease-out' },
           { opacity: 1, offset: 0.45 },
-          { opacity: 1, filter: 'blur(0px)', clipPath: 'inset(0)' },
+          { opacity: 1, filter: 'blur(0px)', maskImage: 'linear-gradient(#000,#000)' },
         ],
         duration: 400,
         cancelled: false,
@@ -1016,6 +1016,30 @@ describe('callbacks that start the next generation', () => {
     intersect(box)
     expect(img.getAttribute('src')).toBe('/b.webp')
     expect(box.style.backgroundColor).toBe('red')
+  })
+
+  it('ends the new generation when onStateChange destroys it as it starts, and leaves the image to the next attachment', async () => {
+    for (const create of [createLazyEase, createPrepared]) {
+      const { img, box } = boxed()
+      let handle: Attachment | undefined
+      let armed = false
+      const le = create({
+        onStateChange: (state) => {
+          if (state !== 'idle' || !armed) return
+          armed = false
+          handle!.destroy()
+          le.attach(img, { url: '/c.webp', loading: 'eager' })
+        },
+      })
+      handle = le.attach(img, { url: '/a.webp', loading: 'eager' })
+      expect(img.getAttribute('src')).toBe('/a.webp')
+      armed = true
+      handle.update({ url: '/b.webp' })
+      intersect(box)
+      await flush()
+      expect(img.getAttribute('src')).toBe('/c.webp')
+      expect(box.getAttribute('data-state')).toBe('loading')
+    }
   })
 })
 
@@ -1404,6 +1428,15 @@ describe('formats', () => {
     resize(box, 100, 100)
     expect(probe.created).toBe(0)
     expect(img.getAttribute('src')).toContain('fmt=webp')
+  })
+
+  it('asks no detector for a single declared format', () => {
+    const detectFormat = vi.fn(() => new Promise<ImageFormat>(() => {}))
+    const { img, box } = boxed()
+    createLazyEase({ loader: createLoader({ formats: ['jpeg'] }), detectFormat }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(box, 100, 100)
+    expect(img.getAttribute('src')).toContain('fmt=jpeg')
+    expect(detectFormat).not.toHaveBeenCalled()
   })
 
   it('passes auto to an auto-negotiating loader without probing', () => {
