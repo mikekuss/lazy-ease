@@ -1,12 +1,13 @@
 import { act, render } from '@testing-library/react'
-import { StrictMode, Suspense, createRef, startTransition, use, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { StrictMode, Suspense, createRef, startTransition, use, useLayoutEffect, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { hydrateRoot } from 'react-dom/client'
+import { createRoot, hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import * as thumbhash from 'thumbhash'
 import { describe, expect, it, vi } from 'vitest'
 import { candidateSet, classicCandidates, createLazyEase, createLoader, detectAvif, focusReveal, fullLadder, measuredCandidates, snapRatio, type LoadState } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
+import * as core from '../../core/test/dom-mocks.js'
 import { enhance } from '../../vanilla/src/index.js'
 import { LazyEaseProvider, type LazyEaseProviderProps } from '../src/context.js'
 import { Image, type ImageProps } from '../src/Image.js'
@@ -886,6 +887,63 @@ describe('an update React has not committed', () => {
     await tweak('c')
     expect(img().className).toBe('c')
     expect(owner().style.backgroundColor).toBe('')
+  })
+})
+
+describe('a new source committed before the old one is destroyed', () => {
+  // Between the commit, which publishes the new render's hooks, and the passive destroy of
+  // the old attachment, the old source can finish loading. Its events reach no new hook.
+  it('reaches no hook of the new render', async () => {
+    vi.useRealTimers()
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    const previous = env.IS_REACT_ACT_ENVIRONMENT
+    env.IS_REACT_ACT_ENVIRONMENT = false
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 50))
+    try {
+      const a = vi.fn()
+      const b = vi.fn()
+      const statesB: LoadState[] = []
+      // A sibling whose layout effect runs in the same commit, before the passive effects.
+      function Kick({ on }: { on: boolean }) {
+        useLayoutEffect(() => {
+          if (on) core.load(container.querySelector('img')!)
+        })
+        return null
+      }
+      const view = (version: string, onLoad: () => void, on: boolean, onStateChange?: (state: LoadState) => void) => (
+        <LazyEaseProvider loader={webp}>
+          <Image src="/a.jpg" version={version} alt="Fern" width={320} height={240} fadeDuration={0} onLoad={onLoad} onStateChange={onStateChange} />
+          <Kick on={on} />
+        </LazyEaseProvider>
+      )
+      root.render(view('r1', a, false))
+      await tick()
+      const img = container.querySelector('img')!
+      const owner = img.closest<HTMLElement>('[data-le]')!
+      core.intersect(owner)
+      core.resize(owner, 320, 240)
+      await tick()
+      root.render(view('r2', b, true, (state) => statesB.push(state)))
+      await tick()
+      expect(b).not.toHaveBeenCalled()
+      expect(statesB).not.toContain('loaded')
+      // The new source loads and fires its own first onLoad.
+      core.intersect(owner)
+      core.resize(owner, 320, 240)
+      await tick()
+      expect(img.getAttribute('src')).toContain('v=r2')
+      core.load(img)
+      await tick()
+      expect(b).toHaveBeenCalledTimes(1)
+      expect(statesB.filter((state) => state === 'loaded')).toHaveLength(1)
+    } finally {
+      root.unmount()
+      container.remove()
+      env.IS_REACT_ACT_ENVIRONMENT = previous
+    }
   })
 })
 

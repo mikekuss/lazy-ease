@@ -285,6 +285,8 @@ function ImageBox({
     loader,
     decoder,
     reveal,
+    // The identity of the committed render, whose hooks these are.
+    id: '',
     event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
     // The currentSrc the stored load event was for.
     eventSrc: '',
@@ -303,8 +305,9 @@ function ImageBox({
   if (kept.shown && (native || kept.shown === identity)) paint = kept.paint
   // The controller calls the hooks of the committed render, and a render renders the
   // placeholder it committed: a render React discards or holds back changes neither.
+  // An attachment of an older source still alive after the commit reaches none of its hooks.
   useLayoutEffect(() => {
-    Object.assign(kept, { onLoad, onStateChange, loader, decoder, reveal: revealer, paint })
+    Object.assign(kept, { id: identity, onLoad, onStateChange, loader, decoder, reveal: revealer, paint })
   })
   // Boxed, the img fills the box (one grid cell with a fallback); bare, it is the slot and carries the placeholder.
   const imgStyle: CSSProperties = {
@@ -387,11 +390,12 @@ function ImageBox({
       loader: { widths, ratios, qualities, formats, url: (params) => state.loader.url(params) },
       root: config.root,
       onStateChange(next) {
-        if (state.state === next) return
+        if (state.id !== identity || state.state === next) return
         state.state = next
         state.onStateChange?.(next, img)
       },
       onDisplay(_, event) {
+        if (state.id !== identity) return
         // A native image calls onLoad from its React handler.
         if (state.shown === identity || native) {
           if (!event) state.shown = identity
