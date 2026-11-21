@@ -85,14 +85,27 @@ const measure: Measure = (src, o, mode, focus, img, box, surface, live, later, c
   const { formats } = loader
   // A development hint, dropped by production bundles; without a bundler, reading `process` throws and skips it.
   try {
-    if (process.env.NODE_ENV !== 'production' && !o.detectFormat && formats !== 'auto' && formats.includes('avif') && !warned) {
+    if (process.env.NODE_ENV !== 'production' && !o.detectFormat && formats !== 'auto' && formats.includes('avif') && pickFormat(formats) !== 'avif' && !warned) {
       warned = true
-      console.warn('[lazy-ease] The loader declares AVIF, but without detectFormat measured images request WebP. Pass detectFormat: detectAvif, or drop avif from formats.')
+      console.warn(`[lazy-ease] The loader declares AVIF, but without detectFormat measured images request ${pickFormat(formats)}. Pass detectFormat: detectAvif, or drop avif from formats.`)
     }
   } catch {}
-  const chosen = formats === 'auto' ? formats : (o.detectFormat ?? pickFormat)(formats)
-  if (typeof chosen == 'string') start(chosen)
-  else void chosen.then(start)
+  // A detector that throws or rejects is reported, and the image takes what no detector would.
+  const fallback = (error: unknown) => {
+    setTimeout(() => {
+      throw error
+    })
+    start(pickFormat(formats as ImageFormat[]))
+  }
+  if (formats === 'auto') start(formats)
+  else
+    try {
+      const chosen = (o.detectFormat ?? pickFormat)(formats)
+      if (typeof chosen == 'string') start(chosen)
+      else chosen.then(start, fallback)
+    } catch (error) {
+      fallback(error)
+    }
   return () => unfocus()
 }
 
@@ -103,5 +116,5 @@ const measure: Measure = (src, o, mode, focus, img, box, surface, live, later, c
  * `@lazy-ease/core/prepared` is the same controller without measured mode.
  */
 export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
-  return createController(config, measure)
+  return createController(config, measure, 'src needs a loader')
 }

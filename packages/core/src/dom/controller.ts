@@ -33,7 +33,8 @@ export interface LazyEaseConfig {
   /**
    * Picks the format of measured images when the loader declares several.
    * `detectAvif` requests AVIF where the browser decodes it. Default: the
-   * best declared format other than AVIF, WebP first.
+   * best declared format other than AVIF, WebP first, or AVIF when it is
+   * the only one. A detector that throws or rejects gets that default.
    */
   detectFormat?: FormatDetector
   /** Every state change of an attached image. */
@@ -166,7 +167,7 @@ const identity = (o: Options, sources: Iterable<Element>) =>
  * observers and format detection start on first need. Several instances,
  * and several copies of the package, can share one page.
  */
-export function createController(config: LazyEaseConfig, measure?: Measure, noSrc = 'src needs a loader'): LazyEase {
+export function createController(config: LazyEaseConfig, measure?: Measure, noSrc?: string): LazyEase {
   /** Attach options over the instance's config over the defaults, validated; with `img` (update) also against the observer. */
   const resolve = (options: AttachOptions, img?: HTMLImageElement): Options => {
     const o: Options = { rootMargin: '400px', fadeDuration: 400, decodeTimeout: 250, quality: 75, ...config }
@@ -182,7 +183,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
         : o.sizes !== undefined && o.srcset === undefined
           ? 'sizes needs srcset'
           : o.src !== undefined && !(measure && o.loader) && !isDirect(o.src, o.domains)
-            ? noSrc
+            ? noSrc!
             : o.height !== undefined && (o.width === undefined || o.aspectRatio !== undefined)
               ? 'height needs width and no aspectRatio'
               : o.fill && (o.width ?? o.height) !== undefined
@@ -329,19 +330,23 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           shown = true
           good = snapshot()
           report('loaded')
+          // A callback above or below can update() or destroy(): then the element belongs to the next generation.
+          if (!live) return
           if (img.style.opacity !== '0' || still()) release()
           else {
             // No style or layout flush (spec): an opacity 0 set in this frame is no start value for the transition,
             // so the animation's keyframes give the fade its start. Where it runs, the transition shows the same fade.
             // Without Web Animations (jsdom) only the transition is left.
             try {
-              fade = img.animate?.(o.reveal ? o.reveal(edge) : { opacity: [0, 1], easing: 'ease-out' }, fadeMs)
+              const keyframes = o.reveal ? o.reveal(edge) : { opacity: [0, 1], easing: 'ease-out' }
+              if (live) fade = img.animate?.(keyframes, fadeMs)
             } catch (error) {
               // A reveal that throws leaves the transition below, a plain fade, and its error is reported.
               setTimeout(() => {
                 throw error
               })
             }
+            if (!live) return
             Object.assign(img.style, { transition: `opacity ${fadeMs}ms ease-out`, opacity: '1' })
             // A placeholder known to stand for a transparent image (a ThumbHash with alpha, or `transparent`)
             // fades out while the image becomes opaque, from 40 to 80 % of the fade, or 25 to 60 % with a
@@ -364,7 +369,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
         const fail = () => {
           report('error')
           // The alt text or the browser's broken-image presentation, in the reserved area.
-          release()
+          if (live) release()
         }
 
         on('load', (event) => {
@@ -409,6 +414,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           assigned = true
           // An upgrade keeps the loaded state; the displayed image stays.
           if (!shown) report('loading')
+          if (!live) return
           for (const source of deferredSources()) {
             if (!activated.has(source)) activated.set(source, snapshot(source))
             const deferred = source.getAttribute('data-le-sizes')

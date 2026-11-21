@@ -10,19 +10,19 @@ ESM imports must perform no detection, DOM access, observer setup or ladder comp
 
 Measure each public import plus required core code with a pinned minifying bundler, production defines, external React peers and Brotli quality 11: esbuild 0.28.2, ES2022 ESM. The measurement fixtures are in `scripts/sizes`; `pnpm check:sizes` measures them after `pnpm build` and fails over budget or with another esbuild version (`--details` lists each entry's largest inputs, `--packed` measures the tarballs `pnpm check:packages` packed, `--json <file>` writes the results).
 
-| Entry | Approved budget | Measured for 0.3 | Measured with opt-in AVIF detection and the prepared controller | Goal after 0.3 |
+| Entry | Approved budget | Measured for 0.3 | Measured on the merged branch | Goal after 0.3 |
 | --- | --- | --- | --- | --- |
 | createLoader | 1000 | 833 | 828 | 1000 |
-| attach with controller creation | 5600 | 5349 | 5057 | 3500 |
-| enhance with controller | 6200 | 5960 | 5628 | 4000 |
-| self-starting IIFE | 6800 | 6589 | 6686 | 4500 |
-| attach with the prepared controller (`@lazy-ease/core/prepared`) | 3200 | – | 3150 | 3200 |
-| enhance with the prepared controller | 3800 | – | 3773 | 3800 |
-| self-starting IIFE without measured images (`lazy-ease.prepared.min.js`) | 4000 | – | 3970 | 4000 |
+| attach with controller creation | 5600 | 5349 | 5291 | 3500 |
+| enhance with controller | 6200 | 5960 | 5866 | 4000 |
+| self-starting IIFE | 6800 | 6589 | 6904 | 4500 |
+| attach with the prepared controller (`@lazy-ease/core/prepared`) | 3200 | – | 3406 | 3200 |
+| enhance with the prepared controller | 3800 | – | 3996 | 3800 |
+| self-starting IIFE without measured images (`lazy-ease.prepared.min.js`) | 4000 | – | 4227 | 4000 |
 | CSS | 500 | 161 | 161 | 500 |
-| React Image | 8200 | 7929 | 7654 | 5000 |
+| React Image | 8200 | 7929 | 7960 | 5000 |
 
-Bytes after Brotli. Entries that measured over their original budget got the measured size rounded up to the next 100 B as their approved 0.3 budget; the others keep their original budget. The goals are the original targets, for the size pass that follows the 0.3 release. Making AVIF detection opt-in and moving measured mode into its own module made the default bundles smaller and the self-starting IIFE, which keeps both, 86 B larger: its budget went from 6600 to 6700. The prepared entries were new then and got their measured size rounded up to the next 100 B. After 0.3.1 the controller's `reveal` hook (the ResizeObserver for the box edge and the keyframes call; `focusReveal` itself tree-shakes) and the placeholder fade-out that lets transparent images crossfade took attach to 5461 B, enhance to 6067 B, the self-starting IIFE to 6713 B and React Image to 8088 B, so these budgets were raised (approved 2026-11-21): attach 5500, enhance 6100, IIFE 6800, React Image 8100. The explicit transparency flag for placeholders (`Placeholder.transparent`, the `transparent` attach option), the guarded reveal (a reveal that throws falls back to the plain fade) and the reveal switch in React (called through the latest render) then took attach to 5504 B, enhance to 6107 B and React Image to 8135 B, so these were raised again (approved 2026-11-21): attach 5600, enhance 6200, React Image 8200; the IIFE stays at 6800. Measured on the merged branch, with the prepared controller and opt-in AVIF detection, all entries are within these budgets.
+Bytes after Brotli. Entries that measured over their original budget got the measured size rounded up to the next 100 B as their approved 0.3 budget; the others keep their original budget. The goals are the original targets, for the size pass that follows the 0.3 release. Making AVIF detection opt-in and moving measured mode into its own module made the default bundles smaller and the self-starting IIFE, which keeps both, 86 B larger: its budget went from 6600 to 6700. The prepared entries were new then and got their measured size rounded up to the next 100 B. After 0.3.1 the controller's `reveal` hook (the ResizeObserver for the box edge and the keyframes call; `focusReveal` itself tree-shakes) and the placeholder fade-out that lets transparent images crossfade took attach to 5461 B, enhance to 6067 B, the self-starting IIFE to 6713 B and React Image to 8088 B, so these budgets were raised (approved 2026-11-21): attach 5500, enhance 6100, IIFE 6800, React Image 8100. The explicit transparency flag for placeholders (`Placeholder.transparent`, the `transparent` attach option), the guarded reveal (a reveal that throws falls back to the plain fade) and the reveal switch in React (called through the latest render) then took attach to 5504 B, enhance to 6107 B and React Image to 8135 B, so these were raised again (approved 2026-11-21): attach 5600, enhance 6200, React Image 8200; the IIFE stays at 6800. Measured on the merged branch, with the prepared controller, opt-in AVIF detection, the reveal, the guards for callbacks that start the next generation and for failing format detectors, and the clipped `focusReveal`, the self-starting IIFE (6904 B) and the three prepared entries (3406, 3996 and 4227 B) are over these budgets; the others are within them.
 
 ## Loading and markup
 

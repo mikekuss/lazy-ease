@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLazyEase, createLoader, detectAvif, focusReveal, whenVisible, type AttachOptions, type Attachment, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
+import { createLazyEase, createLoader, detectAvif, focusReveal, whenVisible, type AttachOptions, type Attachment, type ImageFormat, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
 import { createLazyEase as createPrepared } from '../src/prepared.js'
 import { resetFormatDetection } from '../src/dom/format.js'
 import { thumbhashDecoder } from '../src/thumbhash.js'
@@ -812,9 +812,9 @@ describe('focus reveal', () => {
     expect(animations).toMatchObject([
       {
         keyframes: [
-          { opacity: 0, filter: 'blur(25.6px)', easing: 'ease-out' },
+          { opacity: 0, filter: 'blur(25.6px)', clipPath: 'inset(0)', easing: 'ease-out' },
           { opacity: 1, offset: 0.45 },
-          { opacity: 1, filter: 'blur(0px)' },
+          { opacity: 1, filter: 'blur(0px)', clipPath: 'inset(0)' },
         ],
         duration: 400,
         cancelled: false,
@@ -928,6 +928,69 @@ describe('focus reveal', () => {
     expect(MockResizeObserver.instances.some((o) => o.elements.has(box))).toBe(true)
     handle.destroy()
     expect(MockResizeObserver.instances.some((o) => o.elements.has(box))).toBe(false)
+  })
+})
+
+describe('callbacks that start the next generation', () => {
+  const next: AttachOptions = { url: '/b.webp', loading: 'eager', placeholder: 'red' }
+
+  /** B is still loading long after A's fade would have ended: it keeps its placeholder and stays hidden. */
+  async function expectPending(img: HTMLImageElement, box: HTMLElement, handle: Attachment) {
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    vi.advanceTimersByTime(1000)
+    expect(box.style.backgroundColor).toBe('red')
+    expect(img.style.opacity).toBe('0')
+    expect(handle.state).toBe('loading')
+  }
+
+  it('leaves the next placeholder alone when a reveal updates the image', async () => {
+    const { img, box, attach } = setup()
+    const animations = mockAnimate(img)
+    const handle: Attachment = attach({
+      url: '/a.webp',
+      loading: 'eager',
+      reveal: (edge) => (handle.update(next), focusReveal(edge)),
+    })
+    await loadAndDecode(img)
+    expect(animations).toEqual([])
+    await expectPending(img, box, handle)
+  })
+
+  it('leaves the next placeholder alone when onStateChange updates the image on display or error', async () => {
+    for (const settle of [loadAndDecode, async (img: HTMLImageElement) => fail(img)]) {
+      let handle: Attachment | undefined
+      let once = true
+      const { img, box, attach } = setup({
+        onStateChange: (state) => {
+          if ((state === 'loaded' || state === 'error') && once) {
+            once = false
+            handle!.update(next)
+          }
+        },
+      })
+      const animations = mockAnimate(img)
+      handle = attach({ url: '/a.webp', loading: 'eager' })
+      await settle(img)
+      expect(animations).toEqual([])
+      await expectPending(img, box, handle)
+    }
+  })
+
+  it('writes nothing when onStateChange updates the image as it starts loading', () => {
+    let handle: Attachment | undefined
+    let once = true
+    const { img, box, attach } = setup({
+      onStateChange: (state) => {
+        if (state === 'loading' && once) {
+          once = false
+          handle!.update(next)
+        }
+      },
+    })
+    handle = attach({ url: '/a.webp' })
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    expect(box.style.backgroundColor).toBe('red')
   })
 })
 
@@ -1341,8 +1404,13 @@ describe('formats', () => {
     resize(other.box, 100, 100)
     expect(other.img.getAttribute('src')).toContain('fmt=jpeg')
     expect(probe.created).toBe(0)
+    // A loader that declares only AVIF gets AVIF, and no warning.
+    const single = boxed()
+    createLazyEase({ loader: createLoader({ formats: ['avif'] }) }).attach(single.img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(single.box, 100, 100)
+    expect(single.img.getAttribute('src')).toContain('fmt=avif')
     expect(warn).toHaveBeenCalledOnce()
-    expect(warn.mock.calls[0]![0]).toMatch(/detectAvif/)
+    expect(warn.mock.calls[0]![0]).toMatch(/request webp\. Pass detectFormat: detectAvif/)
   })
 
   it('probes once on first need and takes the best declared format', async () => {
@@ -1389,6 +1457,39 @@ describe('formats', () => {
     resize(other.box, 100, 100)
     expect(other.img.getAttribute('src')).toContain('fmt=jpeg')
     expect(probe.created).toBe(1)
+  })
+})
+
+describe('format detectors that fail', () => {
+  const broken = [
+    () => {
+      throw new Error('broken detector')
+    },
+    () => Promise.reject(new Error('broken detector')),
+  ]
+
+  it('reports the error and takes the format no detector would', async () => {
+    for (const detectFormat of broken) {
+      const { img, box } = boxed()
+      createLazyEase({ loader: createLoader(), detectFormat }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+      await expect(flush()).rejects.toThrow('broken detector')
+      resize(box, 100, 100)
+      expect(img.getAttribute('src')).toContain('fmt=webp')
+    }
+  })
+
+  it('installs nothing for a generation that ended before the detector rejected', async () => {
+    let reject: (error: Error) => void = () => {}
+    let calls = 0
+    const detectFormat = (): ImageFormat | Promise<ImageFormat> => (calls++ ? 'jpeg' : new Promise((_, no) => (reject = no)))
+    const { img, box } = boxed()
+    const handle = createLazyEase({ loader: createLoader(), detectFormat }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    handle.update({ src: '/b.jpg', aspectRatio: 1, loading: 'eager' })
+    reject(new Error('broken detector'))
+    await expect(flush()).rejects.toThrow('broken detector')
+    resize(box, 100, 100)
+    expect(img.getAttribute('src')).toContain('/b.jpg')
+    expect(img.getAttribute('src')).toContain('fmt=jpeg')
   })
 })
 

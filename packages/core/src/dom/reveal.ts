@@ -10,11 +10,15 @@ export type Reveal = (edge: number) => Keyframe[]
  * Brings the image in as blurred as a ThumbHash placeholder from
  * `thumbhashDecoder()` (8 % of the longer edge, 24 px without a size),
  * opaque at 45 % of the fade while the two blurs still match, and sharpens
- * it until the end, so the placeholder seems to come into focus. A separate
- * export, so bundles without it don't carry it.
+ * it until the end, so the placeholder seems to come into focus. The blur
+ * stays inside the image's box (`clip-path` clips filter output), whether or
+ * not the wrapper clips. A separate export, so bundles without it don't
+ * carry it.
  */
+const clipPath = 'inset(0)'
+
 export const focusReveal: Reveal = (edge) => [
-  { opacity: 0, filter: `blur(${edge ? Math.round(edge * 0.8) / 10 : 24}px)`, easing: 'ease-out' },
+  { opacity: 0, filter: `blur(${edge ? Math.round(edge * 0.8) / 10 : 24}px)`, clipPath, easing: 'ease-out' },
   { opacity: 1, offset: 0.45 },
-  { opacity: 1, filter: 'blur(0px)' },
+  { opacity: 1, filter: 'blur(0px)', clipPath },
 ]
