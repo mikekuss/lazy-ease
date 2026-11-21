@@ -349,7 +349,13 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
             shown = true
             if (fades) unwatch()
             good = snapshot()
-            report('loaded')
+            try {
+              report('loaded')
+            } catch (error) {
+              // A callback that throws shows the image at once, without onDisplay; its error goes on.
+              if (live) release()
+              throw error
+            }
             // A callback above or below can update() or destroy(): then the element belongs to the next generation,
             // and this generation's onDisplay doesn't run.
             if (!live) return
@@ -392,13 +398,11 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
             o.onDisplay?.(img, event)
           }
           const fail = () => {
+            // The alt text or the browser's broken-image presentation, in the reserved area. As at the display,
+            // the box edge is no longer watched. Before the report, so a callback that throws changes neither.
+            if (fades) unwatch()
+            release()
             report('error')
-            // The alt text or the browser's broken-image presentation, in the reserved area.
-            // As at the display, the box edge is no longer watched.
-            if (live) {
-              if (fades) unwatch()
-              release()
-            }
           }
 
           on('load', (event) => {
@@ -441,16 +445,21 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
               hidden = true
             }
             assigned = true
-            // An upgrade keeps the loaded state; the displayed image stays.
-            if (!shown) report('loading')
-            if (!live) return
-            for (const source of deferredSources()) {
-              if (!activated.has(source)) activated.set(source, snapshot(source))
-              const deferred = source.getAttribute('data-le-sizes')
-              if (deferred !== null) source.setAttribute('sizes', deferred)
-              source.setAttribute('srcset', source.getAttribute('data-le-srcset')!)
+            // An upgrade keeps the loaded state; the displayed image stays. A callback that throws doesn't
+            // keep the hidden image from loading.
+            try {
+              if (!shown) report('loading')
+            } finally {
+              if (live) {
+                for (const source of deferredSources()) {
+                  if (!activated.has(source)) activated.set(source, snapshot(source))
+                  const deferred = source.getAttribute('data-le-sizes')
+                  if (deferred !== null) source.setAttribute('sizes', deferred)
+                  source.setAttribute('srcset', source.getAttribute('data-le-srcset')!)
+                }
+                restore(values)
+              }
             }
-            restore(values)
           }
 
           const activate = () => {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createLazyEase, createLoader, detectAvif, focusReveal, whenVisible, type AttachOptions, type Attachment, type ImageFormat, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
 import { createLazyEase as createPrepared } from '../src/prepared.js'
 import { resetFormatDetection } from '../src/dom/format.js'
@@ -1074,6 +1074,114 @@ describe('callbacks that start the next generation', () => {
   })
 })
 
+// The real setTimeout, from before the fake timers: Node reports an unhandled rejection only after a macrotask.
+const macrotask = setTimeout.bind(globalThis)
+interface Rejections {
+  listeners(event: string): ((...args: unknown[]) => void)[]
+  removeAllListeners(event: string): void
+  on(event: string, listener: (...args: unknown[]) => void): void
+}
+
+/** Collects what a callback throws outside a call of the test: from an event listener (jsdom reports it) or a promise. */
+function uncaught() {
+  const errors: unknown[] = []
+  const node = (globalThis as unknown as { process: Rejections }).process
+  const saved = node.listeners('unhandledRejection')
+  node.removeAllListeners('unhandledRejection')
+  node.on('unhandledRejection', (reason) => errors.push(reason))
+  const onError = (event: ErrorEvent) => {
+    errors.push(event.error)
+    event.preventDefault()
+  }
+  window.addEventListener('error', onError)
+  return {
+    errors,
+    /** Lets Node report the rejections so far. */
+    settle: () => new Promise((resolve) => macrotask(resolve, 0)),
+    restore() {
+      window.removeEventListener('error', onError)
+      node.removeAllListeners('unhandledRejection')
+      for (const listener of saved) node.on('unhandledRejection', listener)
+    },
+  }
+}
+
+describe('an onStateChange that throws', () => {
+  const watched = (box: HTMLElement) => MockResizeObserver.instances.some((observer) => observer.elements.has(box))
+  const rows: { state: LoadState; options: AttachOptions; drive: (img: HTMLImageElement, box: HTMLElement) => unknown; check: (img: HTMLImageElement, box: HTMLElement, displays: unknown[]) => unknown }[] = [
+    {
+      // The hidden image still gets its target and shows when it loads.
+      state: 'loading',
+      options: { url: '/a.webp' },
+      drive: (_, box) => intersect(box),
+      check: async (img, box, displays) => {
+        expect(img.getAttribute('src')).toBe('/a.webp')
+        expect(img.style.opacity).toBe('0')
+        expect(box.getAttribute('data-state')).toBe('loading')
+        await loadAndDecode(img)
+        expect(img.style.opacity).toBe('1')
+        expect(displays).toHaveLength(1)
+        vi.advanceTimersByTime(1000)
+        expect(box.style.backgroundColor).toBe('')
+      },
+    },
+    {
+      // Shown at once, without onDisplay.
+      state: 'loaded',
+      options: { url: '/a.webp', loading: 'eager' },
+      drive: (img) => loadAndDecode(img),
+      check: (img, box, displays) => {
+        expect(img.style.opacity).toBe('')
+        expect(box.style.backgroundColor).toBe('')
+        expect(box.getAttribute('data-state')).toBe('loaded')
+        expect(displays).toHaveLength(0)
+      },
+    },
+    {
+      // The alt text in the reserved area, as without the throw.
+      state: 'error',
+      options: { url: 'data:image/png;base64,AA==', loading: 'eager' },
+      drive: (img) => fail(img),
+      check: (img, box) => {
+        expect(img.style.opacity).toBe('')
+        expect(box.style.backgroundColor).toBe('')
+        expect(box.getAttribute('data-state')).toBe('error')
+      },
+    },
+  ]
+  for (const [name, create] of [['full', createLazyEase], ['prepared', createPrepared]] as const)
+    for (const row of rows)
+      it(`${name}: leaves the image consistent when it throws on ${row.state}, and its error goes on`, async () => {
+        const { img, box } = boxed()
+        mockAnimate(img)
+        const displays: unknown[] = []
+        const caught = uncaught()
+        try {
+          const le = create({
+            reveal: focusReveal,
+            onStateChange: (state) => {
+              if (state === row.state) throw new Error(`broken ${state}`)
+            },
+          })
+          le.attach(img, { ...row.options, onDisplay: (_, event) => displays.push(event) })
+          resize(box, 180, 120)
+          try {
+            await row.drive(img, box)
+          } catch (error) {
+            caught.errors.push(error)
+          }
+          await vi.advanceTimersByTimeAsync(0)
+          await caught.settle()
+          expect(caught.errors).toContainEqual(new Error(`broken ${row.state}`))
+          await row.check(img, box, displays)
+          // The reveal's edge is watched until the first display or error only.
+          expect(watched(box)).toBe(false)
+        } finally {
+          caught.restore()
+        }
+      })
+})
+
 describe('a callback of a generation leaves its successor alone', () => {
   // An update starts generation B with the options of a row. Once, a callback of B starts the successor N: it
   // updates the image, destroys it and attaches it again, or updates it and throws. Afterwards only N has written.
@@ -1084,7 +1192,7 @@ describe('a callback of a generation leaves its successor alone', () => {
     hook: string
     /** Needs measured mode. */
     measured?: boolean
-    /** The callback runs inside a call of the test, or its error is caught and reported from a timer, so it may throw. */
+    /** The callback may throw: its error reaches the test, a listener's or a promise's as uncaught. */
     throws?: boolean
     skip?: (typeof actions)[number]
     /** Generation A, before B. Its state must differ from B's first, or B reports nothing. Default: deferred. */
@@ -1121,11 +1229,11 @@ describe('a callback of a generation leaves its successor alone', () => {
     { hook: 'onStateChange idle', throws: true, a: { url: '/z.webp', loading: 'eager' }, config: on('idle'), options: b() },
     { hook: 'onStateChange loading at start', throws: true, config: on('loading'), options: eager },
     { hook: 'onStateChange loading when visible', throws: true, config: on('loading'), options: b(), drive: (_, box) => intersect(box) },
-    { hook: 'onStateChange loaded', config: on('loaded'), options: eager, drive: settle },
-    { hook: 'onStateChange error', config: on('error'), options: eager, drive: fail },
+    { hook: 'onStateChange loaded', throws: true, config: on('loaded'), options: eager, drive: settle },
+    { hook: 'onStateChange error', throws: true, config: on('error'), options: eager, drive: fail },
     { hook: 'onStateChange loaded at adoption', throws: true, config: on('loaded'), options: native, before: adopt(100) },
     { hook: 'onStateChange error at adoption', throws: true, config: on('error'), options: native, before: adopt(0) },
-    { hook: 'onDisplay', options: (fire) => ({ ...eager(), onDisplay: fire }), drive: settle },
+    { hook: 'onDisplay', throws: true, options: (fire) => ({ ...eager(), onDisplay: fire }), drive: settle },
     { hook: 'onDisplay at adoption', throws: true, options: (fire) => ({ ...native(), onDisplay: fire }), before: adopt(100) },
     // B started a reveal and the fade-out of its transparent placeholder: both end with it.
     {
@@ -1159,6 +1267,7 @@ describe('a callback of a generation leaves its successor alone', () => {
     },
     {
       hook: 'onStateChange loaded of a picture',
+      throws: true,
       markup: `<span data-le><picture><source media="(min-width:800px)" data-le-srcset="/wide.webp 1440w"><img alt="" src="${INERT}"></picture></span>`,
       config: on('loaded'),
       options: eager,
@@ -1242,7 +1351,9 @@ describe('a callback of a generation leaves its successor alone', () => {
           if (row.markup) fakeImage(img)
           mockAnimate(img)
           const out = mockAnimate(box)
-          const errors: unknown[] = []
+          const caught = uncaught()
+          onTestFinished(caught.restore)
+          const errors = caught.errors
           const step = async (callback: () => unknown) => {
             try {
               await callback()
@@ -1272,6 +1383,7 @@ describe('a callback of a generation leaves its successor alone', () => {
           await step(() => current!.update(row.options(fire)))
           await step(() => row.drive?.(img, box))
           await step(() => vi.advanceTimersByTimeAsync(1000))
+          await caught.settle()
           expect(armed).toBe(false)
           if (action === 'update and throw') expect(errors).toContainEqual(new Error('boom'))
           expect(img.getAttribute('src')).toBe('/n.webp')
