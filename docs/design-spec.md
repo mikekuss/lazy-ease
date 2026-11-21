@@ -10,16 +10,19 @@ ESM imports must perform no detection, DOM access, observer setup or ladder comp
 
 Measure each public import plus required core code with a pinned minifying bundler, production defines, external React peers and Brotli quality 11: esbuild 0.28.2, ES2022 ESM. The measurement fixtures are in `scripts/sizes`; `pnpm check:sizes` measures them after `pnpm build` and fails over budget or with another esbuild version (`--details` lists each entry's largest inputs, `--packed` measures the tarballs `pnpm check:packages` packed, `--json <file>` writes the results).
 
-| Entry | Approved 0.3 budget | Measured for 0.3 | Goal after 0.3 |
-| --- | --- | --- | --- |
-| createLoader | 1000 | 833 | 1000 |
-| attach with controller creation | 5400 | 5349 | 3500 |
-| enhance with controller | 6000 | 5960 | 4000 |
-| self-starting IIFE | 6600 | 6589 | 4500 |
-| CSS | 500 | 161 | 500 |
-| React Image | 7950 | 7929 | 5000 |
+| Entry | Approved budget | Measured for 0.3 | Measured with opt-in AVIF detection and the prepared controller | Goal after 0.3 |
+| --- | --- | --- | --- | --- |
+| createLoader | 1000 | 833 | 828 | 1000 |
+| attach with controller creation | 5400 | 5349 | 5057 | 3500 |
+| enhance with controller | 6000 | 5960 | 5628 | 4000 |
+| self-starting IIFE | 6700 | 6589 | 6686 | 4500 |
+| attach with the prepared controller (`@lazy-ease/core/prepared`) | 3200 | – | 3150 | 3200 |
+| enhance with the prepared controller | 3800 | – | 3773 | 3800 |
+| self-starting IIFE without measured images (`lazy-ease.prepared.min.js`) | 4000 | – | 3970 | 4000 |
+| CSS | 500 | 161 | 161 | 500 |
+| React Image | 7950 | 7929 | 7654 | 5000 |
 
-Bytes after Brotli. Entries that measured over their original budget got the measured size rounded up to the next 100 B as their approved 0.3 budget; the others keep their original budget. The goals are the original targets, for the size pass that follows the 0.3 release.
+Bytes after Brotli. Entries that measured over their original budget got the measured size rounded up to the next 100 B as their approved 0.3 budget; the others keep their original budget. The goals are the original targets, for the size pass that follows the 0.3 release. Making AVIF detection opt-in and moving measured mode into its own module made the default bundles smaller and the self-starting IIFE, which keeps both, 86 B larger: its budget went from 6600 to 6700. The prepared entries were new then and got their measured size rounded up to the next 100 B.
 
 ## Loading and markup
 
