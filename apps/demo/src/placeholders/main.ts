@@ -213,6 +213,17 @@ async function gridPngSvg(a: Analysis, long: number, blur: number, digits: numbe
 /** The decoded ThumbHash style lazy-ease paints when the image activates. */
 const thumbhashStyle = (a: Analysis, blur: number) => thumbhashDecoder(thumbhash, { blur })(btoa(String.fromCharCode(...a.hash)))!.lazy!()
 
+/** What 0.3.1 painted when the image activated: the raw ThumbHash PNG over its average color. */
+function before031(a: Analysis) {
+  const { r, g, b, a: alpha } = thumbhash.thumbHashToAverageRGBA(a.hash)
+  const rgb = [r, g, b].map((value) => Math.round(Math.max(0, Math.min(1, value)) * 255))
+  return {
+    backgroundColor: alpha >= 1 ? `rgb(${rgb.join(', ')})` : `rgba(${rgb.join(', ')}, ${+alpha.toFixed(3)})`,
+    backgroundImage: cssUrl(thumbhash.thumbHashToDataURL(a.hash)),
+    backgroundSize: 'cover',
+  }
+}
+
 // Only `#` and `%` must be escaped; browsers take raw `<` and `>` in a data URI.
 const svgUrl = (svg: string) => `data:image/svg+xml,${svg.replace(/[#%]/g, encodeURIComponent)}`
 const cssUrl = (uri: string) => `url("${uri}")`
@@ -325,7 +336,7 @@ function hero(row: Row, blur: number) {
   split.style.aspectRatio = `${a.width} / ${a.height}`
   const before = document.createElement('div')
   const after = document.createElement('div')
-  Object.assign(before.style, thumbhashStyle(a, 0))
+  Object.assign(before.style, before031(a))
   Object.assign(after.style, thumbhashStyle(a, blur))
   after.className = 'after'
   const handle = document.createElement('input')
@@ -351,8 +362,8 @@ async function render(row: Row) {
   const tiles: HTMLElement[] = [tile(row, 'Original', {}, `${a.width}×${a.height}`, true)]
 
   const hashText = `thumbhash:${btoa(String.fromCharCode(...a.hash))}`
-  const raw = thumbhashStyle(a, 0)
-  tiles.push(tile(row, 'A · before: ThumbHash PNG', raw, `hash ${bytes(hashText.length)} · PNG ${bytes(raw.backgroundImage!.length)}`))
+  const raw = before031(a)
+  tiles.push(tile(row, 'A · before (0.3.1): ThumbHash PNG', raw, `hash ${bytes(hashText.length)} · PNG ${bytes(raw.backgroundImage!.length)}`))
 
   const smooth = thumbhashStyle(a, blur)
   tiles.push(tile(row, 'B · now: ThumbHash, SVG blur', smooth, `hash ${bytes(hashText.length)} · SVG ${bytes(smooth.backgroundImage!.length)}`))
