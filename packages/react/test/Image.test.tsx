@@ -428,6 +428,26 @@ describe('native images', () => {
     load(img())
     expect(onLoad).toHaveBeenCalledTimes(2)
   })
+
+  // A new revision keeps the attachment of a native image, which keeps calling the hooks.
+  const picture = { sources: [{ media: '(min-width: 800px)', src: '/b.jpg' }] }
+  const revisions: [string, Partial<ImageProps>, Partial<ImageProps>][] = [
+    ['version', {}, { version: 'r2' }],
+    ['token', {}, { token: 't2' }],
+    ['version under breakpoint sources', picture, { version: 'r2' }],
+  ]
+  for (const base of [{ priority: true }, { loading: 'native' as const }]) {
+    it.each(revisions)(`reports the state after a new %s before the load (${JSON.stringify(base)})`, (_, initial, change) => {
+      for (const settle of [load, fail]) {
+        const states: LoadState[] = []
+        const { img, rerender, unmount } = mount({ width: 320, height: 240, ...base, ...initial, version: 'r1', token: 't1', onStateChange: (state) => states.push(state) })
+        rerender(change)
+        settle(img())
+        expect(states).toContain(settle === load ? 'loaded' : 'error')
+        unmount()
+      }
+    })
+  }
 })
 
 describe('lifecycle', () => {

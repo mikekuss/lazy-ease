@@ -285,7 +285,7 @@ function ImageBox({
     loader,
     decoder,
     reveal,
-    // The identity of the committed render, whose hooks these are.
+    // The attachment the committed render asks for, whose hooks these are.
     id: '',
     event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
     // The currentSrc the stored load event was for.
@@ -305,9 +305,9 @@ function ImageBox({
   if (kept.shown && (native || kept.shown === identity)) paint = kept.paint
   // The controller calls the hooks of the committed render, and a render renders the
   // placeholder it committed: a render React discards or holds back changes neither.
-  // An attachment of an older source still alive after the commit reaches none of its hooks.
+  // An older attachment still alive after the commit reaches none of its hooks.
   useLayoutEffect(() => {
-    Object.assign(kept, { id: identity, onLoad, onStateChange, loader, decoder, reveal: revealer, paint })
+    Object.assign(kept, { id: signature, onLoad, onStateChange, loader, decoder, reveal: revealer, paint })
   })
   // Boxed, the img fills the box (one grid cell with a fallback); bare, it is the slot and carries the placeholder.
   const imgStyle: CSSProperties = {
@@ -364,7 +364,8 @@ function ImageBox({
   const probe = measured ? loader.url({ src, width: widths[0]!, quality: qualities[0]!, format: formats === 'auto' ? formats : formats[0]! }) : ''
   // A reveal is a function, so only whether there is one counts: it is called through `latest`,
   // so another one takes effect at the next display without a re-attach.
-  const signature = JSON.stringify([options, pictureSources, config.domains, widths, ratios, qualities, formats, probe, !!decoder, !!options.reveal])
+  // A new box (`boxed`) renders a new img, which needs its own attachment.
+  const signature = JSON.stringify([options, pictureSources, config.domains, widths, ratios, qualities, formats, probe, !!decoder, !!options.reveal, boxed])
 
   useEffect(() => {
     const img = self.current!
@@ -390,12 +391,12 @@ function ImageBox({
       loader: { widths, ratios, qualities, formats, url: (params) => state.loader.url(params) },
       root: config.root,
       onStateChange(next) {
-        if (state.id !== identity || state.state === next) return
+        if (state.id !== signature || state.state === next) return
         state.state = next
         state.onStateChange?.(next, img)
       },
       onDisplay(_, event) {
-        if (state.id !== identity) return
+        if (state.id !== signature) return
         // A native image calls onLoad from its React handler.
         if (state.shown === identity || native) {
           if (!event) state.shown = identity
@@ -420,9 +421,8 @@ function ImageBox({
       state.hidden = img.style.opacity === '0' && attachment.state === 'loading'
       attachment.destroy()
     }
-    // `options` is covered by its signature, which leaves out the root and the format
-    // detector. A new box (`boxed`) renders a new img, which needs its own attachment.
-  }, [signature, config.root, config.detectFormat, boxed])
+    // `options` is covered by its signature, which leaves out the root and the format detector.
+  }, [signature, config.root, config.detectFormat])
 
   // Mount-time development checks.
   useEffect(() => {
