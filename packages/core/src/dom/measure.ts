@@ -3,7 +3,7 @@ import { normalizeLoader, snapQuality, type ImageFormat } from '../loader.js'
 import { snapRatio } from '../ratios.js'
 import { focusStyles, type StyleRecord } from '../styles.js'
 import { measuredCandidates, snapWidth } from '../widths.js'
-import { createController, type LazyEase, type LazyEaseConfig, type Measure, type Timer } from './controller.js'
+import { createController, guard, type LazyEase, type LazyEaseConfig, type Measure, type Timer } from './controller.js'
 import { pickFormat } from './format.js'
 import { observeResize } from './observe.js'
 
@@ -51,8 +51,7 @@ const measure: Measure = (src, o, mode, focus, img, box, surface, live, later, c
       widths: candidates(slot),
       srcWidth,
       srcHeight,
-      // A call that ends the generation stops the calls for the other candidates.
-      loader: { url: (request) => (live() ? loader.url(request) : '') },
+      loader,
       src,
       aspectRatio: ratio,
       focalPoint: ratio ? focus : undefined,
@@ -95,7 +94,7 @@ const measure: Measure = (src, o, mode, focus, img, box, surface, live, later, c
   } catch {}
   // A detector that throws or rejects is reported, and the image takes what no detector would.
   const fallback = (error: unknown) => {
-    setTimeout(() => {
+    guard(() => {
       throw error
     })
     start(pickFormat(formats as ImageFormat[]))

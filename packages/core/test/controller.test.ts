@@ -1107,10 +1107,24 @@ function uncaught() {
 }
 
 describe('an onStateChange that throws', () => {
+  // The error is reported from a timer, as a listener's is, and the image goes on as without it.
   const watched = (box: HTMLElement) => MockResizeObserver.instances.some((observer) => observer.elements.has(box))
   const rows: { state: LoadState; options: AttachOptions; drive: (img: HTMLImageElement, box: HTMLElement) => unknown; check: (img: HTMLImageElement, box: HTMLElement, displays: unknown[]) => unknown }[] = [
     {
-      // The hidden image still gets its target and shows when it loads.
+      // As the generation starts, inside attach(): it neither throws nor gives the element back.
+      state: 'idle',
+      options: { url: '/a.webp' },
+      drive: () => {},
+      check: async (img, box, displays) => {
+        expect(box.getAttribute('data-state')).toBe('idle')
+        intersect(box)
+        await loadAndDecode(img)
+        expect(box.getAttribute('data-state')).toBe('loaded')
+        expect(displays).toHaveLength(1)
+      },
+    },
+    {
+      // The hidden image gets its target and fades in when it loads.
       state: 'loading',
       options: { url: '/a.webp' },
       drive: (_, box) => intersect(box),
@@ -1126,19 +1140,23 @@ describe('an onStateChange that throws', () => {
       },
     },
     {
-      // Shown at once, without onDisplay.
+      // The fade and onDisplay, as without the throw.
       state: 'loaded',
       options: { url: '/a.webp', loading: 'eager' },
       drive: (img) => loadAndDecode(img),
       check: (img, box, displays) => {
+        expect(img.style.opacity).toBe('1')
+        expect(img.style.transition).toBe('opacity 400ms ease-out')
+        expect(box.style.backgroundColor).toBe(PLACEHOLDER)
+        expect(box.getAttribute('data-state')).toBe('loaded')
+        expect(displays).toHaveLength(1)
+        vi.advanceTimersByTime(1000)
         expect(img.style.opacity).toBe('')
         expect(box.style.backgroundColor).toBe('')
-        expect(box.getAttribute('data-state')).toBe('loaded')
-        expect(displays).toHaveLength(0)
       },
     },
     {
-      // The alt text in the reserved area, as without the throw.
+      // The alt text in the reserved area.
       state: 'error',
       options: { url: 'data:image/png;base64,AA==', loading: 'eager' },
       drive: (img) => fail(img),
@@ -1151,35 +1169,44 @@ describe('an onStateChange that throws', () => {
   ]
   for (const [name, create] of [['full', createLazyEase], ['prepared', createPrepared]] as const)
     for (const row of rows)
-      it(`${name}: leaves the image consistent when it throws on ${row.state}, and its error goes on`, async () => {
+      it(`${name}: reports the error from a timer when it throws on ${row.state}, and the image goes on`, async () => {
         const { img, box } = boxed()
         mockAnimate(img)
         const displays: unknown[] = []
-        const caught = uncaught()
-        try {
-          const le = create({
-            reveal: focusReveal,
-            onStateChange: (state) => {
-              if (state === row.state) throw new Error(`broken ${state}`)
-            },
-          })
-          le.attach(img, { ...row.options, onDisplay: (_, event) => displays.push(event) })
-          resize(box, 180, 120)
+        const le = create({
+          reveal: focusReveal,
+          onStateChange: (state) => {
+            if (state === row.state) throw new Error(`broken ${state}`)
+          },
+        })
+        // Nothing reaches the caller of attach().
+        le.attach(img, { ...row.options, onDisplay: (_, event) => displays.push(event) })
+        resize(box, 180, 120)
+        // The timer's error surfaces where the test advances the fake timers.
+        const reported: unknown[] = []
+        for (const step of [() => row.drive(img, box), () => vi.advanceTimersByTimeAsync(0)])
           try {
-            await row.drive(img, box)
+            await step()
           } catch (error) {
-            caught.errors.push(error)
+            reported.push(error)
           }
-          await vi.advanceTimersByTimeAsync(0)
-          await caught.settle()
-          expect(caught.errors).toContainEqual(new Error(`broken ${row.state}`))
-          await row.check(img, box, displays)
-          // The reveal's edge is watched until the first display or error only.
-          expect(watched(box)).toBe(false)
-        } finally {
-          caught.restore()
-        }
+        expect(reported).toEqual([new Error(`broken ${row.state}`)])
+        await row.check(img, box, displays)
+        // The reveal's edge is watched until the first display or error only.
+        if (row.state !== 'loading') expect(watched(box)).toBe(false)
       })
+
+  it('calls the callback without the options as this', () => {
+    const { img } = boxed()
+    let self: unknown = 'unset'
+    createLazyEase().attach(img, {
+      url: '/a.webp',
+      onStateChange() {
+        self = this
+      },
+    })
+    expect(self).toBeUndefined()
+  })
 })
 
 describe('a callback of a generation leaves its successor alone', () => {
@@ -1308,22 +1335,15 @@ describe('a callback of a generation leaves its successor alone', () => {
       options: () => ({ ...measured(), aspectRatio: 1, crop: 'browser' as const, srcWidth: 1000, srcHeight: 500, focalPoint: { x: 10, y: 10 } }),
       drive: (_, box) => resize(box, 300, 300),
     },
-    (() => {
-      // A ladder of three candidates: the first call ends B, so the loader is not asked for the other two.
-      let calls = 0
-      return {
-        hook: 'loader of a candidate list',
-        measured: true,
-        throws: true,
-        config: (fire: Fire) => {
-          calls = 0
-          return { loader: { ...ladder, url: ({ width }: ImageRequest) => (calls++, fire(), `/b-${width}.webp`) } }
-        },
-        options: () => ({ ...measured(), srcWidth: 1000, srcHeight: 500 }),
-        drive: (_: HTMLImageElement, box: HTMLElement) => resize(box, 300, 150),
-        after: () => expect(calls).toBe(1),
-      }
-    })(),
+    // A ladder of three candidates: the first call ends B, and the URLs of the other two go nowhere.
+    {
+      hook: 'loader of a candidate list',
+      measured: true,
+      throws: true,
+      config: (fire) => ({ loader: { ...ladder, url: ({ width }: ImageRequest) => (fire(), `/b-${width}.webp`) } }),
+      options: () => ({ ...measured(), srcWidth: 1000, srcHeight: 500 }),
+      drive: (_, box) => resize(box, 300, 150),
+    },
     { hook: 'detectFormat returns', measured: true, throws: true, config: (fire) => ({ loader: twoFormats, detectFormat: () => (fire(), 'webp') }), options: measured },
     { hook: 'detectFormat resolves', measured: true, throws: true, config: (fire) => ({ loader: twoFormats, detectFormat: async () => (fire(), 'webp' as const) }), options: measured },
     {
@@ -1398,7 +1418,7 @@ describe('a callback of a generation leaves its successor alone', () => {
         })
       }
 
-  it('stops asking the loader for candidates once a call ended the generation', () => {
+  it('keeps the last update of a loader that updates the image for every candidate', () => {
     const { box, img } = boxed()
     const asked: number[] = []
     let handle: Attachment | undefined
@@ -1412,8 +1432,9 @@ describe('a callback of a generation leaves its successor alone', () => {
     }
     handle = createLazyEase({ loader }).attach(img, { src: '/b.jpg', loading: 'eager', srcWidth: 1000, srcHeight: 500 })
     resize(box, 300, 150)
-    expect(asked).toEqual([100])
-    expect(img.getAttribute('src')).toBe('/n100.webp')
+    // The loader is a pure function to the controller: it is asked for the whole list, and the list is dropped.
+    expect(asked).toEqual([100, 200, 400])
+    expect(img.getAttribute('src')).toBe('/n400.webp')
     expect(img.hasAttribute('srcset')).toBe(false)
   })
 })

@@ -157,6 +157,20 @@ const styleOf = (element: HTMLElement) => element.style as unknown as Record<str
 const clearStyle = (element: HTMLElement, properties: readonly string[]) => {
   for (const property of properties) styleOf(element)[property] = ''
 }
+/**
+ * Calls into the page's code: a state or display callback, a reveal, a deferred ThumbHash decode.
+ * Its error is reported as an event listener's is, from a timer, and changes nothing here:
+ * the call returns undefined, and the image goes on as if the callback had done nothing.
+ */
+export const guard = <A extends unknown[], T>(callback: ((...args: A) => T) | undefined, ...args: A): T | undefined => {
+  try {
+    return callback?.(...args)
+  } catch (error) {
+    setTimeout(() => {
+      throw error
+    })
+  }
+}
 const isNative = (o: Options) => o.priority || o.loading === 'native'
 /** The logical source of deferred options and picture sources: what an image displayed under them shows. */
 const identity = (o: Options, sources: Iterable<Element>) =>
@@ -250,7 +264,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
         if (state === next) return
         state = next
         owner.setAttribute('data-state', next)
-        o.onStateChange?.(next, img)
+        guard(o.onStateChange, next, img)
       }
 
       const prior = owner.getAttribute('data-state')
@@ -262,8 +276,9 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
       }
       /**
        * One generation: everything that belongs to one logical source. Sets `stop` to its cleanup. If it throws,
-       * the element is released as it was, so a later attach can take it, unless a callback ended the generation
-       * before it threw: then the element belongs to the next one, and only the error goes on.
+       * the element is released as it was, so a later attach can take it, unless the ThumbHash decoder ended the
+       * generation before it threw: then the element belongs to the next one, and only the error goes on. The
+       * callbacks called through `guard` never throw into it.
        */
       const run = () => {
         const before = [img, ...deferredSources()].map((element) => [element, snapshot(element)] as const)
@@ -349,13 +364,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
             shown = true
             if (fades) unwatch()
             good = snapshot()
-            try {
-              report('loaded')
-            } catch (error) {
-              // A callback that throws shows the image at once, without onDisplay; its error goes on.
-              if (live) release()
-              throw error
-            }
+            report('loaded')
             // A callback above or below can update() or destroy(): then the element belongs to the next generation,
             // and this generation's onDisplay doesn't run.
             if (!live) return
@@ -365,16 +374,10 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
               // so the animation's keyframes give the fade its start. Where it runs, the transition shows the same fade.
               // Without Web Animations (jsdom) only the transition is left.
               if (fades && o.reveal) {
-                try {
-                  const keyframes = o.reveal(edge)
-                  if (live) revealed = fade = img.animate?.(keyframes, fadeMs)
-                } catch (error) {
-                  // A reveal that throws gets the plain fade, and its error is reported.
-                  setTimeout(() => {
-                    throw error
-                  })
-                }
+                // A reveal that throws gets the plain fade.
+                const keyframes = guard(o.reveal, edge)
                 if (!live) return
+                if (keyframes) revealed = fade = img.animate?.(keyframes, fadeMs)
               }
               if (!(fades && revealed)) fade = img.animate?.({ opacity: [0, 1], easing: 'ease-out' }, fadeMs)
               Object.assign(img.style, { transition: `opacity ${fadeMs}ms ease-out`, opacity: '1' })
@@ -395,11 +398,11 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
               }
               later(release, fadeMs)
             }
-            o.onDisplay?.(img, event)
+            guard(o.onDisplay, img, event)
           }
           const fail = () => {
             // The alt text or the browser's broken-image presentation, in the reserved area. As at the display,
-            // the box edge is no longer watched. Before the report, so a callback that throws changes neither.
+            // the box edge is no longer watched. Before the report, whose callback can end the generation.
             if (fades) unwatch()
             release()
             report('error')
@@ -445,29 +448,24 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
               hidden = true
             }
             assigned = true
-            // An upgrade keeps the loaded state; the displayed image stays. A callback that throws doesn't
-            // keep the hidden image from loading.
-            try {
-              if (!shown) report('loading')
-            } finally {
-              if (live) {
-                for (const source of deferredSources()) {
-                  if (!activated.has(source)) activated.set(source, snapshot(source))
-                  const deferred = source.getAttribute('data-le-sizes')
-                  if (deferred !== null) source.setAttribute('sizes', deferred)
-                  source.setAttribute('srcset', source.getAttribute('data-le-srcset')!)
-                }
-                restore(values)
-              }
+            // An upgrade keeps the loaded state; the displayed image stays.
+            if (!shown) report('loading')
+            if (!live) return
+            for (const source of deferredSources()) {
+              if (!activated.has(source)) activated.set(source, snapshot(source))
+              const deferred = source.getAttribute('data-le-sizes')
+              if (deferred !== null) source.setAttribute('sizes', deferred)
+              source.setAttribute('srcset', source.getAttribute('data-le-srcset')!)
             }
+            restore(values)
           }
 
           const activate = () => {
             if (placeholder?.lazy && !shown) {
-              const style = placeholder.lazy()
-              // The decoder can update() or destroy().
+              // The decoder can update() or destroy(); one that throws leaves the color.
+              const style = guard(placeholder.lazy)
               if (!live) return
-              paint(style)
+              if (style) paint(style)
             }
             if (o.src === undefined) install(o.srcset, o.sizes, o.url)
             else if (isDirect(o.src, o.domains)) install(undefined, undefined, o.src)

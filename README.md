@@ -105,7 +105,7 @@ export function App() {
 | `loader` | `ImageLoader` or function | provider | Per-image loader. Ignored on images that load directly, with a development warning. |
 | `sources` | `ImageSource[]` | | Art-direction sources in a `<picture>`, each with `media`, `src` and optional `aspectRatio`, `srcWidth`, `srcHeight`, `focalPoint`, `sizes`, `token` and `version`. |
 | `noScript` | `boolean` | `false` | Adds a native `<img>` in `<noscript>` for visitors without JavaScript. Deferred images only. |
-| `onStateChange` | `(state, img) => void` | | Every state change: `idle`, `loading`, `loaded` (once per source, also for an image that loaded before hydration) or `error`. |
+| `onStateChange` | `(state, img) => void` | | Every state change: `idle`, `loading`, `loaded` (once per source, also for an image that loaded before hydration) or `error`. An error it throws is reported as an uncaught error and changes nothing for the image. |
 | `onLoad` | | | The React event of the first real load of the displayed source, called once. An image adopted after hydration gets no event; use `onStateChange`. Resolution upgrades aren't reported. |
 | `ref` | | | Forwarded to the `<img>`. |
 | `className`, `style` | | | Applied to the `<img>`. |
