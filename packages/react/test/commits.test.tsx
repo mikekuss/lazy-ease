@@ -1,17 +1,19 @@
-// The callback contract in React, as a table: what the next update does × when the old source finishes.
+// The callback contract in React, as a table: the kind of image × what the next update does × when the old source finishes.
 //
-// An update gives the image a new `src` (a new img), a new `version` (a new attachment on the same img),
-// only new callbacks (the attachment stays), is a transition React holds back, or hides the image behind
-// a Suspense fallback and shows it again. The old source finishes loading before the update, in the
-// commit of the update (a sibling's layout effect lets its decode end), or the load comes after it.
+// The image is deferred (the controller loads it) or native (React renders its URLs). An update gives it a new
+// `src` (a new img), a new `version` (a new attachment on the same img), a new `token`, only new callbacks (the
+// attachment stays), is a transition React holds back, or hides the image behind a Suspense fallback and shows
+// it again. The old source finishes loading before the update, in the commit of the update (a sibling's layout
+// effect lets its decode end), or the load comes after it. Every render brings its own loader and ThumbHash decoder.
 //
-// Whatever the combination: a callback is called only while its render is the committed one, a source
-// gets at most one onLoad, one `loaded` and one reveal (no second fade), onLoad never sees a removed img, and in the
-// end the committed source is displayed, attached and reported once.
+// Whatever the combination: a callback is called only while its render is the committed one (a render may call
+// its own loader and decoder while React renders it), a source gets at most one onLoad, one `loaded` and one
+// reveal (no second fade), onLoad never sees a removed img, and in the end the committed source is displayed,
+// attached and reported once.
 import { StrictMode, Suspense, startTransition, use, useLayoutEffect, type ReactNode, type SyntheticEvent } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
-import { createLoader, focusReveal, type LoadState } from '@lazy-ease/core'
+import { createLoader, focusReveal, type ImageRequest, type LoadState, type ThumbHashDecoder } from '@lazy-ease/core'
 import * as core from '../../core/test/dom-mocks.js'
 import { LazyEaseProvider } from '../src/context.js'
 import { Image } from '../src/Image.js'
@@ -21,28 +23,41 @@ const CLAIM = Symbol.for('lazy-ease.attachment')
 const webp = createLoader({ formats: ['webp'] })
 const FADE = 40
 
-const changes = ['src', 'version', 'callbacks', 'held transition', 'hidden by Suspense'] as const
+const changes = ['src', 'version', 'token', 'callbacks', 'held transition', 'hidden by Suspense'] as const
+/** A deferred image the controller loads, or a native one whose URLs React renders into the img. */
+const kinds = ['deferred', 'native'] as const
 const timings = ['before the update', 'in its commit', 'after it'] as const
 type Change = (typeof changes)[number]
 type Timing = (typeof timings)[number]
+type Kind = (typeof kinds)[number]
 
 interface Call {
   /** The render whose callback this is. */
   tag: string
   /** The render on screen when it was called. */
   committed: string
-  hook: 'onLoad' | 'loaded' | 'reveal'
+  hook: 'onLoad' | 'loaded' | 'reveal' | 'loader' | 'decoder' | 'lazy'
   source: string
   connected: boolean
+  /** Called while React rendered the image, where a render that may never commit may call its own loader and decoder. */
+  rendering: boolean
 }
 
 interface View {
   tag: string
   src: string
   version: string
+  token: string
   hold?: Promise<unknown>
   /** Runs in a layout effect of this render's commit. */
   kick?: () => void
+}
+
+// Set right before the image renders and cleared right after, so a call in between is one of its render.
+let rendering = false
+function End() {
+  rendering = false
+  return null
 }
 
 function Gate({ hold }: { hold?: Promise<unknown> }) {
@@ -50,7 +65,7 @@ function Gate({ hold }: { hold?: Promise<unknown> }) {
   return null
 }
 
-async function scenario(change: Change, timing: Timing, strict: boolean) {
+async function scenario(kind: Kind, change: Change, timing: Timing, strict: boolean) {
   vi.useRealTimers()
   const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   const previous = env.IS_REACT_ACT_ENVIRONMENT
@@ -74,24 +89,41 @@ async function scenario(change: Change, timing: Timing, strict: boolean) {
   let committed = ''
   const img = () => container.querySelector('img')!
   const owner = () => img().closest<HTMLElement>('[data-le]')!
-  const source = (url: string) => /\/(\w)\.jpg.*v=(r\d)/.exec(url)?.slice(1).join(' ') ?? url
+  const source = (url: string) => /\/(\w)\.jpg.*token=(t\d).*v=(r\d)/.exec(url)?.slice(1).join(' ') ?? url
 
-  function Mark({ tag, kick }: { tag: string; kick?: () => void }) {
+  /** Right before the image: its layout effect runs before the image attaches, so the attachment sees its commit. */
+  function Begin({ tag }: { tag: string }) {
+    rendering = true
     useLayoutEffect(() => {
+      rendering = false
       committed = tag
-      kick?.()
     })
     return null
   }
-  const render = ({ tag, src, version, hold, kick }: View): ReactNode => {
-    const call = (hook: Call['hook'], element: HTMLImageElement) =>
-      calls.push({ tag, committed, hook, source: source(element.currentSrc), connected: element.isConnected })
+  function Mark({ kick }: { kick?: () => void }) {
+    useLayoutEffect(() => kick?.())
+    return null
+  }
+  const render = ({ tag, src, version, token, hold, kick }: View): ReactNode => {
+    const record = (hook: Call['hook'], url: string, connected: boolean) => calls.push({ tag, committed, hook, source: source(url), connected, rendering })
+    const call = (hook: Call['hook'], element: HTMLImageElement) => record(hook, element.currentSrc, element.isConnected)
+    // This render's own loader and decoder: the controller must call them only once the render is committed.
+    const loader = { ...webp, url: (request: ImageRequest) => (record('loader', webp.url(request), true), webp.url(request)) }
+    const thumbhash: ThumbHashDecoder = () => (
+      record('decoder', 'decoder', true),
+      { style: { backgroundColor: 'rgb(1, 2, 3)' }, lazy: () => (record('lazy', 'lazy', true), { backgroundImage: 'url("data:image/png;base64,AAAA")' }) }
+    )
     const tree = (
-      <LazyEaseProvider loader={webp}>
+      <LazyEaseProvider loader={webp} thumbhash={thumbhash}>
         <Suspense fallback={null}>
+          <Begin tag={tag} />
           <Image
             src={src}
             version={version}
+            token={token}
+            loading={kind === 'native' ? 'native' : undefined}
+            loader={loader}
+            placeholder="thumbhash:AAAA"
             alt="Fern"
             width={320}
             height={240}
@@ -100,9 +132,10 @@ async function scenario(change: Change, timing: Timing, strict: boolean) {
             onStateChange={(state: LoadState, element) => state === 'loaded' && call('loaded', element)}
             reveal={(edge) => (call('reveal', img()), focusReveal(edge))}
           />
+          <End />
           <Gate hold={hold} />
         </Suspense>
-        <Mark tag={tag} kick={kick} />
+        <Mark kick={kick} />
       </LazyEaseProvider>
     )
     return strict ? <StrictMode>{tree}</StrictMode> : tree
@@ -112,14 +145,16 @@ async function scenario(change: Change, timing: Timing, strict: boolean) {
     core.intersect(owner())
     core.resize(owner(), 320, 240)
     await tick()
-    if (img().getAttribute('src') === INERT || owner().getAttribute('data-state') === 'loaded') return
+    const src = img().getAttribute('src')
+    // A native image that React gave a new URL loads it, though it stays `loaded`.
+    if (src === INERT || (owner().getAttribute('data-state') === 'loaded' && source(img().currentSrc) === source(src ?? ''))) return
     core.load(img())
     if (decoded) finish?.()
     await tick()
   }
 
   try {
-    const a: View = { tag: 'A', src: '/a.jpg', version: 'r1' }
+    const a: View = { tag: 'A', src: '/a.jpg', version: 'r1', token: 't1' }
     root.render(render(a))
     await tick()
     if (timing === 'before the update') await browse()
@@ -142,7 +177,7 @@ async function scenario(change: Change, timing: Timing, strict: boolean) {
       await tick(400)
       expect(owner().style.display).toBe('block')
     } else {
-      final = { ...a, tag: 'B', ...(change === 'src' && { src: '/b.jpg' }), ...(change === 'version' && { version: 'r2' }), kick }
+      final = { ...a, tag: 'B', ...(change === 'src' && { src: '/b.jpg' }), ...(change === 'version' && { version: 'r2' }), ...(change === 'token' && { token: 't2' }), kick }
       root.render(render(final))
     }
     await tick()
@@ -152,7 +187,8 @@ async function scenario(change: Change, timing: Timing, strict: boolean) {
     return {
       calls,
       final: source(img().currentSrc),
-      expected: `${final.src[1]} ${final.version}`,
+      expected: `${final.src[1]} ${final.token} ${final.version}`,
+      tag: final.tag,
       state: owner().getAttribute('data-state'),
       opacity: img().style.opacity,
       claimed: (img() as unknown as Record<symbol, unknown>)[CLAIM] !== undefined,
@@ -165,28 +201,51 @@ async function scenario(change: Change, timing: Timing, strict: boolean) {
   }
 }
 
+describe.each(kinds)('%s image', (kind) => {
 describe.each([false, true])('the next update and the old source (Strict Mode: %s)', (strict) => {
   describe.each(changes)('%s', (change) => {
     it.each(timings)('the old source finishes %s', async (timing) => {
-      const { calls, final, expected, state, opacity, claimed } = await scenario(change, timing, strict)
+      const { calls, final, expected, tag, state, opacity, claimed } = await scenario(kind, change, timing, strict)
       const of = (hook: Call['hook'], source: string) => calls.filter((call) => call.hook === hook && call.source === source)
 
-      // Only the committed render's callbacks, and never for an img that left the document.
-      expect(calls.filter((call) => call.tag !== call.committed)).toEqual([])
+      // Only the committed render's callbacks, its loader and decoder included, and never for an img that left the document.
+      // A ThumbHash's lazy() belongs to the decode the attachment made, and the decoder is pure: an attachment
+      // that outlives its render (an update of the callbacks alone) still swaps in that decode's image.
+      expect(calls.filter((call) => !call.rendering && call.hook !== 'lazy' && call.tag !== call.committed)).toEqual([])
       expect(calls.filter((call) => !call.connected)).toEqual([])
+      const pure = ['loader', 'decoder', 'lazy'] as const
+      if (kind === 'native') {
+        // A native image's URLs and placeholder are rendered: the controller calls neither the loader nor the decoder.
+        expect(calls.filter((call) => pure.some((hook) => hook === call.hook) && !call.rendering)).toEqual([])
+      } else {
+        // The controller does reach the loader and decoder; those of the committed render where it attached again.
+        const attachedAgain = change === 'src' || change === 'version'
+        for (const hook of ['loader', 'decoder'] as const)
+          expect(calls.some((call) => call.hook === hook && !call.rendering && (!attachedAgain || call.tag === tag)), hook).toBe(true)
+      }
       // Once per source at most: no second onLoad, no second fade.
       for (const source of new Set(calls.map((call) => call.source)))
         for (const hook of ['onLoad', 'loaded', 'reveal'] as const) expect(of(hook, source).length, `${hook} of ${source}`).toBeLessThanOrEqual(1)
-      // A source replaced before it was displayed reaches nothing.
-      const replaced = (change === 'src' || change === 'version') && timing !== 'before the update'
-      if (replaced) expect(calls.filter((call) => call.source === 'a r1')).toEqual([])
+      // A source replaced before it was displayed reaches nothing. A native image is displayed on its load, not its decode.
+      const replaced = (change === 'src' || change === 'version') && timing !== 'before the update' && !(kind === 'native' && timing === 'in its commit')
+      if (replaced) expect(calls.filter((call) => call.source === 'a t1 r1' && call.hook !== 'loader')).toEqual([])
       // The committed source is displayed, once.
       expect(final).toBe(expected)
       expect([state, opacity, claimed]).toEqual(['loaded', '', true])
-      expect(of('onLoad', expected)).toHaveLength(1)
-      expect(of('loaded', expected)).toHaveLength(1)
-      // An image that finished loading while it was hidden is adopted when it shows: displayed without a fade.
-      expect(of('reveal', expected)).toHaveLength(change === 'hidden by Suspense' && timing === 'in its commit' ? 0 : 1)
+      // A measured image's source leaves out the token: a new one after its first display upgrades it in place,
+      // and the reports stay with the URL it was first displayed at.
+      const upgraded = kind === 'deferred' && change === 'token' && timing !== 'after it'
+      const reported = upgraded ? 'a t1 r1' : expected
+      if (upgraded) expect(calls.filter((call) => call.source === expected && call.hook !== 'loader')).toEqual([])
+      expect(of('onLoad', reported)).toHaveLength(1)
+      // A native img that React gives a new URL after it loaded stays `loaded`: its state reports nothing new.
+      const restated = kind === 'native' && (change === 'version' || change === 'token') && timing !== 'after it'
+      expect(of('loaded', reported)).toHaveLength(restated ? 0 : 1)
+      // An image whose decode ends as a new attachment of the same source starts (it finished loading while it was
+      // hidden, or a new token re-attaches a measured image) is adopted: displayed without a fade. A native image has no fade.
+      const adopted = timing === 'in its commit' && (change === 'hidden by Suspense' || (kind === 'deferred' && change === 'token'))
+      expect(of('reveal', reported)).toHaveLength(kind === 'native' || adopted ? 0 : 1)
     })
   })
+})
 })

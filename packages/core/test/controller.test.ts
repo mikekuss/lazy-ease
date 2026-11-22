@@ -122,6 +122,42 @@ describe('prepared mode', () => {
     expect(box.style.backgroundImage).toBe('')
   })
 
+  it('releases a displayed image as it was before any attachment when an update’s decoder throws as the generation starts', async () => {
+    const error = new Error('decoder')
+    // Armed, it throws on its second call: the first resolves update()'s options, the second starts the generation.
+    let armed = 0
+    const lazy = vi.fn(() => ({ backgroundColor: 'red' }))
+    const thumbhash = () => {
+      if (armed && !--armed) throw error
+      return { style: { backgroundColor: 'blue' }, lazy }
+    }
+    const { img, box, attach } = setup({ thumbhash })
+    mockAnimate(img)
+    mockAnimate(box)
+    const options: AttachOptions = { url: '/a.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' }
+    const handle = attach(options)
+    await loadAndDecode(img)
+    vi.advanceTimersByTime(400)
+    expect([img.getAttribute('src'), img.style.opacity, box.getAttribute('data-state'), box.style.backgroundColor]).toEqual(['/a.webp', '', 'loaded', ''])
+    lazy.mockClear()
+    armed = 2
+    // update() first returns the element to its placeholder; the throw then rolls back what was before the first attach.
+    expect(() => handle.update({ ...options, onStateChange: () => {} })).toThrow(error)
+    expect([img.getAttribute('src'), img.getAttribute('srcset'), img.style.cssText, box.getAttribute('data-state'), box.style.backgroundColor]).toEqual([INERT, null, '', null, PLACEHOLDER])
+    expect(lazy).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+    // Released: a later attach takes the element, loads the image again and fades it in.
+    const states: LoadState[] = []
+    const reveal = vi.fn(focusReveal)
+    createLazyEase({ loader: webpLoader, reveal, thumbhash }).attach(img, { ...options, onStateChange: (state) => states.push(state) })
+    expect(lazy).toHaveBeenCalledTimes(1)
+    await loadAndDecode(img)
+    vi.advanceTimersByTime(400)
+    expect([img.getAttribute('src'), img.style.opacity, box.getAttribute('data-state')]).toEqual(['/a.webp', '', 'loaded'])
+    expect(states).toEqual(['idle', 'loading', 'loaded'])
+    expect(reveal).toHaveBeenCalledTimes(1)
+  })
+
   it('fades out the inline placeholder the caller marks transparent', async () => {
     const { img, box, attach } = setup()
     mockAnimate(img)

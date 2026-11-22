@@ -243,6 +243,10 @@ async function check(scenario: Scenario, action: (typeof actions)[number]): Prom
     if ((JSON.parse(got.final)[3] as string).includes('opacity: 0')) problems.push('left hidden')
   } else {
     const reference = await run(scenario, plain, true)
+    // An update shows at once what the same update outside the callback shows, not only in the end.
+    // Eager only: a lazy successor subscribed inside an intersection batch gets that batch's entry and
+    // starts at once, while the oracle's waits for its own initial entry, which comes with the next step.
+    if (plain === 'update' && scenario.loading === 'eager') expectEqual('element right after the update', got.atAction, reference.atAction)
     expectEqual('element', got.final, reference.final)
     expectEqual('successor states', states(got.successor), states(reference.successor))
     expectEqual('successor displays', got.successorDisplays, reference.successorDisplays)
