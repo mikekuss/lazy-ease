@@ -118,6 +118,26 @@ test('prepared images need no loader, no measuring and no format probe', async (
   expect(log.errors).toEqual([])
 })
 
+test('the prepared script fades prepared images in and clears their placeholder', async ({ page }) => {
+  const log = trackConsole(page)
+  const requests = trackImageRequests(page)
+  // The script without the loader, and the page without its measured image.
+  await gotoChanged(page, (html) =>
+    html
+      .replace('/assets/lazy-ease.min.js" data-base-url="/_img" data-formats="webp"', '/assets/lazy-ease.prepared.min.js"')
+      .replace(/<!-- Measured:[\s\S]*?<\/div>\n/, ''),
+  )
+  await expect(page.locator('script[src="/assets/lazy-ease.prepared.min.js"]')).toHaveCount(1)
+  // Both builds leave out the reveal and the transparent fade-out: the plain crossfade remains.
+  for (const id of ['prepared', 'single', 'picture']) {
+    await shown(page, id)
+    await expect.poll(() => box(page, id).evaluate((element) => element.style.backgroundColor + element.style.backgroundImage)).toBe('')
+  }
+  expect(await currentSrc(page, 'prepared')).toMatch(/\/_img\/copy-1\.jpg\?fmt=webp&q=75&w=(640|1080)$/)
+  expect(requests.length).toBeGreaterThan(0)
+  expect(log.errors).toEqual([])
+})
+
 test('two copies of the script on one page attach each image once', async ({ page }) => {
   const log = trackConsole(page)
   // Each copy scans the opted-in areas once when it starts: count the scans.

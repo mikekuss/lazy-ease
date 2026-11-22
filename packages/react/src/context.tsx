@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, use, useMemo, type ReactNode } from 'react'
-import { createLoader, normalizeLoader, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader, type ThumbHashDecoder } from '@lazy-ease/core'
+import { createLoader, normalizeLoader, type FormatDetector, type ImageLoader, type ImageLoaderFunction, type ResolvedLoader, type Reveal, type ThumbHashDecoder } from '@lazy-ease/core'
 
 /**
  * - `lazy`: load when the image comes within `rootMargin` of the root, with a fade
@@ -28,6 +28,8 @@ export interface LazyEaseConfig {
   placeholder: string
   /** Crossfade duration in ms. 0 swaps instantly. */
   fadeDuration: number
+  /** Keyframes for the fade instead of the crossfade: `focusReveal` from `@lazy-ease/core`. */
+  reveal?: Reveal
   /**
    * Enables `thumbhash:` placeholders: `thumbhashDecoder(thumbhash)` from
    * `@lazy-ease/core/thumbhash`, with the `thumbhash` package the app installs.
@@ -35,6 +37,12 @@ export interface LazyEaseConfig {
   thumbhash?: ThumbHashDecoder
   /** `'image'` renders decoded ThumbHash images on the server instead of only their average color. */
   thumbhashSsr: 'color' | 'image'
+  /**
+   * Picks the format of measured images when the loader declares several:
+   * `detectAvif` from `@lazy-ease/core` requests AVIF where the browser
+   * decodes it. Default: the best declared format other than AVIF, WebP first.
+   */
+  detectFormat?: FormatDetector
 }
 
 let defaultLoader: ResolvedLoader | undefined
@@ -77,8 +85,10 @@ export function LazyEaseProvider({
   dwellTime,
   placeholder,
   fadeDuration,
+  reveal,
   thumbhash,
   thumbhashSsr,
+  detectFormat,
 }: LazyEaseProviderProps) {
   const parent = useLazyEaseConfig()
   const value = useMemo<LazyEaseConfig>(
@@ -92,10 +102,12 @@ export function LazyEaseProvider({
       dwellTime: dwellTime ?? parent.dwellTime,
       placeholder: placeholder ?? parent.placeholder,
       fadeDuration: fadeDuration ?? parent.fadeDuration,
+      reveal: reveal ?? parent.reveal,
       thumbhash: thumbhash ?? parent.thumbhash,
       thumbhashSsr: thumbhashSsr ?? parent.thumbhashSsr,
+      detectFormat: detectFormat ?? parent.detectFormat,
     }),
-    [parent, loader, domains, quality, loading, root, rootMargin, dwellTime, placeholder, fadeDuration, thumbhash, thumbhashSsr],
+    [parent, loader, domains, quality, loading, root, rootMargin, dwellTime, placeholder, fadeDuration, reveal, thumbhash, thumbhashSsr, detectFormat],
   )
   return <LazyEaseContext value={value}>{children}</LazyEaseContext>
 }

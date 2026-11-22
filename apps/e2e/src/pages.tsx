@@ -1,3 +1,4 @@
+import { focusReveal } from '@lazy-ease/core'
 import { Image, LazyEaseProvider } from '@lazy-ease/react'
 import { useEffect, type ReactNode } from 'react'
 import * as thumbhash from 'thumbhash'
@@ -42,6 +43,7 @@ const CSS = `
   .fluid { padding: 0; }
   .banner { position: relative; height: 200px; }
   .avatar { position: relative; width: 200px; height: 200px; }
+  .reveal-page { padding: 80px; background: #fff; }
 `
 
 type PageProps = Pick<PageData, 'images'>
@@ -98,6 +100,19 @@ function Fade({ images: { photo } }: PageProps) {
   return (
     <div className="row">
       <Image src={photo.src} alt="" width={300} height={200} srcWidth={photo.width} srcHeight={photo.height} fadeDuration={200} wrapperClassName="fade-box" />
+    </div>
+  )
+}
+
+/**
+ * A wide focus reveal with a long fade, in white space the blur must not paint over,
+ * and a round avatar whose own clip-path the reveal keeps.
+ */
+function Reveal({ images: { photo } }: PageProps) {
+  return (
+    <div className="reveal-page">
+      <Image src={photo.src} alt="" width={1000} height={400} srcWidth={photo.width} srcHeight={photo.height} reveal={focusReveal} fadeDuration={20_000} wrapperClassName="reveal-box" />
+      <Image src={photo.src} alt="" width={400} height={400} srcWidth={photo.width} srcHeight={photo.height} reveal={focusReveal} fadeDuration={20_000} placeholder="none" style={{ clipPath: 'circle(40%)' }} wrapperClassName="reveal-avatar" wrapperStyle={{ marginTop: 80 }} />
     </div>
   )
 }
@@ -193,6 +208,7 @@ export const pages: Record<string, (props: PageProps) => ReactNode> = {
   resize: Resize,
   placeholder: Placeholders,
   fade: Fade,
+  reveal: Reveal,
   priority: Priority,
   'first-viewport': FirstViewport,
   focus: Focus,

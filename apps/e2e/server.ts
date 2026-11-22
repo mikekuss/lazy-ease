@@ -111,6 +111,7 @@ const { pages, renderPage } = (await import(pathToFileURL(ssrFile).href)) as typ
 // published build from packages/vanilla/scripts/bundle.mjs, from source:
 // CI's e2e job does not build the packages.
 const vanillaJs = (await buildScript({ conditions: ['source'], write: false })).outputFiles[0]!.text
+const vanillaPreparedJs = (await buildScript({ entry: 'auto-prepared', conditions: ['source'], write: false })).outputFiles[0]!.text
 const vanillaHtml = await readFile(path.join(here, 'static', 'vanilla.html'), 'utf8')
 
 // Core as an ES module, for specs that drive the controller directly.
@@ -211,6 +212,7 @@ app.get('/assets/lazy-ease.min.js', async (c) => {
   if (status >= 400) return c.text('Script failed', status as 500, { 'Cache-Control': 'no-store' })
   return c.body(vanillaJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' })
 })
+app.get('/assets/lazy-ease.prepared.min.js', (c) => c.body(vanillaPreparedJs, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
 app.get('/assets/vanilla.js', (c) => c.body(vanillaEsm, 200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }))
 app.get('/assets/lazy-ease.css', (c) => c.body(cssText, 200, { 'Content-Type': 'text/css', 'Cache-Control': 'no-store' }))
 app.get('/vanilla', (c) => c.html(vanillaHtml))

@@ -1,12 +1,11 @@
-import { candidateSet } from '../candidates.js'
 import { normalizeFocalPoint, percentPosition, type FocalPoint } from '../focal.js'
-import { normalizeLoader, snapQuality, type ImageFormat, type ImageLoader, type ImageLoaderFunction } from '../loader.js'
-import { snapRatio } from '../ratios.js'
+import type { ImageLoader, ImageLoaderFunction } from '../loader.js'
 import { isDirect } from '../source.js'
-import { focusStyles, parsePlaceholder, type StyleRecord, type ThumbHashDecoder } from '../styles.js'
-import { measuredCandidates, snapWidth } from '../widths.js'
-import { chooseFormat } from './format.js'
+import { parsePlaceholder, type StyleRecord, type ThumbHashDecoder } from '../styles.js'
+import { fades } from './fades.js'
+import type { FormatDetector } from './format.js'
 import { observeResize, whenVisible } from './observe.js'
+import type { Reveal } from './reveal.js'
 
 export type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
 
@@ -26,10 +25,19 @@ export interface LazyEaseConfig {
   dwellTime?: number
   /** Crossfade in ms. 0 swaps directly, as does `prefers-reduced-motion`. Default 400. */
   fadeDuration?: number
+  /** Keyframes for the fade instead of the crossfade, e.g. `focusReveal`. Default: none. */
+  reveal?: Reveal
   /** How long a loaded image may take to decode before it is shown anyway, in ms. Default 250. */
   decodeTimeout?: number
   /** Enables `thumbhash:` placeholders; see `@lazy-ease/core/thumbhash`. */
   thumbhash?: ThumbHashDecoder
+  /**
+   * Picks the format of measured images when the loader declares several.
+   * `detectAvif` requests AVIF where the browser decodes it. Default: the
+   * best declared format other than AVIF, WebP first, or AVIF when it is
+   * the only one. A detector that throws or rejects gets that default.
+   */
+  detectFormat?: FormatDetector
   /** Every state change of an attached image. */
   onStateChange?: (state: LoadState, img: HTMLImageElement) => void
 }
@@ -39,7 +47,7 @@ export interface LazyEaseConfig {
  * and/or `url` (prepared), or `priority` / `loading: 'native'`, which adopt
  * the sources already in the HTML.
  */
-export interface AttachOptions extends Pick<LazyEaseConfig, 'loader' | 'quality' | 'root' | 'rootMargin' | 'dwellTime' | 'fadeDuration' | 'onStateChange'> {
+export interface AttachOptions extends Pick<LazyEaseConfig, 'loader' | 'quality' | 'root' | 'rootMargin' | 'dwellTime' | 'fadeDuration' | 'reveal' | 'onStateChange'> {
   /** Logical source. The controller measures the slot and installs the loader's candidates. */
   src?: string
   /** Prepared candidate list, copied as is on activation. */
@@ -74,6 +82,12 @@ export interface AttachOptions extends Pick<LazyEaseConfig, 'loader' | 'quality'
   /** A CSS color, a data URI, `thumbhash:<base64>` or `'none'`, painted on the box. Default: what the HTML has. */
   placeholder?: string
   /**
+   * The placeholder the caller painted inline stands for a transparent image,
+   * e.g. a decoded ThumbHash with alpha: it fades out during the fade instead
+   * of staying under the image to the end. A `placeholder` says it itself.
+   */
+  transparent?: boolean
+  /**
    * First display of this source, once: after a load and decode, or when an
    * already displayed image is adopted. `event` is the load event when one
    * was observed; adoption never fabricates one.
@@ -105,20 +119,57 @@ const PLACEHOLDER = ['backgroundColor', 'backgroundImage', 'backgroundSize', 'ba
 const FADE = ['opacity', 'transition']
 const ATTRIBUTES = ['sizes', 'srcset', 'src']
 
-type Options = LazyEaseConfig & AttachOptions
-type Timer = ReturnType<typeof setTimeout>
+/** Attach options over the instance's config over the defaults. */
+export type Options = LazyEaseConfig & AttachOptions
+export type Timer = ReturnType<typeof setTimeout>
+
+export type Mode = 'fill' | 'fixed' | 'ratio' | 'intrinsic'
+
+/**
+ * Measured mode, for one generation: watches the slot of `src` and installs
+ * the loader's candidates for it. Returns what removes the focal styles it
+ * set. Positional, because an object of these costs bytes in every bundle.
+ */
+export type Measure = (
+  src: string,
+  o: Options,
+  mode: Mode,
+  /** The normalized focal point, for every mode but intrinsic. */
+  focus: FocalPoint | undefined,
+  img: HTMLImageElement,
+  box: HTMLElement | undefined,
+  /** The box, or the img without one: the element that is measured. */
+  surface: HTMLElement,
+  /** Whether the generation still runs. */
+  live: () => boolean,
+  /** A timeout the end of the generation clears. */
+  later: (callback: () => void, ms: number) => Timer,
+  /** Clears a timeout from `later` early. */
+  cancel: (timer?: Timer) => void,
+  /** Called when the generation ends. */
+  cleanups: (() => void)[],
+  /** Activates candidates: sizes, srcset and src, a missing src keeping the placeholder's. */
+  install: (srcset?: string, sizes?: string, src?: string) => void,
+) => () => void
 
 // Camel-case properties, as StyleRecord has them; '' removes a declaration.
 const styleOf = (element: HTMLElement) => element.style as unknown as Record<string, string>
 const clearStyle = (element: HTMLElement, properties: readonly string[]) => {
   for (const property of properties) styleOf(element)[property] = ''
 }
-/** Sets `styles` on `element` and returns what puts the replaced values back. */
-const assign = (element: HTMLElement, styles: StyleRecord) => {
-  const before: Record<string, string> = {}
-  for (const property in styles) before[property] = styleOf(element)[property]!
-  Object.assign(element.style, styles)
-  return () => Object.assign(element.style, before)
+/**
+ * Calls into the page's code: a state or display callback, a reveal, a deferred ThumbHash decode.
+ * Its error is reported as an event listener's is, from a timer, and changes nothing here:
+ * the call returns undefined, and the image goes on as if the callback had done nothing.
+ */
+export const guard = <A extends unknown[], T>(callback: ((...args: A) => T) | undefined, ...args: A): T | undefined => {
+  try {
+    return callback?.(...args)
+  } catch (error) {
+    setTimeout(() => {
+      throw error
+    })
+  }
 }
 const isNative = (o: Options) => o.priority || o.loading === 'native'
 /** The logical source of deferred options and picture sources: what an image displayed under them shows. */
@@ -126,11 +177,12 @@ const identity = (o: Options, sources: Iterable<Element>) =>
   JSON.stringify([o.src, o.srcset, o.url, o.version, ...[...sources].map((source) => source.getAttribute('data-le-srcset'))])
 
 /**
- * A controller instance. Creating it does nothing: observers and format
- * detection start on first need. Several instances, and several copies of
- * the package, can share one page.
+ * A controller instance, with measured mode when `measure` is given;
+ * `noSrc` is the error for a `src` it cannot load. Creating it does nothing:
+ * observers and format detection start on first need. Several instances,
+ * and several copies of the package, can share one page.
  */
-export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
+export function createController(config: LazyEaseConfig, measure?: Measure, noSrc?: string): LazyEase {
   /** Attach options over the instance's config over the defaults, validated; with `img` (update) also against the observer. */
   const resolve = (options: AttachOptions, img?: HTMLImageElement): Options => {
     const o: Options = { rootMargin: '400px', fadeDuration: 400, decodeTimeout: 250, quality: 75, ...config }
@@ -145,8 +197,8 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
         ? 'needs exactly one of src, srcset/url or native'
         : o.sizes !== undefined && o.srcset === undefined
           ? 'sizes needs srcset'
-          : o.src !== undefined && !o.loader && !isDirect(o.src, o.domains)
-            ? 'src needs a loader'
+          : o.src !== undefined && !(measure && o.loader) && !isDirect(o.src, o.domains)
+            ? noSrc!
             : o.height !== undefined && (o.width === undefined || o.aspectRatio !== undefined)
               ? 'height needs width and no aspectRatio'
               : o.fill && (o.width ?? o.height) !== undefined
@@ -212,277 +264,265 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
         if (state === next) return
         state = next
         owner.setAttribute('data-state', next)
-        o.onStateChange?.(next, img)
-      }
-
-      /** One generation: everything that belongs to one logical source. Sets `stop` to its cleanup. */
-      const run = () => {
-        const native = isNative(o)
-        // A native data: URI is the target; only the inert pixel is a placeholder there.
-        const placeholderSrc = native ? INERT : inert
-        const src = attribute('src')
-        const recorded = targets[targetKey]
-        let own = img.hasAttribute('srcset') || (native ? (src ?? INERT) !== INERT : src != null && (src === recorded?.[1] || !src.startsWith('data:')))
-        const deferred = deferredSources()
-        const target = native ? undefined : identity(o, deferred)
-        // The element still has the target of an earlier attachment for another source:
-        // back to the placeholder, so the old image is neither adopted nor shown.
-        if (own && target && recorded && recorded[0] !== target) {
-          restore([null, null, inert])
-          for (const source of deferred) {
-            source.removeAttribute('srcset')
-            if (source.hasAttribute('data-le-sizes')) source.removeAttribute('sizes')
-          }
-          own = false
-        }
-        // An adopted target is this source's; a native one is nobody's.
-        // A data: src next to an adopted srcset is the placeholder, unless the target set it.
-        targets[targetKey] = own && target ? [target, src?.startsWith('data:') && src !== recorded?.[1] ? undefined : src, inert] : undefined
-        let live = true
-        // A native source is the element's own, whenever it is set.
-        let assigned = native || own
-        let shown = false
-        let hidden = false
-        let good: (string | null)[] | undefined
-        let fade: Animation | undefined
-        // The <source> elements this generation activated, with their attributes from before.
-        const activated = new Map<Element, (string | null)[]>()
-        let unfocus = () => {}
-        const timers = new Set<Timer>()
-        const cleanups: (() => void)[] = []
-        const later = (callback: () => void, ms: number) => {
-          const timer = setTimeout(() => {
-            timers.delete(timer)
-            callback()
-          }, ms)
-          timers.add(timer)
-          return timer
-        }
-        const on = (type: string, listener: (event: Event) => void) => {
-          img.addEventListener(type, listener)
-          cleanups.push(() => img.removeEventListener(type, listener))
-        }
-        const fadeMs = o.fadeDuration!
-        const placeholder = o.placeholder === undefined ? undefined : parsePlaceholder(o.placeholder, o.thumbhash)
-        const mode = o.fill ? 'fill' : o.height !== undefined ? 'fixed' : o.aspectRatio !== undefined ? 'ratio' : 'intrinsic'
-        const focus = mode === 'intrinsic' ? undefined : normalizeFocalPoint(o.focalPoint)
-        const paint = (style: StyleRecord) => {
-          clearStyle(surface, PLACEHOLDER)
-          Object.assign(surface.style, focus && style.backgroundImage ? { ...style, backgroundPosition: percentPosition(focus) } : style)
-        }
-        if (placeholder) paint(placeholder.style)
-
-        // Shows the image and removes the placeholder, so transparent images don't show it. Ends a fade cut short.
-        const release = () => {
-          fade?.cancel()
-          clearStyle(img, FADE)
-          clearStyle(surface, PLACEHOLDER)
-        }
-        const display = (event?: Event) => {
-          shown = true
-          good = snapshot()
-          report('loaded')
-          if (img.style.opacity !== '0' || fadeMs <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches) release()
-          else {
-            // No style or layout flush (spec): an opacity 0 set in this frame is no start value for the transition,
-            // so the animation's keyframes give the fade its start. Where it runs, the transition shows the same fade.
-            // Without Web Animations (jsdom) only the transition is left.
-            fade = img.animate?.({ opacity: [0, 1], easing: 'ease-out' }, fadeMs)
-            Object.assign(img.style, { transition: `opacity ${fadeMs}ms ease-out`, opacity: '1' })
-            later(release, fadeMs)
-          }
-          o.onDisplay?.(img, event)
-        }
-        const fail = () => {
-          report('error')
-          // The alt text or the browser's broken-image presentation, in the reserved area.
-          release()
-        }
-
-        on('load', (event) => {
-          // The inert placeholder's own load says nothing about the target.
-          if (!assigned || img.currentSrc === placeholderSrc) return
-          if (shown) good = snapshot()
-          else if (native) display(event)
-          else {
-            const expected = img.currentSrc
-            void Promise.race([
-              img.decode().then(
-                () => true,
-                () => false,
-              ),
-              new Promise<boolean>((resolve) => later(() => resolve(true), o.decodeTimeout!)),
-            ]).then((ok) => {
-              // A newer source is on its way, or this generation is over.
-              if (!live || shown || img.currentSrc !== expected) return
-              if (ok) display(event)
-              else fail()
-            })
-          }
-        })
-        on('error', () => {
-          if (!assigned) return
-          // A failed upgrade keeps the image that is displayed.
-          if (!shown) fail()
-          else if (good && snapshot().some((value, i) => value !== good![i])) restore(good)
-        })
-
-        const install = (srcset?: string, sizes?: string, src?: string) => {
-          const values = [srcset && sizes, srcset, src ?? attribute('src')]
-          // Only a src the target writes is its own: a srcset alone leaves the placeholder src.
-          targets[targetKey] = [target!, src, inert]
-          // An adopted error of this very source stays one: writing nothing brings no new event.
-          if (state === 'error' && img.parentElement?.tagName !== 'PICTURE' && snapshot().every((value, i) => value === (values[i] ?? null))) return
-          // Hidden before the target is assigned, so neither a partial image nor the alt text flashes.
-          if (!assigned && box) {
-            img.style.opacity = '0'
-            hidden = true
-          }
-          assigned = true
-          // An upgrade keeps the loaded state; the displayed image stays.
-          if (!shown) report('loading')
-          for (const source of deferredSources()) {
-            if (!activated.has(source)) activated.set(source, snapshot(source))
-            const deferred = source.getAttribute('data-le-sizes')
-            if (deferred !== null) source.setAttribute('sizes', deferred)
-            source.setAttribute('srcset', source.getAttribute('data-le-srcset')!)
-          }
-          restore(values)
-        }
-
-        const measure = (src: string) => {
-          const loader = normalizeLoader(o.loader!)
-          const quality = snapQuality(o.quality!, loader.qualities)
-          const { srcWidth, srcHeight } = o
-          const declared = mode === 'fixed' ? o.width! / o.height! : o.aspectRatio
-          const sourceRatio = srcWidth && srcHeight ? srcWidth / srcHeight : undefined
-          const browserCrop =
-            mode !== 'intrinsic' && (o.crop ? o.crop === 'browser' : mode === 'fill' && declared === undefined && !!sourceRatio)
-          const candidates = (slot: number) => measuredCandidates({ measuredWidth: slot, ladder: loader.widths, srcWidth })
-          // The candidate a browser at this DPR takes for a slot.
-          const selected = (slot: number) => Math.min(snapWidth(slot * (devicePixelRatio || 1), loader.widths), candidates(slot).at(-1)!)
-          let current: { slot: number; ratio?: number } | undefined
-          let format: ImageFormat | 'auto'
-          let timer: Timer | undefined
-
-          const resize = (width: number, height: number) => {
-            // Hidden or collapsed slots stay as they are until they get a size.
-            if (!live || !(width > 0) || (mode === 'fill' && !(height > 0))) return
-            // Without a declared ratio a server-cropped fill takes the box's.
-            const ratio = browserCrop || mode === 'intrinsic' ? undefined : snapRatio(declared ?? width / height, loader.ratios)
-            const served = browserCrop ? sourceRatio : ratio
-            // The cover width: the image is wider than the box when the box is relatively taller.
-            let slot = Math.ceil(served ? Math.max(width, height * served) : width)
-            if (current) {
-              if (ratio === current.ratio && !(slot > current.slot && selected(slot) > selected(current.slot))) return
-              slot = Math.max(slot, current.slot)
-            }
-            current = { slot, ratio }
-            const set = candidateSet({
-              widths: candidates(slot),
-              srcWidth,
-              srcHeight,
-              loader,
-              src,
-              aspectRatio: ratio,
-              focalPoint: ratio ? focus : undefined,
-              quality,
-              format,
-              version: o.version,
-              token: o.token,
-            })
-            if (focus) {
-              // A re-measure replaces the previous crop’s styles.
-              unfocus()
-              const styles = focusStyles({ focus, crop: ratio, srcWidth, srcHeight })
-              const undo = [assign(img, styles.img), box && assign(box, styles.box)]
-              unfocus = () => undo.forEach((callback) => callback?.())
-            }
-            install(set.srcset, `${slot}px`, set.srcset ? undefined : set.src)
-          }
-
-          const start = (chosen: ImageFormat | 'auto') => {
-            if (!live) return
-            format = chosen
-            cleanups.push(
-              observeResize(surface, (width, height) => {
-                // The first size counts at once; later ones once a resize settles.
-                if (!current) return resize(width, height)
-                clearTimeout(timer)
-                timers.delete(timer!)
-                timer = later(() => resize(width, height), 200)
-              }),
-            )
-          }
-          const chosen = chooseFormat(loader.formats)
-          if (typeof chosen == 'string') start(chosen)
-          else void chosen.then(start)
-        }
-
-        const activate = () => {
-          if (placeholder?.lazy && !shown) paint(placeholder.lazy())
-          if (o.src === undefined) install(o.srcset, o.sizes, o.url)
-          else if (isDirect(o.src, o.domains)) install(undefined, undefined, o.src)
-          else measure(o.src)
-        }
-
-        // Adoption: an image that already has its target is not reloaded.
-        if (own && img.complete) {
-          if (img.naturalWidth > 0) display()
-          else fail()
-        } else report(own ? 'loading' : 'idle')
-
-        const end = (next?: Options) => {
-          live = false
-          cleanups.forEach((cleanup) => cleanup())
-          timers.forEach(clearTimeout)
-          // A fade cut short ends here, so the placeholder does not stay behind the image.
-          if (shown) release()
-          // A target still loading shows when it arrives, over the placeholder.
-          else if (hidden) clearStyle(img, FADE)
-          if (!next) return
-          unfocus()
-          // Back to the placeholder: the old target must not show under the new source.
-          // A native source is what the element has when the update runs.
-          if (!isNative(next)) {
-            restore([null, null, inert])
-            targets[targetKey] = undefined
-            activated.forEach((values, source) => restore(values, source))
-          }
-        }
-
-        // Before what can throw, so that start() can end the generation.
-        stop = end
-        if (native) {
-          if (o.priority) {
-            img.setAttribute('fetchpriority', 'high')
-            img.setAttribute('loading', 'eager')
-          }
-        } else if (o.loading === 'eager') activate()
-        // Throws when there is no IntersectionObserver for this root and margin.
-        else cleanups.push(whenVisible(surface, o, activate))
+        guard(o.onStateChange, next, img)
       }
 
       const prior = owner.getAttribute('data-state')
-      /** Starts a generation. If it throws, the element is released as it was, so a later attach can take it. */
-      const start = () => {
+      /** Ends the generation and gives up the element. */
+      const destroy = () => {
+        stop?.()
+        stop = undefined
+        if (claims[key] === claim) delete claims[key]
+      }
+      /**
+       * One generation: everything that belongs to one logical source. Sets `stop` to its cleanup. If it throws,
+       * the element is released as it was, so a later attach can take it, unless the ThumbHash decoder ended the
+       * generation before it threw: then the element belongs to the next one, and only the error goes on. The
+       * callbacks called through `guard` never throw into it.
+       */
+      const run = () => {
         const before = [img, ...deferredSources()].map((element) => [element, snapshot(element)] as const)
         const recorded = targets[targetKey]
+        let live = true
         try {
-          run()
+          const native = isNative(o)
+          // A native data: URI is the target; only the inert pixel is a placeholder there.
+          const placeholderSrc = native ? INERT : inert
+          const src = attribute('src')
+          let own = img.hasAttribute('srcset') || (native ? (src ?? INERT) !== INERT : src != null && (src === recorded?.[1] || !src.startsWith('data:')))
+          const deferred = deferredSources()
+          const target = native ? undefined : identity(o, deferred)
+          // The element still has the target of an earlier attachment for another source:
+          // back to the placeholder, so the old image is neither adopted nor shown.
+          if (own && target && recorded && recorded[0] !== target) {
+            restore([null, null, inert])
+            for (const source of deferred) {
+              source.removeAttribute('srcset')
+              if (source.hasAttribute('data-le-sizes')) source.removeAttribute('sizes')
+            }
+            own = false
+          }
+          // An adopted target is this source's; a native one is nobody's.
+          // A data: src next to an adopted srcset is the placeholder, unless the target set it.
+          targets[targetKey] = own && target ? [target, src?.startsWith('data:') && src !== recorded?.[1] ? undefined : src, inert] : undefined
+          // A native source is the element's own, whenever it is set.
+          let assigned = native || own
+          let shown = false
+          let hidden = false
+          let good: (string | null)[] | undefined
+          let fade: Animation | undefined
+          let fadeOut: Animation | undefined
+          // The reveal's animation, once it runs.
+          let revealed: Animation | undefined
+          // The <source> elements this generation activated, with their attributes from before.
+          const activated = new Map<Element, (string | null)[]>()
+          let unfocus = () => {}
+          const timers = new Set<Timer>()
+          const cleanups: (() => void)[] = []
+          const later = (callback: () => void, ms: number) => {
+            const timer = setTimeout(() => {
+              timers.delete(timer)
+              callback()
+            }, ms)
+            timers.add(timer)
+            return timer
+          }
+          const cancel = (timer?: Timer) => {
+            clearTimeout(timer)
+            timers.delete(timer!)
+          }
+          const on = (type: string, listener: (event: Event) => void) => {
+            img.addEventListener(type, listener)
+            cleanups.push(() => img.removeEventListener(type, listener))
+          }
+          const fadeMs = o.fadeDuration!
+          // Until `end` is the cleanup: a decoder that updates or destroys the image ends this generation too.
+          stop = () => (live = false)
+          const placeholder = o.placeholder === undefined ? undefined : parsePlaceholder(o.placeholder, o.thumbhash)
+          if (!live) return
+          const mode: Mode = o.fill ? 'fill' : o.height !== undefined ? 'fixed' : o.aspectRatio !== undefined ? 'ratio' : 'intrinsic'
+          const focus = mode === 'intrinsic' ? undefined : normalizeFocalPoint(o.focalPoint)
+          const paint = (style: StyleRecord) => {
+            clearStyle(surface, PLACEHOLDER)
+            Object.assign(surface.style, focus && style.backgroundImage ? { ...style, backgroundPosition: percentPosition(focus) } : style)
+          }
+          if (placeholder) paint(placeholder.style)
+          // No fade: none set, or reduced motion.
+          const still = () => fadeMs <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches
+          // The box size for a reveal, without a layout read at display: watched until the first display.
+          let edge = 0
+          let unwatch = () => {}
+
+          // Shows the image and removes the placeholder, so transparent images don't show it. Ends a fade cut short.
+          const release = () => {
+            fade?.cancel()
+            if (fades) fadeOut?.cancel()
+            clearStyle(img, FADE)
+            clearStyle(surface, PLACEHOLDER)
+          }
+          const display = (event?: Event) => {
+            shown = true
+            if (fades) unwatch()
+            good = snapshot()
+            report('loaded')
+            // A callback above or below can update() or destroy(): then the element belongs to the next generation,
+            // and this generation's onDisplay doesn't run.
+            if (!live) return
+            if (img.style.opacity !== '0' || still()) release()
+            else {
+              // No style or layout flush (spec): an opacity 0 set in this frame is no start value for the transition,
+              // so the animation's keyframes give the fade its start. Where it runs, the transition shows the same fade.
+              // Without Web Animations (jsdom) only the transition is left.
+              if (fades && o.reveal) {
+                // A reveal that throws gets the plain fade.
+                const keyframes = guard(o.reveal, edge)
+                if (!live) return
+                if (keyframes) revealed = fade = img.animate?.(keyframes, fadeMs)
+              }
+              if (!(fades && revealed)) fade = img.animate?.({ opacity: [0, 1], easing: 'ease-out' }, fadeMs)
+              Object.assign(img.style, { transition: `opacity ${fadeMs}ms ease-out`, opacity: '1' })
+              // A placeholder known to stand for a transparent image (a ThumbHash with alpha, or `transparent`)
+              // fades out while the image becomes opaque, from 40 to 80 % of the fade, or 25 to 60 % with a
+              // reveal that runs (`focusReveal` is opaque at 45 %), so the image crossfades instead of losing it
+              // at once at the end. Any other stays to the end, under the edges a blurring reveal leaves translucent.
+              // Only what is painted inline fades: release() clears that, so it does not come back, while a
+              // background from the author's CSS stays. Browsers that don't interpolate background images
+              // (Firefox) drop the image half way through.
+              if (fades && (placeholder ?? o).transparent) {
+                const [from, to] = revealed ? [0.25, 0.6] : [0.4, 0.8]
+                const { backgroundImage, backgroundColor } = surface.style
+                fadeOut = surface.animate?.(
+                  { ...(backgroundImage && { backgroundImage: `url(${INERT})` }), ...(backgroundColor && { backgroundColor: 'transparent' }) },
+                  { duration: (to - from) * fadeMs, delay: from * fadeMs, fill: 'forwards' },
+                )
+              }
+              later(release, fadeMs)
+            }
+            guard(o.onDisplay, img, event)
+          }
+          const fail = () => {
+            // The alt text or the browser's broken-image presentation, in the reserved area. As at the display,
+            // the box edge is no longer watched. Before the report, whose callback can end the generation.
+            if (fades) unwatch()
+            release()
+            report('error')
+          }
+
+          on('load', (event) => {
+            // The inert placeholder's own load says nothing about the target.
+            if (!assigned || img.currentSrc === placeholderSrc) return
+            if (shown) good = snapshot()
+            else if (native) display(event)
+            else {
+              const expected = img.currentSrc
+              void Promise.race([
+                img.decode().then(
+                  () => true,
+                  () => false,
+                ),
+                new Promise<boolean>((resolve) => later(() => resolve(true), o.decodeTimeout!)),
+              ]).then((ok) => {
+                // A newer source is on its way, or this generation is over.
+                if (!live || shown || img.currentSrc !== expected) return
+                if (ok) display(event)
+                else fail()
+              })
+            }
+          })
+          on('error', () => {
+            if (!assigned) return
+            // A failed upgrade keeps the image that is displayed.
+            if (!shown) fail()
+            else if (good && snapshot().some((value, i) => value !== good![i])) restore(good)
+          })
+
+          const install = (srcset?: string, sizes?: string, src?: string) => {
+            const values = [srcset && sizes, srcset, src ?? attribute('src')]
+            // Only a src the target writes is its own: a srcset alone leaves the placeholder src.
+            targets[targetKey] = [target!, src, inert]
+            // An adopted error of this very source stays one: writing nothing brings no new event.
+            if (state === 'error' && img.parentElement?.tagName !== 'PICTURE' && snapshot().every((value, i) => value === (values[i] ?? null))) return
+            // Hidden before the target is assigned, so neither a partial image nor the alt text flashes.
+            if (!assigned && box) {
+              img.style.opacity = '0'
+              hidden = true
+            }
+            assigned = true
+            // An upgrade keeps the loaded state; the displayed image stays.
+            if (!shown) report('loading')
+            if (!live) return
+            for (const source of deferredSources()) {
+              if (!activated.has(source)) activated.set(source, snapshot(source))
+              const deferred = source.getAttribute('data-le-sizes')
+              if (deferred !== null) source.setAttribute('sizes', deferred)
+              source.setAttribute('srcset', source.getAttribute('data-le-srcset')!)
+            }
+            restore(values)
+          }
+
+          const activate = () => {
+            if (placeholder?.lazy && !shown) {
+              // The decoder can update() or destroy(); one that throws leaves the color.
+              const style = guard(placeholder.lazy)
+              if (!live) return
+              if (style) paint(style)
+            }
+            if (o.src === undefined) install(o.srcset, o.sizes, o.url)
+            else if (isDirect(o.src, o.domains)) install(undefined, undefined, o.src)
+            else unfocus = measure!(o.src, o, mode, focus, img, box, surface, () => live, later, cancel, cleanups, install)
+          }
+
+          const end = (next?: Options) => {
+            live = false
+            cleanups.forEach((cleanup) => cleanup())
+            timers.forEach(clearTimeout)
+            // A fade cut short ends here, so the placeholder does not stay behind the image.
+            if (shown) release()
+            // A target still loading shows when it arrives, over the placeholder.
+            else if (hidden) clearStyle(img, FADE)
+            if (!next) return
+            unfocus()
+            // Back to the placeholder: the old target must not show under the new source.
+            // A native source is what the element has when the update runs.
+            if (!isNative(next)) {
+              restore([null, null, inert])
+              targets[targetKey] = undefined
+              activated.forEach((values, source) => restore(values, source))
+            }
+          }
+
+          // Before the first report and what can throw, so that a callback's destroy() and update() end this generation.
+          stop = end
+          // Adoption: an image that already has its target is not reloaded.
+          if (own && img.complete) {
+            if (img.naturalWidth > 0) display()
+            else fail()
+          } else report(own ? 'loading' : 'idle')
+          // A callback above destroyed or updated the image.
+          if (!live) return
+          // Not for an image displayed or failed at adoption, which reveals nothing.
+          if (fades && o.reveal && box && !native && !(own && img.complete) && !still())
+            cleanups.push((unwatch = observeResize(box, (width, height) => (edge = width > height ? width : height))))
+          if (native) {
+            if (o.priority) {
+              img.setAttribute('fetchpriority', 'high')
+              img.setAttribute('loading', 'eager')
+            }
+          } else if (o.loading === 'eager') activate()
+          // Throws when there is no IntersectionObserver for this root and margin.
+          else cleanups.push(whenVisible(surface, o, activate))
         } catch (error) {
-          stop?.()
-          stop = undefined
+          if (!live) throw error
+          destroy()
           before.forEach(([element, values]) => restore(values, element))
           targets[targetKey] = recorded
           unpaint()
           if (prior === null) owner.removeAttribute('data-state')
           else owner.setAttribute('data-state', prior)
-          if (claims[key] === claim) delete claims[key]
           throw error
         }
       }
-      start()
+      run()
       return {
         get state() {
           return state!
@@ -493,13 +533,9 @@ export function createLazyEase(config: LazyEaseConfig = {}): LazyEase {
           stop(resolved)
           unpaint()
           o = resolved
-          start()
+          run()
         },
-        destroy() {
-          stop?.()
-          stop = undefined
-          if (claims[key] === claim) delete claims[key]
-        },
+        destroy,
       }
     },
   }

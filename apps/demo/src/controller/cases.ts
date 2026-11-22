@@ -71,13 +71,13 @@ export const CASES: Case[] = [
     id: 'thumbhash',
     group: 'Loading',
     title: 'ThumbHash placeholder',
-    about: 'The average color shows at once; the decoded preview is swapped in when the image activates, and removed when it is displayed.',
+    about: 'The average color shows at once; the decoded preview, blurred in an SVG, is swapped in when the image activates, and removed when it is displayed.',
     async run(ctx) {
       const image = portrait(ctx)
       const { box, img } = ctx.box(ctx.stage, 'frame ratio-4-5')
       const le = ctx.lazyEase({ loader: ctx.loader() })
       let sawPreview = false
-      const stop = watchStyle(box, (style) => (sawPreview ||= style.backgroundImage.startsWith('url("data:image/png')))
+      const stop = watchStyle(box, (style) => (sawPreview ||= style.backgroundImage.startsWith('url("data:image/svg+xml') && style.backgroundImage.includes('feGaussianBlur')))
       const a = le.attach(img, { src: image.src, aspectRatio: 4 / 5, placeholder: `thumbhash:${image.thumbhash}`, ...metadata(image) })
       ctx.assert('Average color painted synchronously', box.style.backgroundColor !== '')
       await ctx.expect('Decoded preview painted on activation', () => sawPreview)

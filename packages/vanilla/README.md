@@ -35,20 +35,24 @@ An invalid setting, such as an unknown format, a margin without units or a negat
 
 Content added after the script ran is not enhanced on its own. Use the ESM API for pages that change.
 
+When the template writes every candidate list or URL, link `lazy-ease.prepared.min.js` instead: the same script without measured images and the loader, about 2.7 kB smaller after Brotli. `data-root-margin` and `data-dwell-time` work the same; `data-base-url` is reported and ignored, and so is every `data-le-src` image that would need the loader.
+
 ## With a bundler
 
 The controller and the loader come from `@lazy-ease/core`, so install both: `npm install @lazy-ease/vanilla @lazy-ease/core`.
 
 ```js
-import { createLazyEase, createLoader } from '@lazy-ease/core'
+import { createLazyEase, createLoader, detectAvif } from '@lazy-ease/core'
 import { enhance } from '@lazy-ease/vanilla'
 import '@lazy-ease/vanilla/lazy-ease.css'
 
-const le = createLazyEase({ loader: createLoader({ baseUrl: '/_img' }) })
+const le = createLazyEase({ loader: createLoader({ baseUrl: '/_img' }), detectFormat: detectAvif })
 const enhanced = enhance(le, document.body)
 // Later, e.g. before the page's content is replaced:
 enhanced.destroy()
 ```
+
+`detectFormat: detectAvif` requests AVIF where the browser decodes it; without it, measured images take the best declared format other than AVIF. A loader that declares only AVIF gets AVIF without a warning, and a single declared format never calls the detector. Without `data-le-src` images, `createLazyEase` from `@lazy-ease/core/prepared` leaves measured mode out of the bundle.
 
 `enhance(le, root)` takes a document, an element or a shadow root, the root itself included, and returns a handle whose `destroy()` releases what this call attached. It skips elements another call, instance or bundle already owns, so enhancing an area again after adding content is safe. The instance's `root` (the scrolling element) is separate from the area you enhance.
 

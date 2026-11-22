@@ -8,6 +8,6 @@
     "customConditions": []
   },
   "include": ["src"],
-  // The self-starting script is bundled by scripts/bundle.mjs, not compiled on its own.
-  "exclude": ["src/auto.ts"]
+  // The self-starting scripts are bundled by scripts/bundle.mjs, not compiled on their own.
+  "exclude": ["src/auto.ts", "src/auto-prepared.ts", "src/boot.ts"]
 }

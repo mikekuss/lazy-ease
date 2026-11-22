@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLazyEase, createLoader, whenVisible, type AttachOptions, type Attachment, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
-import { chooseFormat, resetFormatDetection } from '../src/dom/format.js'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { createLazyEase, createLoader, detectAvif, focusReveal, whenVisible, type AttachOptions, type Attachment, type ImageFormat, type ImageRequest, type LazyEaseConfig, type LoadState } from '../src/index.js'
+import { createLazyEase as createPrepared } from '../src/prepared.js'
+import { resetFormatDetection } from '../src/dom/format.js'
+import { thumbhashDecoder } from '../src/thumbhash.js'
 import { observeResize, resetObservers } from '../src/dom/observe.js'
 import { fail, fakeImage, flush, installDom, intersect, load, media, mockAnimate, MockIntersectionObserver, MockResizeObserver, probe, recordLayoutReads, resize } from './dom-mocks.js'
 
@@ -98,6 +100,129 @@ describe('prepared mode', () => {
     expect(box.style.backgroundColor).toBe('')
     expect(img.style.opacity).toBe('')
     expect(reads).toEqual([])
+  })
+
+  // A decoder whose placeholder stands for a transparent image, as `thumbhashDecoder()` returns for a hash with alpha.
+  const alphaHash = () => ({ style: {}, lazy: () => ({ backgroundImage: 'url("data:image/png;base64,AAAA")' }), transparent: true })
+
+  it('fades a transparent placeholder out while the image becomes opaque, so a transparent image crossfades', async () => {
+    const { img, box, attach } = setup({ thumbhash: alphaHash })
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+    expect(box.style.backgroundColor).toBe('')
+    await loadAndDecode(img)
+    // Only what it painted inline: the decoded image, no color.
+    expect(out).toMatchObject([{ keyframes: { backgroundImage: `url(${INERT})` }, duration: { duration: 160, delay: 160, fill: 'forwards' }, cancelled: false }])
+    expect(out[0]!.keyframes).not.toHaveProperty('backgroundColor')
+    // The placeholder is still painted underneath; the animation only covers it.
+    expect(box.style.backgroundImage).toContain('AAAA')
+    vi.advanceTimersByTime(400)
+    expect(out[0]!.cancelled).toBe(true)
+    expect(box.style.backgroundImage).toBe('')
+  })
+
+  it('fades out the inline placeholder the caller marks transparent', async () => {
+    const { img, box, attach } = setup()
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', transparent: true })
+    await loadAndDecode(img)
+    expect(out).toMatchObject([{ keyframes: { backgroundColor: 'transparent' } }])
+    expect(out[0]!.keyframes).not.toHaveProperty('backgroundImage')
+    vi.advanceTimersByTime(400)
+    expect(box.style.backgroundColor).toBe('')
+  })
+
+  it('keeps every other placeholder under the image until the fade ends', async () => {
+    const opaqueHash = () => ({ style: { backgroundColor: 'red' }, lazy: () => ({ backgroundImage: 'url("data:image/png;base64,AAAA")' }) })
+    // No placeholder option (what the HTML paints), a color, a data URI, 'none', an opaque ThumbHash; with and without a reveal.
+    for (const placeholder of [undefined, 'blue', 'data:image/png;base64,AAAA', 'none', 'thumbhash:AAAA']) {
+      for (const reveal of [undefined, focusReveal]) {
+        const { img, box, attach } = setup({ reveal, thumbhash: opaqueHash })
+        mockAnimate(img)
+        const out = mockAnimate(box)
+        attach({ url: '/a.webp', loading: 'eager', placeholder })
+        await loadAndDecode(img)
+        expect(out).toEqual([])
+        vi.advanceTimersByTime(400)
+        expect(box.style.backgroundColor).toBe('')
+      }
+    }
+  })
+
+  it('keeps a placeholder from author CSS under the image, and does not animate it', async () => {
+    const { img, box, attach } = setup()
+    box.removeAttribute('style')
+    box.className = 'frame'
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager' })
+    await loadAndDecode(img)
+    expect(out).toEqual([])
+  })
+
+  it('leaves a background from author CSS under a transparent placeholder alone', async () => {
+    const { img, box, attach } = setup({ thumbhash: alphaHash })
+    box.removeAttribute('style')
+    box.className = 'frame'
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+    await loadAndDecode(img)
+    // The CSS color is not animated away, so it does not jump back when the fade ends.
+    expect(out[0]!.keyframes).toEqual({ backgroundImage: `url(${INERT})` })
+    vi.advanceTimersByTime(400)
+    expect(box.getAttribute('style') ?? '').not.toContain('background-color')
+  })
+
+  it('fades a transparent placeholder out earlier with a reveal, before the image has sharpened', async () => {
+    const { img, box, attach } = setup({ reveal: focusReveal, fadeDuration: 1000, thumbhash: alphaHash })
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+    await loadAndDecode(img)
+    expect(out[0]!.duration).toEqual({ duration: 350, delay: 250, fill: 'forwards' })
+  })
+
+  it('fades a transparent placeholder out in the plain window when the reveal throws', async () => {
+    const reveal = () => {
+      throw new Error('broken reveal')
+    }
+    const { img, box, attach } = setup({ reveal, fadeDuration: 1000, thumbhash: alphaHash })
+    mockAnimate(img)
+    const out = mockAnimate(box)
+    attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+    load(img)
+    await expect(flush()).rejects.toThrow('broken reveal')
+    expect(out[0]!.duration).toEqual({ duration: 400, delay: 400, fill: 'forwards' })
+  })
+
+  it('cancels the placeholder fade-out when update or destroy cuts the fade short', async () => {
+    for (const cut of ['update', 'destroy'] as const) {
+      const { img, box, attach } = setup({ thumbhash: alphaHash })
+      mockAnimate(img)
+      const out = mockAnimate(box)
+      const handle = attach({ url: '/logo.webp', loading: 'eager', placeholder: 'thumbhash:AAAA' })
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(200)
+      expect(out[0]!.cancelled).toBe(false)
+      if (cut === 'update') handle.update({ url: '/b.webp', placeholder: 'blue' })
+      else handle.destroy()
+      expect(out[0]!.cancelled).toBe(true)
+      expect(box.style.backgroundImage).toBe('')
+      if (cut === 'update') expect(box.style.backgroundColor).toBe('blue')
+      handle.destroy()
+    }
+  })
+
+  it('does not fade the placeholder when it swaps directly', async () => {
+    media.reducedMotion = true
+    const { img, box, attach } = setup()
+    const out = mockAnimate(box)
+    attach({ url: '/a.webp', loading: 'eager', transparent: true })
+    await loadAndDecode(img)
+    expect(out).toEqual([])
   })
 
   it('reads no style or layout through load, decode and reveal', async () => {
@@ -687,6 +812,633 @@ describe('generations', () => {
   }
 })
 
+describe('focus reveal', () => {
+  it('sharpens from 8 % of the longer edge while it fades in, and reads no layout', async () => {
+    const { img, box, attach } = setup({ reveal: focusReveal })
+    const animations = mockAnimate(img)
+    const reads = recordLayoutReads()
+    attach({ url: '/a.webp' })
+    resize(box, 320, 213)
+    intersect(box)
+    expect(img.style.opacity).toBe('0')
+    await loadAndDecode(img)
+    expect(animations).toMatchObject([
+      {
+        keyframes: [
+          { opacity: 0, filter: 'blur(25.6px)', mask: 'linear-gradient(#000,#000)', webkitMask: 'linear-gradient(#000,#000)', easing: 'ease-out' },
+          { opacity: 1, offset: 0.45 },
+          { opacity: 1, filter: 'blur(0px)', mask: 'linear-gradient(#000,#000)', webkitMask: 'linear-gradient(#000,#000)' },
+        ],
+        duration: 400,
+        cancelled: false,
+      },
+    ])
+    expect(box.style.backgroundColor).toBe(PLACEHOLDER)
+    vi.advanceTimersByTime(400)
+    // Released like a fade: the animation and its blur end, the placeholder goes.
+    expect(animations[0]!.cancelled).toBe(true)
+    expect(box.style.backgroundColor).toBe('')
+    expect(img.style.opacity).toBe('')
+    expect(img.style.filter).toBe('')
+    expect(reads).toEqual([])
+  })
+
+  it('takes reveal per image, and keeps the plain fade by default', async () => {
+    const plain = setup()
+    const plainAnimations = mockAnimate(plain.img)
+    plain.attach({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(plain.img)
+    expect(plainAnimations[0]!.keyframes).toEqual({ opacity: [0, 1], easing: 'ease-out' })
+
+    const focused = setup()
+    const animations = mockAnimate(focused.img)
+    focused.attach({ url: '/a.webp', loading: 'eager', reveal: focusReveal })
+    resize(focused.box, 200, 400)
+    await loadAndDecode(focused.img)
+    expect((animations[0]!.keyframes as Keyframe[])[0]!.filter).toBe('blur(32px)')
+  })
+
+  it('runs any reveal with the longer edge, a ResizeObserver reported', async () => {
+    const edges: number[] = []
+    const reveal = (edge: number) => (edges.push(edge), [{ opacity: 0, transform: 'scale(1.1)' }, { opacity: 1, transform: 'none' }])
+    const { img, box, attach } = setup({ reveal })
+    const animations = mockAnimate(img)
+    attach({ url: '/a.webp' })
+    resize(box, 300, 500)
+    intersect(box)
+    await loadAndDecode(img)
+    expect(edges).toEqual([500])
+    expect(animations[0]!.keyframes).toEqual([{ opacity: 0, transform: 'scale(1.1)' }, { opacity: 1, transform: 'none' }])
+  })
+
+  it('starts from a fixed blur when no size was reported', async () => {
+    const { img, attach } = setup({ reveal: focusReveal })
+    const animations = mockAnimate(img)
+    attach({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(img)
+    expect((animations[0]!.keyframes as Keyframe[])[0]!.filter).toBe('blur(24px)')
+  })
+
+  it('swaps directly with reduced motion or a zero fade', async () => {
+    for (const config of [{ fadeDuration: 0 }, {}]) {
+      media.reducedMotion = !('fadeDuration' in config)
+      const { img, box, attach } = setup({ reveal: focusReveal, ...config })
+      const animations = mockAnimate(img)
+      attach({ url: '/a.webp', loading: 'eager' })
+      resize(box, 320, 213)
+      await loadAndDecode(img)
+      expect(animations).toEqual([])
+      expect(img.style.opacity).toBe('')
+      expect(box.style.backgroundColor).toBe('')
+    }
+  })
+
+  it('falls back to the plain fade when a reveal throws, and reports the error', async () => {
+    const { img, box, attach } = setup({
+      reveal: () => {
+        throw new Error('broken reveal')
+      },
+    })
+    const animations = mockAnimate(img)
+    attach({ url: '/a.webp', loading: 'eager' })
+    load(img)
+    // Reported from a timer of its own, after the display.
+    await expect(flush()).rejects.toThrow('broken reveal')
+    // The fade it has without a reveal, animation and transition.
+    expect(animations).toMatchObject([{ keyframes: { opacity: [0, 1], easing: 'ease-out' }, duration: 400 }])
+    expect(img.style.opacity).toBe('1')
+    expect(img.style.transition).toBe('opacity 400ms ease-out')
+    vi.advanceTimersByTime(400)
+    expect(img.style.opacity).toBe('')
+    expect(box.style.backgroundColor).toBe('')
+  })
+
+  it('observes the box only when a fade can run', () => {
+    const observed = (box: Element) => MockResizeObserver.instances.some((o) => o.elements.has(box))
+    for (const [config, options, expected, reduced] of [
+      [{}, {}, true],
+      [{ fadeDuration: 0 }, {}, false],
+      [{}, { priority: true }, false],
+      [{}, {}, false, true],
+    ] as [LazyEaseConfig, AttachOptions, boolean, boolean?][]) {
+      resetObservers()
+      media.reducedMotion = !!reduced
+      const { box, attach } = setup({ reveal: focusReveal, ...config })
+      attach(options.priority ? options : { url: '/a.webp', ...options })
+      expect(observed(box)).toBe(expected)
+    }
+    // A bare img has no fade.
+    resetObservers()
+    document.body.innerHTML = `<img alt="" src="${INERT}">`
+    const img = document.querySelector('img')!
+    createLazyEase({ reveal: focusReveal }).attach(img, { url: '/a.webp' })
+    expect(observed(img)).toBe(false)
+  })
+
+  it('stops watching the box edge after the first display, and never watches it for an adopted image', async () => {
+    const observed = (box: Element) => MockResizeObserver.instances.some((o) => o.elements.has(box))
+    const { img, box, attach } = setup({ reveal: focusReveal })
+    attach({ url: '/a.webp', loading: 'eager' })
+    expect(observed(box)).toBe(true)
+    await loadAndDecode(img)
+    expect(observed(box)).toBe(false)
+
+    // Measured images keep their own subscription for candidate upgrades.
+    resetObservers()
+    const measured = setup({ reveal: focusReveal })
+    measured.attach({ src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(measured.box, 100, 100)
+    await loadAndDecode(measured.img)
+    expect(MockResizeObserver.instances.flatMap((o) => [...o.elements]).filter((element) => element === measured.box)).toHaveLength(1)
+
+    // Already displayed when attached: nothing to reveal, nothing to watch.
+    resetObservers()
+    const adopted = setup({ reveal: focusReveal }, 'srcset="/a.webp 640w" sizes="640px"')
+    Object.assign(adopted.img, { complete: true, naturalWidth: 100 })
+    adopted.attach({ srcset: '/a.webp 640w', sizes: '640px' })
+    expect(adopted.states).toEqual(['loaded'])
+    expect(observed(adopted.box)).toBe(false)
+
+    // Already failed when attached: the error is final, nothing to watch either.
+    resetObservers()
+    const failed = setup({ reveal: focusReveal })
+    failed.img.setAttribute('src', '/missing.webp')
+    Object.assign(failed.img, { complete: true, naturalWidth: 0 })
+    failed.attach({ url: '/missing.webp' })
+    expect(failed.states).toEqual(['error'])
+    expect(observed(failed.box)).toBe(false)
+
+    // A load error ends the watch too: the error is final.
+    resetObservers()
+    const broken = setup({ reveal: focusReveal })
+    broken.attach({ url: 'data:image/png;base64,AA==', loading: 'eager' })
+    expect(observed(broken.box)).toBe(true)
+    fail(broken.img)
+    expect(broken.states.at(-1)).toBe('error')
+    expect(observed(broken.box)).toBe(false)
+  })
+
+  it('stops observing the box when the generation ends', async () => {
+    const { box, attach } = setup({ reveal: focusReveal })
+    const handle = attach({ url: '/a.webp' })
+    expect(MockResizeObserver.instances.some((o) => o.elements.has(box))).toBe(true)
+    handle.destroy()
+    expect(MockResizeObserver.instances.some((o) => o.elements.has(box))).toBe(false)
+  })
+})
+
+describe('callbacks that start the next generation', () => {
+  const next: AttachOptions = { url: '/b.webp', loading: 'eager', placeholder: 'red' }
+
+  /** B is still loading long after A's fade would have ended: it keeps its placeholder and stays hidden. */
+  async function expectPending(img: HTMLImageElement, box: HTMLElement, handle: Attachment) {
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    vi.advanceTimersByTime(1000)
+    expect(box.style.backgroundColor).toBe('red')
+    expect(img.style.opacity).toBe('0')
+    expect(handle.state).toBe('loading')
+  }
+
+  it('leaves the next placeholder alone when a reveal updates the image', async () => {
+    const { img, box, attach } = setup()
+    const animations = mockAnimate(img)
+    const handle: Attachment = attach({
+      url: '/a.webp',
+      loading: 'eager',
+      reveal: (edge) => (handle.update(next), focusReveal(edge)),
+    })
+    await loadAndDecode(img)
+    expect(animations).toEqual([])
+    await expectPending(img, box, handle)
+  })
+
+  it('leaves the next placeholder alone when onStateChange updates the image on display or error', async () => {
+    for (const settle of [loadAndDecode, async (img: HTMLImageElement) => fail(img)]) {
+      let handle: Attachment | undefined
+      let once = true
+      const { img, box, attach } = setup({
+        onStateChange: (state) => {
+          if ((state === 'loaded' || state === 'error') && once) {
+            once = false
+            handle!.update(next)
+          }
+        },
+      })
+      const animations = mockAnimate(img)
+      handle = attach({ url: '/a.webp', loading: 'eager' })
+      await settle(img)
+      expect(animations).toEqual([])
+      await expectPending(img, box, handle)
+    }
+  })
+
+  it('writes nothing when onStateChange updates the image as it starts loading', () => {
+    let handle: Attachment | undefined
+    let once = true
+    const { img, box, attach } = setup({
+      onStateChange: (state) => {
+        if (state === 'loading' && once) {
+          once = false
+          handle!.update(next)
+        }
+      },
+    })
+    handle = attach({ url: '/a.webp' })
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    expect(box.style.backgroundColor).toBe('red')
+  })
+
+  it('ends the new generation when onStateChange destroys it as it starts, and leaves the image to the next attachment', async () => {
+    for (const create of [createLazyEase, createPrepared]) {
+      const { img, box } = boxed()
+      let handle: Attachment | undefined
+      let armed = false
+      const le = create({
+        onStateChange: (state) => {
+          if (state !== 'idle' || !armed) return
+          armed = false
+          handle!.destroy()
+          le.attach(img, { url: '/c.webp', loading: 'eager' })
+        },
+      })
+      handle = le.attach(img, { url: '/a.webp', loading: 'eager' })
+      expect(img.getAttribute('src')).toBe('/a.webp')
+      armed = true
+      handle.update({ url: '/b.webp' })
+      intersect(box)
+      await flush()
+      expect(img.getAttribute('src')).toBe('/c.webp')
+      expect(box.getAttribute('data-state')).toBe('loading')
+    }
+  })
+})
+
+// The real setTimeout, from before the fake timers: Node reports an unhandled rejection only after a macrotask.
+const macrotask = setTimeout.bind(globalThis)
+interface Rejections {
+  listeners(event: string): ((...args: unknown[]) => void)[]
+  removeAllListeners(event: string): void
+  on(event: string, listener: (...args: unknown[]) => void): void
+}
+
+/** Collects what a callback throws outside a call of the test: from an event listener (jsdom reports it) or a promise. */
+function uncaught() {
+  const errors: unknown[] = []
+  const node = (globalThis as unknown as { process: Rejections }).process
+  const saved = node.listeners('unhandledRejection')
+  node.removeAllListeners('unhandledRejection')
+  node.on('unhandledRejection', (reason) => errors.push(reason))
+  const onError = (event: ErrorEvent) => {
+    errors.push(event.error)
+    event.preventDefault()
+  }
+  window.addEventListener('error', onError)
+  return {
+    errors,
+    /** Lets Node report the rejections so far. */
+    settle: () => new Promise((resolve) => macrotask(resolve, 0)),
+    restore() {
+      window.removeEventListener('error', onError)
+      node.removeAllListeners('unhandledRejection')
+      for (const listener of saved) node.on('unhandledRejection', listener)
+    },
+  }
+}
+
+describe('an onStateChange that throws', () => {
+  // The error is reported from a timer, as a listener's is, and the image goes on as without it.
+  const watched = (box: HTMLElement) => MockResizeObserver.instances.some((observer) => observer.elements.has(box))
+  const rows: { state: LoadState; options: AttachOptions; drive: (img: HTMLImageElement, box: HTMLElement) => unknown; check: (img: HTMLImageElement, box: HTMLElement, displays: unknown[]) => unknown }[] = [
+    {
+      // As the generation starts, inside attach(): it neither throws nor gives the element back.
+      state: 'idle',
+      options: { url: '/a.webp' },
+      drive: () => {},
+      check: async (img, box, displays) => {
+        expect(box.getAttribute('data-state')).toBe('idle')
+        intersect(box)
+        await loadAndDecode(img)
+        expect(box.getAttribute('data-state')).toBe('loaded')
+        expect(displays).toHaveLength(1)
+      },
+    },
+    {
+      // The hidden image gets its target and fades in when it loads.
+      state: 'loading',
+      options: { url: '/a.webp' },
+      drive: (_, box) => intersect(box),
+      check: async (img, box, displays) => {
+        expect(img.getAttribute('src')).toBe('/a.webp')
+        expect(img.style.opacity).toBe('0')
+        expect(box.getAttribute('data-state')).toBe('loading')
+        await loadAndDecode(img)
+        expect(img.style.opacity).toBe('1')
+        expect(displays).toHaveLength(1)
+        vi.advanceTimersByTime(1000)
+        expect(box.style.backgroundColor).toBe('')
+      },
+    },
+    {
+      // The fade and onDisplay, as without the throw.
+      state: 'loaded',
+      options: { url: '/a.webp', loading: 'eager' },
+      drive: (img) => loadAndDecode(img),
+      check: (img, box, displays) => {
+        expect(img.style.opacity).toBe('1')
+        expect(img.style.transition).toBe('opacity 400ms ease-out')
+        expect(box.style.backgroundColor).toBe(PLACEHOLDER)
+        expect(box.getAttribute('data-state')).toBe('loaded')
+        expect(displays).toHaveLength(1)
+        vi.advanceTimersByTime(1000)
+        expect(img.style.opacity).toBe('')
+        expect(box.style.backgroundColor).toBe('')
+      },
+    },
+    {
+      // The alt text in the reserved area.
+      state: 'error',
+      options: { url: 'data:image/png;base64,AA==', loading: 'eager' },
+      drive: (img) => fail(img),
+      check: (img, box) => {
+        expect(img.style.opacity).toBe('')
+        expect(box.style.backgroundColor).toBe('')
+        expect(box.getAttribute('data-state')).toBe('error')
+      },
+    },
+  ]
+  for (const [name, create] of [['full', createLazyEase], ['prepared', createPrepared]] as const)
+    for (const row of rows)
+      it(`${name}: reports the error from a timer when it throws on ${row.state}, and the image goes on`, async () => {
+        const { img, box } = boxed()
+        mockAnimate(img)
+        const displays: unknown[] = []
+        const le = create({
+          reveal: focusReveal,
+          onStateChange: (state) => {
+            if (state === row.state) throw new Error(`broken ${state}`)
+          },
+        })
+        // Nothing reaches the caller of attach().
+        le.attach(img, { ...row.options, onDisplay: (_, event) => displays.push(event) })
+        resize(box, 180, 120)
+        // The timer's error surfaces where the test advances the fake timers.
+        const reported: unknown[] = []
+        for (const step of [() => row.drive(img, box), () => vi.advanceTimersByTimeAsync(0)])
+          try {
+            await step()
+          } catch (error) {
+            reported.push(error)
+          }
+        expect(reported).toEqual([new Error(`broken ${row.state}`)])
+        await row.check(img, box, displays)
+        // The reveal's edge is watched until the first display or error only.
+        if (row.state !== 'loading') expect(watched(box)).toBe(false)
+      })
+
+  it('calls the callback without the options as this', () => {
+    const { img } = boxed()
+    let self: unknown = 'unset'
+    createLazyEase().attach(img, {
+      url: '/a.webp',
+      onStateChange() {
+        self = this
+      },
+    })
+    expect(self).toBeUndefined()
+  })
+})
+
+describe('a callback of a generation leaves its successor alone', () => {
+  // An update starts generation B with the options of a row. Once, a callback of B starts the successor N: it
+  // updates the image, destroys it and attaches it again, or updates it and throws. Afterwards only N has written.
+  const N: AttachOptions = { url: '/n.webp', loading: 'eager', placeholder: 'red' }
+  const actions = ['update', 'destroy and attach', 'update and throw'] as const
+  type Fire = () => void
+  interface Row {
+    hook: string
+    /** Needs measured mode. */
+    measured?: boolean
+    /** The callback may throw: its error reaches the test, a listener's or a promise's as uncaught. */
+    throws?: boolean
+    skip?: (typeof actions)[number]
+    /** Generation A, before B. Its state must differ from B's first, or B reports nothing. Default: deferred. */
+    a?: AttachOptions
+    /** The element, if not a boxed img. */
+    markup?: string
+    /** `handle` is the current attachment, for a row that chains generations. */
+    config?: (fire: Fire, handle: () => Attachment) => LazyEaseConfig
+    options: (fire: Fire) => AttachOptions
+    /** Before the update to B. */
+    before?: (img: HTMLImageElement) => void
+    drive?: (img: HTMLImageElement, box: HTMLElement) => unknown
+    /** Further checks once N has taken over; `out` are the box's animations. */
+    after?: (img: HTMLImageElement, out: { cancelled: boolean }[]) => void
+  }
+  const b = (options: AttachOptions = {}) => () => ({ url: '/b.webp', ...options })
+  const eager = b({ loading: 'eager' })
+  const native = () => ({ loading: 'native' as const })
+  const measured = () => ({ src: '/b.jpg', loading: 'eager' as const })
+  const twoFormats = createLoader({ formats: ['webp', 'avif'] })
+  const ladder = createLoader({ widths: [100, 200, 400], formats: ['webp'] })
+  const settle = (img: HTMLImageElement) => loadAndDecode(img, '/b.webp')
+  const adopt = (naturalWidth: number) => (img: HTMLImageElement) => {
+    img.setAttribute('src', '/b.webp')
+    Object.assign(img, { complete: true, naturalWidth, currentSrc: '/b.webp' })
+  }
+  const activatedByN = (img: HTMLImageElement) => {
+    const source = img.parentElement!.querySelector('source')!
+    expect(source.getAttribute('srcset')).toBe('/wide.webp 1440w')
+    expect(source.hasAttribute('sizes')).toBe(false)
+  }
+  const on = (wanted: LoadState) => (fire: Fire) => ({ onStateChange: (state: LoadState) => void (state === wanted && fire()) })
+  const rows: Row[] = [
+    { hook: 'onStateChange idle', throws: true, a: { url: '/z.webp', loading: 'eager' }, config: on('idle'), options: b() },
+    { hook: 'onStateChange loading at start', throws: true, config: on('loading'), options: eager },
+    { hook: 'onStateChange loading when visible', throws: true, config: on('loading'), options: b(), drive: (_, box) => intersect(box) },
+    { hook: 'onStateChange loaded', throws: true, config: on('loaded'), options: eager, drive: settle },
+    { hook: 'onStateChange error', throws: true, config: on('error'), options: eager, drive: fail },
+    { hook: 'onStateChange loaded at adoption', throws: true, config: on('loaded'), options: native, before: adopt(100) },
+    { hook: 'onStateChange error at adoption', throws: true, config: on('error'), options: native, before: adopt(0) },
+    { hook: 'onDisplay', throws: true, options: (fire) => ({ ...eager(), onDisplay: fire }), drive: settle },
+    { hook: 'onDisplay at adoption', throws: true, options: (fire) => ({ ...native(), onDisplay: fire }), before: adopt(100) },
+    // B started a reveal and the fade-out of its transparent placeholder: both end with it.
+    {
+      hook: 'onDisplay with a reveal and a transparent placeholder',
+      config: () => ({ reveal: focusReveal, thumbhash: () => ({ style: {}, lazy: () => ({ backgroundImage: 'url("data:image/png;base64,AAAA")' }), transparent: true }) }),
+      options: (fire) => ({ ...eager(), placeholder: 'thumbhash:AAAA', onDisplay: fire }),
+      drive: settle,
+      after: (_, out) => {
+        expect(out).toHaveLength(1)
+        expect(out[0]!.cancelled).toBe(true)
+      },
+    },
+    // B loads, its onStateChange starts a native generation that adopts B's image, and that one's onDisplay fires.
+    {
+      hook: 'onDisplay of a native generation that a loaded one started',
+      config: (fire, handle) => {
+        let chained = false
+        return { onStateChange: (state) => void (state === 'loaded' && !chained && ((chained = true), handle().update({ loading: 'native', onDisplay: fire }))) }
+      },
+      options: eager,
+      drive: settle,
+    },
+    // B activates the deferred sources of its picture; N, eager too, activates them once more.
+    {
+      hook: 'onStateChange loading of a picture',
+      throws: true,
+      markup: `<span data-le><picture><source media="(min-width:800px)" data-le-srcset="/wide.webp 1440w"><img alt="" src="${INERT}"></picture></span>`,
+      config: on('loading'),
+      options: eager,
+      after: activatedByN,
+    },
+    {
+      hook: 'onStateChange loaded of a picture',
+      throws: true,
+      markup: `<span data-le><picture><source media="(min-width:800px)" data-le-srcset="/wide.webp 1440w"><img alt="" src="${INERT}"></picture></span>`,
+      config: on('loaded'),
+      options: eager,
+      drive: settle,
+      after: activatedByN,
+    },
+    { hook: 'reveal', throws: true, config: (fire) => ({ reveal: (edge) => (fire(), focusReveal(edge)) }), options: eager, drive: settle },
+    // The decoder runs twice. First while update() resolves B, before anything ends: B overtakes an update from it, as any update.
+    {
+      hook: 'ThumbHash decoder resolving the options',
+      throws: true,
+      skip: 'update',
+      config: (fire) => ({ thumbhash: () => (fire(), { style: { backgroundColor: 'blue' } }) }),
+      options: b({ placeholder: 'thumbhash:AAAA' }),
+    },
+    // Then as B starts, before it has listeners or a cleanup.
+    {
+      hook: 'ThumbHash decoder starting the generation',
+      throws: true,
+      config: (fire) => {
+        let calls = 0
+        return { thumbhash: () => (++calls === 2 && fire(), { style: { backgroundColor: 'blue' } }) }
+      },
+      options: b({ placeholder: 'thumbhash:AAAA' }),
+    },
+    {
+      hook: 'ThumbHash lazy decode',
+      throws: true,
+      config: (fire) => ({ thumbhash: () => ({ style: { backgroundColor: 'green' }, lazy: () => (fire(), { backgroundColor: 'blue' }) }) }),
+      options: b({ loading: 'eager', placeholder: 'thumbhash:AAAA' }),
+    },
+    {
+      hook: 'loader',
+      measured: true,
+      throws: true,
+      config: (fire) => ({ loader: (request) => (fire(), `/b-${request.width}.webp`), detectFormat: () => 'webp' }),
+      // A browser crop, so that B's focus would show as an object-position on the image.
+      options: () => ({ ...measured(), aspectRatio: 1, crop: 'browser' as const, srcWidth: 1000, srcHeight: 500, focalPoint: { x: 10, y: 10 } }),
+      drive: (_, box) => resize(box, 300, 300),
+    },
+    // A ladder of three candidates: the first call ends B, and the URLs of the other two go nowhere.
+    {
+      hook: 'loader of a candidate list',
+      measured: true,
+      throws: true,
+      config: (fire) => ({ loader: { ...ladder, url: ({ width }: ImageRequest) => (fire(), `/b-${width}.webp`) } }),
+      options: () => ({ ...measured(), srcWidth: 1000, srcHeight: 500 }),
+      drive: (_, box) => resize(box, 300, 150),
+    },
+    { hook: 'detectFormat returns', measured: true, throws: true, config: (fire) => ({ loader: twoFormats, detectFormat: () => (fire(), 'webp') }), options: measured },
+    { hook: 'detectFormat resolves', measured: true, throws: true, config: (fire) => ({ loader: twoFormats, detectFormat: async () => (fire(), 'webp' as const) }), options: measured },
+    {
+      hook: 'detectFormat rejects',
+      measured: true,
+      throws: true,
+      config: (fire) => ({
+        loader: twoFormats,
+        detectFormat: async () => {
+          fire()
+          throw new Error('no format')
+        },
+      }),
+      options: measured,
+    },
+  ]
+
+  for (const [name, create] of [['full', createLazyEase], ['prepared', createPrepared]] as const)
+    for (const row of rows)
+      for (const action of actions) {
+        if ((row.measured && name === 'prepared') || (action === 'update and throw' && !row.throws) || row.skip === action) continue
+        it(`${name}: ${row.hook}, ${action}`, async () => {
+          if (row.markup) document.body.innerHTML = row.markup
+          const { box, img } = row.markup ? { box: document.querySelector<HTMLElement>('[data-le]')!, img: document.querySelector('img')! } : boxed()
+          if (row.markup) fakeImage(img)
+          mockAnimate(img)
+          const out = mockAnimate(box)
+          const caught = uncaught()
+          onTestFinished(caught.restore)
+          const errors = caught.errors
+          const step = async (callback: () => unknown) => {
+            try {
+              await callback()
+            } catch (error) {
+              errors.push(error)
+            }
+          }
+          let armed = false
+          let current: Attachment | undefined
+          const fire = () => {
+            if (!armed) return
+            armed = false
+            if (action === 'destroy and attach') {
+              current!.destroy()
+              // Back to the placeholder first, or N adopts what B displays.
+              img.setAttribute('src', INERT)
+              current = le.attach(img, N)
+            } else {
+              current!.update(N)
+              if (action === 'update and throw') throw new Error('boom')
+            }
+          }
+          const le = create({ ...row.config?.(fire, () => current!) })
+          current = le.attach(img, row.a ?? { url: '/z.webp' })
+          row.before?.(img)
+          armed = true
+          await step(() => current!.update(row.options(fire)))
+          await step(() => row.drive?.(img, box))
+          await step(() => vi.advanceTimersByTimeAsync(1000))
+          await caught.settle()
+          expect(armed).toBe(false)
+          if (action === 'update and throw') expect(errors).toContainEqual(new Error('boom'))
+          expect(img.getAttribute('src')).toBe('/n.webp')
+          expect(box.style.backgroundColor).toBe('red')
+          expect(box.style.backgroundImage).toBe('')
+          expect(img.style.opacity).toBe('0')
+          expect(img.style.objectPosition).toBe('')
+          expect(box.getAttribute('data-state')).toBe('loading')
+          expect(current.state).toBe('loading')
+          expect(() => le.attach(img, { url: '/x.webp' })).toThrow('already attached')
+          row.after?.(img, out)
+        })
+      }
+
+  it('keeps the last update of a loader that updates the image for every candidate', () => {
+    const { box, img } = boxed()
+    const asked: number[] = []
+    let handle: Attachment | undefined
+    const loader = {
+      ...ladder,
+      url: ({ width }: ImageRequest) => {
+        asked.push(width)
+        handle!.update({ url: `/n${width}.webp`, loading: 'eager' })
+        return `/b-${width}.webp`
+      },
+    }
+    handle = createLazyEase({ loader }).attach(img, { src: '/b.jpg', loading: 'eager', srcWidth: 1000, srcHeight: 500 })
+    resize(box, 300, 150)
+    // The loader is a pure function to the controller: it is asked for the whole list, and the list is dropped.
+    expect(asked).toEqual([100, 200, 400])
+    expect(img.getAttribute('src')).toBe('/n400.webp')
+    expect(img.hasAttribute('srcset')).toBe(false)
+  })
+})
+
 describe('validation', () => {
   it.each<[string, AttachOptions]>([
     ['measured and prepared', { src: '/a.jpg', srcset: '/a.webp 640w' }],
@@ -728,8 +1480,8 @@ describe('ownership', () => {
 
   it('is shared by separate copies of the package', async () => {
     // A second module instance, as a second bundle on the page would have.
-    const path = '../src/dom/controller.js?copy'
-    const copy = (await import(/* @vite-ignore */ path)) as typeof import('../src/dom/controller.js')
+    const path = '../src/dom/measure.js?copy'
+    const copy = (await import(/* @vite-ignore */ path)) as typeof import('../src/dom/measure.js')
     expect(copy.createLazyEase).not.toBe(createLazyEase)
     const { img, box } = setup()
     const handle = createLazyEase().attach(img, { url: '/a.webp' })
@@ -1074,6 +1826,15 @@ describe('formats', () => {
     expect(img.getAttribute('src')).toContain('fmt=webp')
   })
 
+  it('asks no detector for a single declared format', () => {
+    const detectFormat = vi.fn(() => new Promise<ImageFormat>(() => {}))
+    const { img, box } = boxed()
+    createLazyEase({ loader: createLoader({ formats: ['jpeg'] }), detectFormat }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(box, 100, 100)
+    expect(img.getAttribute('src')).toContain('fmt=jpeg')
+    expect(detectFormat).not.toHaveBeenCalled()
+  })
+
   it('passes auto to an auto-negotiating loader without probing', () => {
     const url = vi.fn((r: ImageRequest) => `/cdn${r.src}?w=${r.width}&f=${r.format}`)
     const { img, box, attach } = setup({ loader: { url, widths: [100, 200], qualities: [75], formats: 'auto' } })
@@ -1083,8 +1844,31 @@ describe('formats', () => {
     expect(img.getAttribute('src')).toBe('/cdn/a.jpg?w=200&f=auto')
   })
 
+  it('requests the best declared format other than AVIF without a detector, and warns once in development', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    for (let i = 0; i < 2; i++) {
+      const { img, box } = boxed()
+      createLazyEase({ loader: createLoader() }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+      // Synchronous: the first size installs at once.
+      resize(box, 100, 100)
+      expect(img.getAttribute('src')).toContain('fmt=webp')
+    }
+    const other = boxed()
+    createLazyEase({ loader: createLoader({ formats: ['avif', 'jpeg'] }) }).attach(other.img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(other.box, 100, 100)
+    expect(other.img.getAttribute('src')).toContain('fmt=jpeg')
+    expect(probe.created).toBe(0)
+    // A loader that declares only AVIF gets AVIF, and no warning.
+    const single = boxed()
+    createLazyEase({ loader: createLoader({ formats: ['avif'] }) }).attach(single.img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    resize(single.box, 100, 100)
+    expect(single.img.getAttribute('src')).toContain('fmt=avif')
+    expect(warn).toHaveBeenCalledOnce()
+    expect(warn.mock.calls[0]![0]).toMatch(/request webp\. Pass detectFormat: detectAvif/)
+  })
+
   it('probes once on first need and takes the best declared format', async () => {
-    const le = createLazyEase({ loader: createLoader() })
+    const le = createLazyEase({ loader: createLoader(), detectFormat: detectAvif })
     expect(probe.created).toBe(0)
     const { img, box } = boxed()
     le.attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
@@ -1095,37 +1879,101 @@ describe('formats', () => {
   })
 
   it('decides without a probe when AVIF is not declared', () => {
-    expect(chooseFormat(['webp', 'jpeg'])).toBe('webp')
-    expect(chooseFormat(['jpeg', 'webp'])).toBe('webp')
+    expect(detectAvif(['webp', 'jpeg'])).toBe('webp')
+    expect(detectAvif(['jpeg', 'webp'])).toBe('webp')
+    expect(detectAvif(['avif'])).toBe('avif')
     const { img, box } = boxed()
-    createLazyEase({ loader: createLoader({ formats: ['webp', 'jpeg'] }) }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    createLazyEase({ loader: createLoader({ formats: ['webp', 'jpeg'] }), detectFormat: detectAvif }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     // Synchronous: the first size installs at once.
     resize(box, 100, 100)
     expect(img.getAttribute('src')).toContain('fmt=webp')
     expect(probe.created).toBe(0)
   })
 
-  it('falls back to WebP when detection takes longer than 200 ms', async () => {
+  it('falls back to WebP, or the next declared format, when detection takes longer than 200 ms', async () => {
     probe.hang = true
     const { img, box } = boxed()
-    createLazyEase({ loader: createLoader() }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    createLazyEase({ loader: createLoader(), detectFormat: detectAvif }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     await vi.advanceTimersByTimeAsync(200)
     resize(box, 100, 100)
     expect(img.getAttribute('src')).toContain('fmt=webp')
+    const jpeg = detectAvif(['avif', 'jpeg'])
+    await vi.advanceTimersByTimeAsync(200)
+    await expect(jpeg).resolves.toBe('jpeg')
   })
 
   it('takes WebP, or the next declared format, when the browser does not decode AVIF', async () => {
     probe.avif = false
     const { img, box } = boxed()
-    createLazyEase({ loader: createLoader() }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    createLazyEase({ loader: createLoader(), detectFormat: detectAvif }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     await flush()
     resize(box, 100, 100)
     expect(img.getAttribute('src')).toContain('fmt=webp')
     const other = boxed()
-    createLazyEase({ loader: createLoader({ formats: ['avif', 'jpeg'] }) }).attach(other.img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    createLazyEase({ loader: createLoader({ formats: ['avif', 'jpeg'] }), detectFormat: detectAvif }).attach(other.img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
     resize(other.box, 100, 100)
     expect(other.img.getAttribute('src')).toContain('fmt=jpeg')
     expect(probe.created).toBe(1)
+  })
+})
+
+describe('format detectors that fail', () => {
+  const broken = [
+    () => {
+      throw new Error('broken detector')
+    },
+    () => Promise.reject(new Error('broken detector')),
+  ]
+
+  it('reports the error and takes the format no detector would', async () => {
+    for (const detectFormat of broken) {
+      const { img, box } = boxed()
+      createLazyEase({ loader: createLoader(), detectFormat }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+      await expect(flush()).rejects.toThrow('broken detector')
+      resize(box, 100, 100)
+      expect(img.getAttribute('src')).toContain('fmt=webp')
+    }
+  })
+
+  it('installs nothing for a generation that ended before the detector rejected', async () => {
+    let reject: (error: Error) => void = () => {}
+    let calls = 0
+    const detectFormat = (): ImageFormat | Promise<ImageFormat> => (calls++ ? 'jpeg' : new Promise((_, no) => (reject = no)))
+    const { img, box } = boxed()
+    const handle = createLazyEase({ loader: createLoader(), detectFormat }).attach(img, { src: '/a.jpg', aspectRatio: 1, loading: 'eager' })
+    handle.update({ src: '/b.jpg', aspectRatio: 1, loading: 'eager' })
+    reject(new Error('broken detector'))
+    await expect(flush()).rejects.toThrow('broken detector')
+    resize(box, 100, 100)
+    expect(img.getAttribute('src')).toContain('/b.jpg')
+    expect(img.getAttribute('src')).toContain('fmt=jpeg')
+  })
+})
+
+describe('without measured mode (@lazy-ease/core/prepared)', () => {
+  it('loads prepared, native and direct sources as the full controller does', async () => {
+    const { img, box } = boxed()
+    const handle = createPrepared().attach(img, { srcset: '/sq-750.webp 750w', sizes: '100vw', loading: 'eager' })
+    expect(img.getAttribute('srcset')).toBe('/sq-750.webp 750w')
+    expect(box.getAttribute('data-state')).toBe('loading')
+    await loadAndDecode(img, '/sq-750.webp')
+    expect(handle.state).toBe('loaded')
+    handle.update({ src: '/logo.svg', loading: 'eager' })
+    expect(img.getAttribute('src')).toBe('/logo.svg')
+    expect(img.hasAttribute('srcset')).toBe(false)
+  })
+
+  it('rejects a source the loader would build, with or without a loader', () => {
+    for (const config of [{}, { loader: webpLoader }]) {
+      const { img, box } = boxed()
+      const before = document.body.innerHTML
+      expect(() => createPrepared(config).attach(img, { src: '/a.jpg', loading: 'eager' })).toThrow('[lazy-ease] src needs createLazyEase from @lazy-ease/core')
+      expect(document.body.innerHTML).toBe(before)
+      expect(box.hasAttribute('data-state')).toBe(false)
+    }
+    const { img } = boxed()
+    const handle = createPrepared({ loader: webpLoader }).attach(img, { url: '/a.webp' })
+    expect(() => handle.update({ src: '/a.jpg' })).toThrow(/src needs createLazyEase/)
   })
 })
 
@@ -1237,5 +2085,27 @@ describe('placeholders', () => {
     intersect(box)
     expect(lazy).toHaveBeenCalledOnce()
     expect(box.style.backgroundImage).toContain('BBBB')
+  })
+
+  it('paints a transparent ThumbHash without its color, and removes it after the reveal', async () => {
+    const png = `data:image/png;base64,${btoa(String.fromCharCode(137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 32, 0, 0, 0, 32, 8, 6, 0, 0, 0))}`
+    const thumbhash = thumbhashDecoder({ thumbHashToAverageRGBA: () => ({ r: 0.5, g: 0, b: 1, a: 0.3 }), thumbHashToDataURL: () => png })
+    // A header with the alpha flag (bit 23) set.
+    const hash = btoa(String.fromCharCode(0, 0, 0x80, 0, 0, 0))
+    for (const reveal of [undefined, focusReveal]) {
+      const { img, box, attach } = setup({ thumbhash, reveal })
+      mockAnimate(img)
+      attach({ url: '/logo.webp', placeholder: `thumbhash:${hash}` })
+      expect(box.style.backgroundColor).toBe('rgba(128, 0, 255, 0.3)')
+      intersect(box)
+      // The blurred image alone: a color under it would tint the transparent parts.
+      expect(box.style.backgroundColor).toBe('')
+      expect(box.style.backgroundImage).toContain('data:image/svg+xml')
+      expect(decodeURIComponent(box.style.backgroundImage)).not.toContain('feFuncA')
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(400)
+      expect(box.style.backgroundImage).toBe('')
+      expect(img.style.opacity).toBe('')
+    }
   })
 })

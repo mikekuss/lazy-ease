@@ -1,4 +1,4 @@
-import { createLazyEase, createLoader, type ImageLoader, type LazyEase } from '@lazy-ease/core'
+import { createLazyEase, createLoader, detectAvif, type ImageLoader, type LazyEase } from '@lazy-ease/core'
 import { cssText } from '@lazy-ease/vanilla/css'
 import { useEffect, useRef, useState } from 'react'
 import { PRIVATE } from '../catalog'
@@ -79,7 +79,7 @@ export function ShadowPanel({ loader }: { loader: ImageLoader }) {
     shadow.adoptedStyleSheets = [sheet]
     shadow.innerHTML = `<div class="panel"><p>Scroll this panel.</p><div class="spacer"></div><span data-le></span><small></small></div>`
     const panel = shadow.querySelector<HTMLElement>('.panel')!
-    setController({ le: createLazyEase({ loader, root: panel, onStateChange: (next) => show.current(next) }), panel })
+    setController({ le: createLazyEase({ loader, root: panel, detectFormat: detectAvif, onStateChange: (next) => show.current(next) }), panel })
   }, [loader])
 
   useEffect(() => {

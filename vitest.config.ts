@@ -7,6 +7,7 @@ export default defineConfig({
     alias: [
       { find: /^@lazy-ease\/core$/, replacement: fileURLToPath(new URL('packages/core/src/index.ts', import.meta.url)) },
       { find: /^@lazy-ease\/core\/thumbhash$/, replacement: fileURLToPath(new URL('packages/core/src/thumbhash.ts', import.meta.url)) },
+      { find: /^@lazy-ease\/core\/prepared$/, replacement: fileURLToPath(new URL('packages/core/src/prepared.ts', import.meta.url)) },
     ],
   },
   test: {

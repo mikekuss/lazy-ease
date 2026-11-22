@@ -12,7 +12,7 @@ import { Image } from '@lazy-ease/react'
 
 What it does:
 
-1. **Less data.** Every image is delivered at the size it is rendered at (× device pixel ratio, capped at 2), in AVIF or WebP, cropped by the server or the browser.
+1. **Less data.** Every image is delivered at the size it is rendered at (× device pixel ratio, capped at 2), in WebP or, with the opt-in detection, AVIF, cropped by the server or the browser.
 2. **No layout shift.** Fixed sizes, aspect ratios, fill boxes and known source dimensions reserve the space before the image arrives.
 3. **No unnecessary loads.** Deferred images aren't requested until they come near the viewport. Measured images hidden with `display: none` are never requested.
 4. **A placeholder on first paint.** A color, a data URI or a [ThumbHash](https://evanw.github.io/thumbhash/) as an inline style in the server HTML, with no extra request.
@@ -100,11 +100,12 @@ export function App() {
 | `priority` | `boolean` | `false` | Native sources, eager, `fetchpriority="high"`, a preload and no fade. Requires `width` or `sizes`. For the LCP image only. |
 | `placeholder` | `string` | provider (`'#e5e7eb'`) | A CSS color, a data URI, `thumbhash:<base64>` or `'none'`. See [Placeholders](#placeholders). |
 | `fadeDuration` | `number` | provider (`400`) | Fade in ms after load and decode. `0` swaps directly. Native images never fade. |
+| `reveal` | `Reveal` | provider (none) | Keyframes for the fade instead of the crossfade. `focusReveal` from `@lazy-ease/core` starts the image as blurred as a ThumbHash placeholder and sharpens it. |
 | `unoptimized` | `boolean` | `false` | Loads `src` as is, without the loader. |
 | `loader` | `ImageLoader` or function | provider | Per-image loader. Ignored on images that load directly, with a development warning. |
 | `sources` | `ImageSource[]` | | Art-direction sources in a `<picture>`, each with `media`, `src` and optional `aspectRatio`, `srcWidth`, `srcHeight`, `focalPoint`, `sizes`, `token` and `version`. |
 | `noScript` | `boolean` | `false` | Adds a native `<img>` in `<noscript>` for visitors without JavaScript. Deferred images only. |
-| `onStateChange` | `(state, img) => void` | | Every state change: `idle`, `loading`, `loaded` (once per source, also for an image that loaded before hydration) or `error`. |
+| `onStateChange` | `(state, img) => void` | | Every state change: `idle`, `loading`, `loaded` (once per source, also for an image that loaded before hydration) or `error`. An error it throws is reported as an uncaught error and changes nothing for the image. |
 | `onLoad` | | | The React event of the first real load of the displayed source, called once. An image adopted after hydration gets no event; use `onStateChange`. Resolution upgrades aren't reported. |
 | `ref` | | | Forwarded to the `<img>`. |
 | `className`, `style` | | | Applied to the `<img>`. |
@@ -163,8 +164,10 @@ These combinations throw in development: `height` without `width`; `fill` with `
 | `dwellTime` | `0` | How long, in ms, an image must stay in the preload zone before it loads. Leaving earlier requests nothing, so fast flings through a long gallery stay cheap. |
 | `placeholder` | `'#e5e7eb'` | Used without a `placeholder` prop or for an invalid one. |
 | `fadeDuration` | `400` | |
+| `reveal` | none | `focusReveal` sharpens every deferred image from a placeholder-like blur during its fade. |
 | `thumbhash` | none | The decoder for `thumbhash:` placeholders, `thumbhashDecoder(thumbhash)` from `@lazy-ease/core/thumbhash`. See [Placeholders](#placeholders). |
 | `thumbhashSsr` | `'color'` | `'image'` puts decoded ThumbHash images in the server HTML instead of only their average color. |
+| `detectFormat` | none | Picks the format of measured images: `detectAvif` from `@lazy-ease/core` requests AVIF where the browser decodes it. Without it they take the best declared format other than AVIF, WebP first; a loader that declares only AVIF gets AVIF. Pass a stable function: a new one reattaches every image. See [Loading modes](#loading-modes). |
 
 ## Loading modes
 
@@ -179,7 +182,7 @@ Where the URLs come from and when the image shows are separate choices:
 
 `loading="lazy"` (the default) activates a deferred image when it comes within `rootMargin` of the root, through one shared `IntersectionObserver` per root and margin. `loading="eager"` activates it right after hydration, still with the fade.
 
-**Measured images** grow their candidates when the box grows (after a 200 ms trailing debounce) and never shrink them, so resizing only downloads anything when a larger ladder step is needed. The browser keeps the displayed image during an upgrade. The format is the best one the browser decodes among the loader's `formats`: AVIF is probed once, when the first measured image activates, and WebP is taken if that takes longer than 200 ms. In development, the component warns when a deferred image is already in the first viewport when it mounts.
+**Measured images** grow their candidates when the box grows (after a 200 ms trailing debounce) and never shrink them, so resizing only downloads anything when a larger ladder step is needed. The browser keeps the displayed image during an upgrade. The format is the best one the loader declares other than AVIF, WebP first. AVIF detection is opt-in, so apps that don't use it don't ship it: with `detectFormat={detectAvif}` (from `@lazy-ease/core`) on the provider, the format is the best one the browser decodes among the loader's `formats`; AVIF is probed once, when the first measured image activates; if that takes longer than 200 ms, the image takes the best declared format other than AVIF: WebP if declared, otherwise JPEG. A loader that declares only AVIF gets AVIF, without a detector and without a warning. A development build warns once when the loader declares AVIF besides other formats and no detector is set. In development, the component warns when a deferred image is already in the first viewport when it mounts.
 
 **Prepared and native candidates** are built before anything is known about the browser, so they use WebP (or JPEG, if the loader has no WebP). A known `width` gives the 1× and 2× widths, snapped to the ladder; without `width`, `sizes` offers the full ladder. `sizes` defaults to `{width}px` or `100vw`.
 
@@ -187,7 +190,7 @@ Where the URLs come from and when the image shows are separate choices:
 
 `priority` emits a `<link rel="preload" as="image" imagesrcset imagesizes fetchpriority="high">` through React's `preload()`, built from the same strings as the `<img>`, with its `crossOrigin` and `referrerPolicy`, so the browser fetches the image once. With `sources`, only the first source is preloaded, under its media query. Use `priority` for the LCP image only and `loading="native"` for other images in the first viewport: deferred images wait for hydration, and the browser's preload scanner never sees them.
 
-**Fade.** A deferred image fades in over `fadeDuration` after it has loaded and decoded, so a half-downloaded image never paints. If decoding takes longer than 250 ms the image is shown anyway. `fadeDuration={0}` or `prefers-reduced-motion: reduce` swaps directly. Later upgrades don't fade again. The placeholder is removed after the fade, so transparent images don't show it. A failed first load removes the placeholder, keeps the reserved area and sets `data-state="error"`, so the alt text or the browser's broken-image presentation shows.
+**Fade.** A deferred image fades in over `fadeDuration` after it has loaded and decoded, so a half-downloaded image never paints. If decoding takes longer than 250 ms the image is shown anyway. `fadeDuration={0}` or `prefers-reduced-motion: reduce` swaps directly. Later upgrades don't fade again. With `reveal={focusReveal}` (from `@lazy-ease/core`) the image starts blurred by 8 % of the box's longer edge, as much as a ThumbHash placeholder, is opaque after 45 % of the fade and sharpens until its end, so the placeholder seems to come into focus. A mask of the image's box keeps the blur inside it; the image's own `clip-path` still applies, a `mask` of its own is replaced while the reveal runs. The box size comes from a ResizeObserver, so the reveal reads no layout. A reveal is a function from that edge to keyframes, so a bundle that doesn't import `focusReveal` doesn't carry it; one that throws gets the plain fade, and its error is reported. Another reveal function takes effect at the next fade, without a re-attach. The placeholder stays under the image until the fade ends and is removed then, so transparent images don't show it. A ThumbHash with alpha stands for a transparent image: its placeholder fades out during the fade instead, so the image crossfades. A failed first load removes the placeholder, keeps the reserved area and sets `data-state="error"`, so the alt text or the browser's broken-image presentation shows.
 
 **Nested scroll containers.** Inside a carousel or an `overflow: auto` panel, the container clips before `rootMargin` applies along its scroll axis. The observer also passes the margin as `scrollMargin`, which Chromium supports; elsewhere such images load when they become visible. Set the provider's `root` to the container to observe against it.
 
@@ -222,7 +225,7 @@ export function Gallery({ hash }: { hash: string }) {
 }
 ```
 
-A decoded ThumbHash is a PNG data URI of about 5.5 KB per image. So the server HTML gets only the hash's average color, and a deferred image swaps in the decoded image when it activates, so off-screen images never decode. `priority` images, and every image under `thumbhashSsr: 'image'`, get the decoded image in the server HTML. Other native images show only the color. Without a decoder, a `thumbhash:` placeholder falls back to the provider's default with a development warning.
+The decoded image is a small PNG that the browser would upscale with visible steps, so the decoder draws it in an SVG with a Gaussian blur of 8 % of its longer edge: `thumbhashDecoder(thumbhash, { blur: 12 })` changes it, `blur: 0` paints the PNG as is. A ThumbHash with alpha keeps its transparency, paints no average color under its image and fades out while the image fades in, so a transparent image crossfades. Every other placeholder (colors, data URIs, opaque ThumbHashes, the box's own CSS) stays under the image until the fade ends, also under the edges `focusReveal` blurs. A decoded ThumbHash is about 6 KB per image, the PNG in its blurring SVG. So the server HTML gets only the hash's average color, and a deferred image swaps in the decoded image when it activates, so off-screen images never decode. `priority` images, and every image under `thumbhashSsr: 'image'`, get the decoded image in the server HTML. Other native images show only the color. Without a decoder, a `thumbhash:` placeholder falls back to the provider's default with a development warning.
 
 **Metadata.** Compute sizes, placeholders and revisions once, at upload or build time, and store them with the image:
 

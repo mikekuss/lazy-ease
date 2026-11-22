@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { createLazyEase, createLoader, type LazyEaseConfig } from '@lazy-ease/core'
+import { createLazyEase, createLoader, focusReveal, type LazyEaseConfig } from '@lazy-ease/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetFormatDetection } from '../../core/src/dom/format.js'
 import { resetObservers } from '../../core/src/dom/observe.js'
-import { fakeImage, flush, installDom, intersect, load, MockIntersectionObserver, MockResizeObserver, resize } from '../../core/test/dom-mocks.js'
+import { fakeImage, flush, installDom, intersect, load, mockAnimate, MockIntersectionObserver, MockResizeObserver, resize } from '../../core/test/dom-mocks.js'
 import { cssText } from '../src/css.js'
 import { enhance, readOptions } from '../src/index.js'
 
@@ -329,6 +329,17 @@ describe('enhance', () => {
     enhance(le, panel)
     expect(MockIntersectionObserver.instances.at(-1)!.elements.size).toBe(0)
     handle.destroy()
+  })
+
+  it('passes the reveal of its instance to every image it attaches', async () => {
+    html(`<main>${boxed('data-le-url="/a.jpg"', 'm')}</main>`)
+    const animations = mockAnimate(img('m'))
+    enhance(createLazyEase({ reveal: focusReveal }))
+    resize($('#m'), 400, 300)
+    intersect($('#m'))
+    load(img('m'))
+    await flush()
+    expect(animations.map((animation) => animation.keyframes)).toMatchObject([[{ opacity: 0, filter: 'blur(32px)' }, { opacity: 1, offset: 0.45 }, { opacity: 1, filter: 'blur(0px)' }]])
   })
 
   it('stops watching a background on destroy', () => {
