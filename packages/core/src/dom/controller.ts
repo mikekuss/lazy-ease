@@ -101,10 +101,10 @@ export interface Attachment {
   /**
    * Starts a new generation for new options (a new logical source) with its
    * own placeholder. A native generation adopts the sources the element has
-   * when `update` runs, so set them first. The same deferred source (src,
-   * srcset, url, version and picture sources) keeps an image that has its
-   * target, loading, loaded or failed, under the new options; one without it
-   * starts over on the same placeholder.
+   * when `update` runs, so set them first. Options that differ from the
+   * current ones only in their functions (callbacks, reveal, the loader's url),
+   * for the same picture sources, keep an image that has its target, loading,
+   * loaded or failed, and take effect from then on.
    */
   update(options: AttachOptions): void
   /** Releases listeners, observers, timers and ownership. The element keeps what it displays. */
@@ -249,7 +249,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           else if (element.getAttribute(name) !== value) element.setAttribute(name, value)
         })
       let state: LoadState | undefined
-      // Ends the generation, or keeps it under options of the same source and returns them.
+      // Ends the generation, or keeps it under options that differ only in their functions and returns them.
       let stop: ((next?: Options) => unknown) | undefined
 
       const report = (next: LoadState) => {
@@ -467,8 +467,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           }
 
           const end = (next?: Options) => {
-            // The same source keeps an image that has its target, loading, loaded or failed, under the new options.
-            if (next && assigned && identity(next, deferredSources()) === target) return (o = next)
+            // Options that differ only in their functions keep an image that has its target, loading, loaded or failed.
+            if (next && assigned && identity(next, deferredSources()) === target && JSON.stringify(next) === JSON.stringify(o)) return (o = next)
             live = false
             cleanups.forEach((cleanup) => cleanup())
             timers.forEach(clearTimeout)
