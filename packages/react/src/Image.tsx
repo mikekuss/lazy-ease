@@ -410,8 +410,11 @@ function ImageBox({
         const synthetic = state.event as unknown as { currentTarget: EventTarget | null }
         // React has reset currentTarget since the event was dispatched.
         synthetic.currentTarget = img
-        state.onLoad?.(state.event!)
-        synthetic.currentTarget = null
+        try {
+          state.onLoad?.(state.event!)
+        } finally {
+          synthetic.currentTarget = null
+        }
       },
     })
     // A target hidden for its fade before a re-attach (Strict Mode) is hidden again, so it still fades.

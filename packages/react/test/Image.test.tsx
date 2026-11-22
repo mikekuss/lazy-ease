@@ -525,6 +525,21 @@ describe('lifecycle', () => {
     expect(onLoad).toHaveBeenCalledTimes(1)
   })
 
+  it('resets currentTarget when an adopted onLoad throws', async () => {
+    let seen: SyntheticEvent<HTMLImageElement> | undefined
+    const onLoad = vi.fn((event: SyntheticEvent<HTMLImageElement>) => {
+      seen = event
+      throw new Error('onLoad')
+    })
+    decoding.behavior = 'hang'
+    const { img, rerender } = mount({ width: 320, height: 240, sizes: '320px', loading: 'eager', fadeDuration: 300, onLoad })
+    load(img())
+    rerender({ fadeDuration: 301 })
+    await advance(1000).catch(() => {})
+    expect(onLoad).toHaveBeenCalledTimes(1)
+    expect(seen!.currentTarget).toBeNull()
+  })
+
   it('does not replay onLoad when only sizes changes', async () => {
     const onLoad = vi.fn()
     const { img, rerender } = mount({ aspectRatio: 1.5, sizes: '320px', srcWidth: 2400, srcHeight: 1600, loading: 'eager', fadeDuration: 300, onLoad })
