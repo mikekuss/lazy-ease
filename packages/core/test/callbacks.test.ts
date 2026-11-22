@@ -228,15 +228,15 @@ async function check(scenario: Scenario, action: (typeof actions)[number]): Prom
     return problems
   }
   if (action === 'throw' && scenario.hook === 'loader') {
-    // A loader that throws has no URL: the error reaches the observer's batch, and the image stays on
-    // its placeholder.
+    // A loader that throws has no URL: its observer subscription reports the error from a timer, and the
+    // image stays on its placeholder.
     expectEqual('errors', got.errors, [error])
     expectEqual('state', JSON.parse(got.final)[5], 'idle')
     expectEqual('src', JSON.parse(got.final)[0], INERT)
     return problems
   }
 
-  // Reported once: from a timer, or for the decoder and the loader where they were called.
+  // Reported once: from a timer, or for the decoder where it was called.
   expectEqual('errors', got.errors, throws ? [error] : [])
   if (plain === 'destroy') {
     expectEqual('element after destroy', got.final, got.atAction)

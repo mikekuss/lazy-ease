@@ -1,3 +1,5 @@
+import { guard } from './guard.js'
+
 type Root = Element | Document | null
 type Callback = (...args: any[]) => void
 
@@ -21,8 +23,9 @@ function observe(root: Root | undefined, margin: string | undefined, element: El
     pools.push((pool = { root, margin, callbacks, observer: create(callbacks) }))
   }
   const { observer, callbacks } = pool
-  // Its own identity, so the same callback can subscribe twice.
-  const subscription: Callback = (...args) => callback(...args)
+  // Its own identity, so the same callback can subscribe twice. Guarded, so one
+  // that throws reports its error from a timer and the rest of the batch runs.
+  const subscription: Callback = (...args) => guard(callback, ...args)
   let set = callbacks.get(element)
   if (set) observer.unobserve(element)
   else callbacks.set(element, (set = new Set()))

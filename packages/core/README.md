@@ -84,7 +84,7 @@ const le = createLazyEase()
 le.attach(document.querySelector<HTMLImageElement>('#card img')!, { srcset: '/a-640.webp 640w, /a-1280.webp 1280w', sizes: '50vw' })
 ```
 
-`whenVisible(element, { root, rootMargin, dwellTime }, callback)` is the visibility primitive on its own, for decorative backgrounds; it returns a function that cancels. `le.config` is the config the instance was created with, so an adapter can watch backgrounds against the same root and margin as the images.
+`whenVisible(element, { root, rootMargin, dwellTime }, callback)` is the visibility primitive on its own, for decorative backgrounds; it returns a function that cancels. An error the callback throws is reported from a timer, and the other elements of the same observer batch still get theirs. `le.config` is the config the instance was created with, so an adapter can watch backgrounds against the same root and margin as the images.
 
 `imageSet({ src, width, loader })` builds the CSS `image-set()` value for a decorative background: 1x and 2x (or the `densities` you pass) for every declared format, best first, with optional `aspectRatio`, `focalPoint`, `srcWidth`, `quality`, `version` and `token`:
 

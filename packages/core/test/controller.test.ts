@@ -1578,6 +1578,39 @@ describe('visibility', () => {
     expect(sizes).toEqual([10, 10, 20])
   })
 
+  it('runs the rest of an intersection batch when one whenVisible callback throws, and reports it from a timer', () => {
+    document.body.innerHTML = '<div></div><div></div>'
+    const [first, second] = [...document.querySelectorAll('div')]
+    const error = new Error('visible')
+    const calls: string[] = []
+    whenVisible(first!, {}, () => {
+      throw error
+    })
+    whenVisible(first!, {}, () => calls.push('first'))
+    whenVisible(second!, {}, () => calls.push('second'))
+    const [observer] = MockIntersectionObserver.instances
+    const entries = [first, second].map((target) => ({ target, isIntersecting: true }) as unknown as IntersectionObserverEntry)
+    observer!.callback(entries, observer as unknown as IntersectionObserver)
+    expect(calls).toEqual(['first', 'second'])
+    expect(() => vi.advanceTimersByTime(0)).toThrow(error)
+  })
+
+  it('reports sizes to the rest of a resize batch when one callback throws, and reports it from a timer', () => {
+    document.body.innerHTML = '<div></div><div></div>'
+    const [first, second] = [...document.querySelectorAll('div')]
+    const error = new Error('resize')
+    const sizes: number[] = []
+    observeResize(first!, () => {
+      throw error
+    })
+    observeResize(second!, (width) => sizes.push(width))
+    const [observer] = MockResizeObserver.instances
+    const entries = [first, second].map((target) => ({ target, contentRect: { width: 10, height: 10 } }) as unknown as ResizeObserverEntry)
+    observer!.callback(entries, observer as unknown as ResizeObserver)
+    expect(sizes).toEqual([10])
+    expect(() => vi.advanceTimersByTime(0)).toThrow(error)
+  })
+
   it('observes against a custom root', () => {
     document.body.innerHTML = `<div id="panel"><span data-le><img src="${INERT}"></span></div>`
     const panel = document.getElementById('panel')!
@@ -1695,6 +1728,27 @@ describe('measured mode', () => {
     expect(img.hasAttribute('srcset')).toBe(false)
     expect(img.hasAttribute('sizes')).toBe(false)
     expect(img.getAttribute('src')).toBe('/_img/lake.jpg?ar=1&fmt=webp&q=75&w=640')
+  })
+
+  it('sizes the other images of a resize batch when one image’s loader throws, and reports it from a timer', () => {
+    document.body.innerHTML = `<span data-le><img src="${INERT}"></span><span data-le><img src="${INERT}"></span>`
+    const [bad, good] = [...document.querySelectorAll('img')]
+    const [badBox, goodBox] = [...document.querySelectorAll('span')]
+    const error = new Error('loader')
+    const loader = createLoader({ formats: ['webp'] })
+    const url = (request: ImageRequest) => {
+      if (request.src === '/bad.jpg') throw error
+      return loader.url(request)
+    }
+    const le = createLazyEase({ loader: { ...loader, url } })
+    le.attach(bad!, { src: '/bad.jpg', aspectRatio: 1, loading: 'eager' })
+    le.attach(good!, { src: '/lake.jpg', aspectRatio: 1, loading: 'eager' })
+    const observer = MockResizeObserver.instances.find((o) => o.elements.has(badBox!) && o.elements.has(goodBox!))!
+    const entries = [badBox, goodBox].map((target) => ({ target, contentRect: { width: 300, height: 300 } }) as unknown as ResizeObserverEntry)
+    observer.callback(entries, observer as unknown as ResizeObserver)
+    expect(good!.getAttribute('src')).toBe('/_img/lake.jpg?ar=1&fmt=webp&q=75&w=640')
+    expect(bad!.getAttribute('src')).toBe(INERT)
+    expect(() => vi.advanceTimersByTime(0)).toThrow(error)
   })
 
   it('passes the crop token and revision to the loader', () => {
