@@ -208,15 +208,22 @@ describe.each([false, true])('the next update and the old source (Strict Mode: %
       const { calls, final, expected, tag, state, opacity, claimed } = await scenario(kind, change, timing, strict)
       const of = (hook: Call['hook'], source: string) => calls.filter((call) => call.hook === hook && call.source === source)
 
-      // Only the committed render's callbacks, its loader and decoder included, and never for an img that left the document.
-      // A ThumbHash's lazy() belongs to the decode the attachment made, and the decoder is pure: an attachment
-      // that outlives its render (an update of the callbacks alone) still swaps in that decode's image.
-      expect(calls.filter((call) => !call.rendering && call.hook !== 'lazy' && call.tag !== call.committed)).toEqual([])
-      expect(calls.filter((call) => !call.connected)).toEqual([])
       const pure = ['loader', 'decoder', 'lazy'] as const
+      const isPure = (call: Call) => pure.some((hook) => hook === call.hook)
+      // Only the committed render's callbacks, its loader and decoder included, and never for an img that left the
+      // document. Only the loader and decoder may run while React renders, for that render.
+      expect(calls.filter((call) => !(call.rendering && isPure(call)) && call.hook !== 'lazy' && call.tag !== call.committed)).toEqual([])
+      expect(calls.filter((call) => !call.connected)).toEqual([])
+      // A ThumbHash's lazy() belongs to the decode the attachment made, and the decoder is pure: an attachment that
+      // outlives its render (an update of the callbacks alone) still swaps in that decode's image, but no other.
+      let decoded: string | undefined
+      for (const call of calls) {
+        if (call.hook === 'decoder' && !call.rendering) decoded = call.tag
+        else if (call.hook === 'lazy') expect(call.tag, 'lazy() of the last decode').toBe(decoded)
+      }
       if (kind === 'native') {
         // A native image's URLs and placeholder are rendered: the controller calls neither the loader nor the decoder.
-        expect(calls.filter((call) => pure.some((hook) => hook === call.hook) && !call.rendering)).toEqual([])
+        expect(calls.filter((call) => isPure(call) && !call.rendering)).toEqual([])
       } else {
         // The controller does reach the loader and decoder; those of the committed render where it attached again.
         const attachedAgain = change === 'src' || change === 'version'
@@ -228,7 +235,10 @@ describe.each([false, true])('the next update and the old source (Strict Mode: %
         for (const hook of ['onLoad', 'loaded', 'reveal'] as const) expect(of(hook, source).length, `${hook} of ${source}`).toBeLessThanOrEqual(1)
       // A source replaced before it was displayed reaches nothing. A native image is displayed on its load, not its decode.
       const replaced = (change === 'src' || change === 'version') && timing !== 'before the update' && !(kind === 'native' && timing === 'in its commit')
-      if (replaced) expect(calls.filter((call) => call.source === 'a t1 r1' && call.hook !== 'loader')).toEqual([])
+      // Its loader may have built its URLs (while rendering, or for a browse before the update), but the controller
+      // asks it for nothing once the update is in.
+      const browsedBefore = timing === 'in its commit'
+      if (replaced) expect(calls.filter((call) => call.source === 'a t1 r1' && (call.hook !== 'loader' || (!browsedBefore && !call.rendering)))).toEqual([])
       // The committed source is displayed, once.
       expect(final).toBe(expected)
       expect([state, opacity, claimed]).toEqual(['loaded', '', true])
@@ -238,11 +248,14 @@ describe.each([false, true])('the next update and the old source (Strict Mode: %
       const reported = upgraded ? 'a t1 r1' : expected
       if (upgraded) expect(calls.filter((call) => call.source === expected && call.hook !== 'loader')).toEqual([])
       expect(of('onLoad', reported)).toHaveLength(1)
-      // A native img that React gives a new URL after it loaded stays `loaded`: its state reports nothing new.
+      // Known gap, not the contract: a native img that React gives a new version or token after it loaded is not
+      // re-attached (its attach options carry no URLs), so it stays `loaded` and reports nothing for the new source,
+      // and a failed load of the new URL is not reported as `error` either. The contract is `loaded` once per source.
       const restated = kind === 'native' && (change === 'version' || change === 'token') && timing !== 'after it'
       expect(of('loaded', reported)).toHaveLength(restated ? 0 : 1)
       // An image whose decode ends as a new attachment of the same source starts (it finished loading while it was
-      // hidden, or a new token re-attaches a measured image) is adopted: displayed without a fade. A native image has no fade.
+      // hidden, or a new token re-attaches a measured image) is adopted: the placeholder gives way to it at once,
+      // without a fade. Accepted: the token is not part of the source. A native image has no fade.
       const adopted = timing === 'in its commit' && (change === 'hidden by Suspense' || (kind === 'deferred' && change === 'token'))
       expect(of('reveal', reported)).toHaveLength(kind === 'native' || adopted ? 0 : 1)
     })

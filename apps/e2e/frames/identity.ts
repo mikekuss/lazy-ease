@@ -8,12 +8,17 @@ import type { FullConfig } from '@playwright/test'
 // against someone else's code would prove nothing.
 const expected = path.resolve(import.meta.dirname, '..', '..', 'demo')
 
+/** Whether two paths name the same directory; a path that no longer exists (a deleted worktree) names none. */
 export const same = (a: string, b: string) => {
   const norm = (p: string) => {
     const real = realpathSync.native(p)
     return process.platform === 'win32' ? real.toLowerCase() : real
   }
-  return norm(a) === norm(b)
+  try {
+    return norm(a) === norm(b)
+  } catch {
+    return false
+  }
 }
 
 export default async function identity(config: FullConfig) {
