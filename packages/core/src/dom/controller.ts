@@ -101,7 +101,10 @@ export interface Attachment {
   /**
    * Starts a new generation for new options (a new logical source) with its
    * own placeholder. A native generation adopts the sources the element has
-   * when `update` runs, so set them first.
+   * when `update` runs, so set them first. The same deferred source (src,
+   * srcset, url, version and picture sources) keeps an image that has its
+   * target, loading, loaded or failed, under the new options; one without it
+   * starts over on the same placeholder.
    */
   update(options: AttachOptions): void
   /** Releases listeners, observers, timers and ownership. The element keeps what it displays. */
@@ -246,7 +249,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           else if (element.getAttribute(name) !== value) element.setAttribute(name, value)
         })
       let state: LoadState | undefined
-      let stop: ((next?: Options) => void) | undefined
+      // Ends the generation, or keeps it under options of the same source and returns them.
+      let stop: ((next?: Options) => unknown) | undefined
 
       const report = (next: LoadState) => {
         if (state === next) return
@@ -463,6 +467,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           }
 
           const end = (next?: Options) => {
+            // The same source keeps an image that has its target, loading, loaded or failed, under the new options.
+            if (next && assigned && identity(next, deferredSources()) === target) return (o = next)
             live = false
             cleanups.forEach((cleanup) => cleanup())
             timers.forEach(clearTimeout)
@@ -519,8 +525,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
         },
         update(next) {
           const resolved = resolve(next, img)
-          if (!stop) return
-          stop(resolved)
+          if (!stop || stop(resolved)) return
           unpaint()
           o = resolved
           run()

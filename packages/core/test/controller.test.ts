@@ -142,7 +142,7 @@ describe('prepared mode', () => {
     lazy.mockClear()
     armed = 2
     // update() first returns the element to its placeholder; the throw then rolls back what was before the first attach.
-    expect(() => handle.update({ ...options, onStateChange: () => {} })).toThrow(error)
+    expect(() => handle.update({ ...options, url: '/b.webp', onStateChange: () => {} })).toThrow(error)
     expect([img.getAttribute('src'), img.getAttribute('srcset'), img.style.cssText, box.getAttribute('data-state'), box.style.backgroundColor]).toEqual([INERT, null, '', null, PLACEHOLDER])
     expect(lazy).not.toHaveBeenCalled()
     expect(vi.getTimerCount()).toBe(0)
@@ -502,6 +502,99 @@ describe('generations', () => {
     expect(img.getAttribute('src')).toBe('/b.webp')
     await loadAndDecode(img, '/b.webp')
     expect(handle.state).toBe('loaded')
+  })
+
+  describe('an update with the same source', () => {
+    it('keeps a loaded image on display: no placeholder, fade or report, and the new callbacks take over', async () => {
+      const { img, box, attach, states, displays } = setup()
+      const animations = mockAnimate(img)
+      const handle = attach({ url: '/a.webp', loading: 'eager', placeholder: 'blue' })
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(400)
+      const shown = { src: img.getAttribute('src'), img: img.getAttribute('style'), box: box.getAttribute('style') }
+      const later: LoadState[] = []
+      handle.update({ url: '/a.webp', loading: 'eager', placeholder: 'red', onStateChange: (state) => later.push(state) })
+      expect({ src: img.getAttribute('src'), img: img.getAttribute('style'), box: box.getAttribute('style') }).toEqual(shown)
+      expect([handle.state, box.getAttribute('data-state')]).toEqual(['loaded', 'loaded'])
+      expect(states).toEqual(['idle', 'loading', 'loaded'])
+      expect(displays).toHaveLength(1)
+      expect(animations).toHaveLength(1)
+      // A failed upgrade keeps the image; the next source starts from the new placeholder and reports to the new callback.
+      handle.update({ url: '/b.webp', loading: 'eager', placeholder: 'red', onStateChange: (state) => later.push(state) })
+      expect(box.style.backgroundColor).toBe('red')
+      expect(later).toEqual(['idle', 'loading'])
+      expect(states).toEqual(['idle', 'loading', 'loaded'])
+    })
+
+    it('keeps a loading image hidden for its fade, and displays it through the new callbacks', async () => {
+      const { img, box, attach, states, displays } = setup()
+      const handle = attach({ url: '/a.webp', loading: 'eager', placeholder: 'blue' })
+      expect([img.getAttribute('src'), img.style.opacity, box.style.backgroundColor]).toEqual(['/a.webp', '0', 'blue'])
+      const later: LoadState[] = []
+      const shown: (Event | undefined)[] = []
+      handle.update({ url: '/a.webp', loading: 'eager', placeholder: 'blue', onStateChange: (state) => later.push(state), onDisplay: (_, event) => shown.push(event) })
+      expect([img.getAttribute('src'), img.style.opacity, box.style.backgroundColor, handle.state]).toEqual(['/a.webp', '0', 'blue', 'loading'])
+      await loadAndDecode(img)
+      expect([img.style.opacity, img.style.transition]).toEqual(['1', 'opacity 400ms ease-out'])
+      expect(states).toEqual(['idle', 'loading'])
+      expect(later).toEqual(['loaded'])
+      expect(displays).toHaveLength(0)
+      expect(shown).toHaveLength(1)
+      expect(shown[0]).toBeInstanceOf(Event)
+    })
+
+    it('keeps a failed image failed, without reloading it', () => {
+      const { img, box, attach, states } = setup()
+      const handle = attach({ url: '/gone.webp', loading: 'eager', placeholder: 'blue' })
+      fail(img)
+      expect([handle.state, box.style.backgroundColor]).toEqual(['error', ''])
+      handle.update({ url: '/gone.webp', loading: 'eager', placeholder: 'blue' })
+      expect([img.getAttribute('src'), handle.state, box.getAttribute('data-state'), box.style.backgroundColor, img.style.opacity]).toEqual(['/gone.webp', 'error', 'error', '', ''])
+      expect(states).toEqual(['idle', 'loading', 'error'])
+    })
+
+    it('starts an image without its target over under the new root margin, on the same placeholder', () => {
+      const { img, box, attach, states } = setup()
+      const observers = () => MockIntersectionObserver.instances.filter((o) => o.elements.has(box)).map((o) => o.options.rootMargin)
+      // Not activated yet: the new generation waits under the new margin and paints the same placeholder.
+      const idle = attach({ url: '/a.webp', placeholder: 'blue' })
+      const later: LoadState[] = []
+      idle.update({ url: '/a.webp', placeholder: 'blue', rootMargin: '10px', onStateChange: (state) => later.push(state) })
+      expect(observers()).toEqual(['10px'])
+      expect([img.getAttribute('src'), box.style.backgroundColor, idle.state]).toEqual([INERT, 'blue', 'idle'])
+      expect([states, later]).toEqual([['idle'], []])
+      intersect(box)
+      expect([img.getAttribute('src'), later]).toEqual(['/a.webp', ['loading']])
+    })
+
+    it('keeps an adopted image waiting on its observer, and activates it under the new options', async () => {
+      const { le, img, box, attach } = setup()
+      const observers = () => MockIntersectionObserver.instances.filter((o) => o.elements.has(box)).map((o) => o.options.rootMargin)
+      const source = { srcset: '/a-640.webp 640w', url: '/a-640.webp' }
+      const first = attach({ ...source, sizes: '100vw', loading: 'eager' })
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(400)
+      first.destroy()
+      // Adopted, and waiting to activate: it stays on display, and the intersection installs the new candidates.
+      const adopted = le.attach(img, { ...source, sizes: '100vw' })
+      expect(adopted.state).toBe('loaded')
+      adopted.update({ ...source, sizes: '50vw', rootMargin: '10px' })
+      expect([img.getAttribute('src'), img.getAttribute('sizes'), adopted.state]).toEqual(['/a-640.webp', '100vw', 'loaded'])
+      // Its generation goes on, with the observer it waits on.
+      expect(observers()).toEqual(['400px'])
+      intersect(box)
+      expect([img.getAttribute('sizes'), adopted.state, box.style.backgroundColor]).toEqual(['50vw', 'loaded', ''])
+    })
+
+    it('goes back to the placeholder for a new version, as for any new source', async () => {
+      const { img, box, attach, states } = setup()
+      const handle = attach({ url: '/a.webp', version: '1', loading: 'eager', placeholder: 'blue' })
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(400)
+      handle.update({ url: '/a.webp', version: '2', placeholder: 'blue' })
+      expect([img.getAttribute('src'), handle.state, box.style.backgroundColor]).toEqual([INERT, 'idle', 'blue'])
+      expect(states).toEqual(['idle', 'loading', 'loaded', 'idle'])
+    })
   })
 
   it('starts a new generation when a destroyed image is attached again with another source', async () => {

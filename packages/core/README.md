@@ -47,6 +47,7 @@ const handle = le.attach(image('#cell img'), { src: '/fern.jpg', fill: true, src
 le.attach(image('#hero img'), { priority: true })
 
 handle.update({ src: '/lake.jpg', fill: true }) // a new source: back to its placeholder; an invalid root or rootMargin throws first
+handle.update({ src: '/lake.jpg', fill: true, onStateChange: console.log }) // the same source: the image stays as it is
 handle.destroy() // releases listeners, observers, timers and the claim on the element
 ```
 
@@ -70,6 +71,8 @@ const le = createLazyEase({ loader: createLoader(), detectFormat: detectAvif })
 ```
 
 **Callbacks.** An error thrown by `onStateChange`, `onDisplay`, a `reveal` or the deferred decode of a ThumbHash is reported as an uncaught error, from a timer, as an event listener's is: `attach()` and `update()` don't throw it, and the image goes on as if the callback had done nothing. `update()` and `destroy()` inside any callback take effect at once, and the generation they ended writes nothing afterwards. The loader's `url`, `detectFormat` and the ThumbHash decoder are meant to be pure functions: a loader that throws leaves the image on its placeholder, and a decoder that throws is an error of the `attach()` or `update()` that called it. Callbacks are called without a `this`.
+
+**Updates.** `update()` with a new source (`src`, `srcset`, `url`, `version` or the `data-le-srcset` of picture sources) goes back to its placeholder and loads it. With the same source, for example from a component that calls it on every render, an image that has its target keeps it: a loaded one stays on display with no placeholder, fade or report, a loading one keeps loading and fades in when it arrives, a failed one stays failed. The new callbacks, `reveal` and `decodeTimeout` apply from then on, and an image that has not activated yet activates under the new `sizes` and loader options; the placeholder, `fadeDuration`, layout and focal point, and the root and margin it waits on stay as they were until the next new source, and so do a measured image's loader options once it has activated. An image without its target yet (not visible, or still being measured) starts over under the new options on the same placeholder, so a new `root`, `rootMargin` or `dwellTime` applies. A native image always starts a new generation that adopts what the element has.
 
 Measured images grow their candidates after a 200 ms trailing debounce and never shrink them; a failed upgrade keeps the image that is displayed. A failed first load or decode releases the placeholder and reports `error`. An element can be attached once; the claim is shared by every copy of the package on the page.
 
