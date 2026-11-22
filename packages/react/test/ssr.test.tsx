@@ -128,6 +128,42 @@ describe('server output', () => {
     }
   })
 
+  it('renders the color when the decode of a ThumbHash throws while rendering', () => {
+    vi.useFakeTimers()
+    try {
+      const error = new Error('lazy failed')
+      const decoder = () => ({ style: { backgroundColor: '#123456' }, lazy: () => { throw error } })
+      for (const [props, provider] of [
+        [MODES['thumbhash measured']!, { thumbhashSsr: 'image' }],
+        [MODES['thumbhash priority']!, {}],
+      ] as [Partial<ImageProps>, Provider][]) {
+        const markup = html(props, { thumbhash: decoder, ...provider })
+        expect(markup).toContain('background-color:#123456')
+        expect(markup).not.toContain('background-image')
+        expect(() => vi.runOnlyPendingTimers()).toThrow(error)
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('logs the decode error on the server instead of throwing it from a timer', () => {
+    const error = new Error('lazy failed')
+    const decoder = () => ({ style: { backgroundColor: '#123456' }, lazy: () => { throw error } })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const timer = vi.spyOn(globalThis, 'setTimeout')
+    vi.stubGlobal('window', undefined)
+    try {
+      expect(html(MODES['thumbhash priority']!, { thumbhash: decoder })).toContain('background-color:#123456')
+      expect(log).toHaveBeenCalledWith(error)
+      expect(timer).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+      log.mockRestore()
+      timer.mockRestore()
+    }
+  })
+
   it('renders a transparent ThumbHash without a color under its image', () => {
     // A purple disc on a transparent square.
     const rgba = new Uint8Array(16 * 16 * 4)

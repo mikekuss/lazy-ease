@@ -242,8 +242,21 @@ function ImageBox({
   const parsed = requested ?? parsePlaceholder(config.placeholder, decoder) ?? { style: {} }
   // A decoded ThumbHash on the server, or only its color with the image swapped in on activation.
   const ssrImage = parsed.lazy && (config.thumbhashSsr === 'image' || priority)
-  // A copy: the parsed styles are shared, memoized per hash.
-  let paint: CSSProperties = { ...(ssrImage ? parsed.lazy!() : parsed.style) }
+  // A copy: the parsed styles are shared, memoized per hash. A lazy() that throws leaves the
+  // color, as the controller does; its error is reported from a timer, or logged on the server,
+  // where a timer's error would end the process.
+  let painted: CSSProperties | undefined
+  if (ssrImage)
+    try {
+      painted = parsed.lazy!()
+    } catch (error) {
+      if (typeof window > 'u') console.error(error)
+      else
+        setTimeout(() => {
+          throw error
+        })
+    }
+  let paint: CSSProperties = { ...(painted ?? parsed.style) }
   if (paint.backgroundImage) paint.backgroundPosition = focus ? percentPosition(focus) : 'center'
 
   // A measured image is positioned by the controller, its no-JS fallback by these styles.
