@@ -3,8 +3,9 @@ import { normalizeLoader, snapQuality, type ImageFormat } from '../loader.js'
 import { snapRatio } from '../ratios.js'
 import { focusStyles, type StyleRecord } from '../styles.js'
 import { measuredCandidates, snapWidth } from '../widths.js'
-import { createController, guard, type LazyEase, type LazyEaseConfig, type Measure, type Timer } from './controller.js'
+import { createController, type LazyEase, type LazyEaseConfig, type Measure, type Timer } from './controller.js'
 import { pickFormat } from './format.js'
+import { guard } from './guard.js'
 import { observeResize } from './observe.js'
 
 declare const process: { env: { NODE_ENV?: string } }

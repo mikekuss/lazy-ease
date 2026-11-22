@@ -4,6 +4,7 @@ import { isDirect } from '../source.js'
 import { parsePlaceholder, type StyleRecord, type ThumbHashDecoder } from '../styles.js'
 import { fades } from './fades.js'
 import type { FormatDetector } from './format.js'
+import { guard } from './guard.js'
 import { observeResize, whenVisible } from './observe.js'
 import type { Reveal } from './reveal.js'
 
@@ -156,20 +157,6 @@ export type Measure = (
 const styleOf = (element: HTMLElement) => element.style as unknown as Record<string, string>
 const clearStyle = (element: HTMLElement, properties: readonly string[]) => {
   for (const property of properties) styleOf(element)[property] = ''
-}
-/**
- * Calls into the page's code: a state or display callback, a reveal, a deferred ThumbHash decode.
- * Its error is reported as an event listener's is, from a timer, and changes nothing here:
- * the call returns undefined, and the image goes on as if the callback had done nothing.
- */
-export const guard = <A extends unknown[], T>(callback: ((...args: A) => T) | undefined, ...args: A): T | undefined => {
-  try {
-    return callback?.(...args)
-  } catch (error) {
-    setTimeout(() => {
-      throw error
-    })
-  }
 }
 const isNative = (o: Options) => o.priority || o.loading === 'native'
 /** The logical source of deferred options and picture sources: what an image displayed under them shows. */

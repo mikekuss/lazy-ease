@@ -1578,6 +1578,39 @@ describe('visibility', () => {
     expect(sizes).toEqual([10, 10, 20])
   })
 
+  it('runs the rest of an intersection batch when one whenVisible callback throws, and reports it from a timer', () => {
+    document.body.innerHTML = '<div></div><div></div>'
+    const [first, second] = [...document.querySelectorAll('div')]
+    const error = new Error('visible')
+    const calls: string[] = []
+    whenVisible(first!, {}, () => {
+      throw error
+    })
+    whenVisible(first!, {}, () => calls.push('first'))
+    whenVisible(second!, {}, () => calls.push('second'))
+    const [observer] = MockIntersectionObserver.instances
+    const entries = [first, second].map((target) => ({ target, isIntersecting: true }) as unknown as IntersectionObserverEntry)
+    observer!.callback(entries, observer as unknown as IntersectionObserver)
+    expect(calls).toEqual(['first', 'second'])
+    expect(() => vi.advanceTimersByTime(0)).toThrow(error)
+  })
+
+  it('reports sizes to the rest of a resize batch when one callback throws, and reports it from a timer', () => {
+    document.body.innerHTML = '<div></div><div></div>'
+    const [first, second] = [...document.querySelectorAll('div')]
+    const error = new Error('resize')
+    const sizes: number[] = []
+    observeResize(first!, () => {
+      throw error
+    })
+    observeResize(second!, (width) => sizes.push(width))
+    const [observer] = MockResizeObserver.instances
+    const entries = [first, second].map((target) => ({ target, contentRect: { width: 10, height: 10 } }) as unknown as ResizeObserverEntry)
+    observer!.callback(entries, observer as unknown as ResizeObserver)
+    expect(sizes).toEqual([10])
+    expect(() => vi.advanceTimersByTime(0)).toThrow(error)
+  })
+
   it('observes against a custom root', () => {
     document.body.innerHTML = `<div id="panel"><span data-le><img src="${INERT}"></span></div>`
     const panel = document.getElementById('panel')!
