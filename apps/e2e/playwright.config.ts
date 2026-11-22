@@ -5,6 +5,8 @@ const baseURL = `http://127.0.0.1:${PORT}`
 
 export default defineConfig({
   testDir: 'tests',
+  // Refuses a server that another checkout started on this port.
+  globalSetup: './identity.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

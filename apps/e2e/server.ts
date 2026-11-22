@@ -197,6 +197,8 @@ app.use('/_img/*', async (c, next) => {
 app.route('/_img', createImageApp({ root, storage: memoryStorage(), qualities: [60, 75], policy: ({ path }) => (path === images.focus.src ? { focalPoint: FOCUS } : {}) }))
 
 app.get('/health', (c) => c.text('ok'))
+// Which checkout this server runs from, for the check in identity.ts.
+app.get('/identity', (c) => c.json({ dir: here }))
 // 320×640 and loaded as is: an intrinsic image whose height nothing reserves.
 app.get('/tall.svg', (c) =>
   c.body('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="640"><rect width="320" height="640" fill="#2a6"/></svg>', 200, {
