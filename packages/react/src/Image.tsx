@@ -301,6 +301,7 @@ function ImageBox({
     event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
     // The currentSrc the stored load event was for.
     eventSrc: '',
+    // The last state reported: a re-attach of the same source repeats none.
     state: '',
     // The identity of the source last displayed, '' before the first display.
     shown: '',
@@ -368,14 +369,15 @@ function ImageBox({
   // Equivalent config keeps the attachment: the loader and decoder are compared by
   // what they offer and called through `latest`, so inline ones don't re-attach.
   // For a measured image, a probe URL tells a changed URL scheme from an inline loader
-  // with the same output. Prepared images carry their URLs in `options`, native ones
-  // in the img's own attributes, and a direct source must never reach the loader.
+  // with the same output. Prepared images carry their URLs in `options`, native ones in
+  // the img's own attributes, so `identity` (new URLs attach again), and a direct source
+  // must never reach the loader.
   const { widths, ratios, qualities, formats } = loader
   const probe = measured ? loader.url({ src, width: widths[0]!, quality: qualities[0]!, format: formats === 'auto' ? formats : formats[0]! }) : ''
   // A reveal is a function, so only whether there is one counts: it is called through `latest`,
   // so another one takes effect at the next display without a re-attach.
   // A new box (`boxed`) renders a new img, which needs its own attachment.
-  const signature = JSON.stringify([options, pictureSources, config.domains, widths, ratios, qualities, formats, probe, !!decoder, !!options.reveal, boxed])
+  const signature = JSON.stringify([options, pictureSources, config.domains, widths, ratios, qualities, formats, probe, !!decoder, !!options.reveal, boxed, identity])
 
   // In the commit, like the hooks: the layout cleanup ends the old attachment before the new
   // render's hooks are published, so the old source's load, decode or reveal reaches none
@@ -387,6 +389,8 @@ function ImageBox({
     if (state.shown !== identity) {
       // The author's own styles win over the placeholder, as in the markup.
       Object.assign(img.closest<HTMLElement>('[data-le]')!.style, paint, boxed ? wrapperStyle : style)
+      // A new source after a displayed one reports its states afresh, `loaded` of a cached one too.
+      if (state.shown) state.state = ''
       // A deferred source left before it was displayed starts over, with its placeholder
       // and onLoad, when it comes back.
       if (!native) state.shown = ''
@@ -409,9 +413,10 @@ function ImageBox({
         state.onStateChange?.(next, img)
       },
       onDisplay(_, event) {
-        // A native image calls onLoad from its React handler.
+        // A native image calls onLoad from its React handler. An adopted one counts as shown
+        // only at its first display: a new source's own load is still on its way.
         if (state.shown === identity || native) {
-          if (!event) state.shown = identity
+          if (!event && !state.shown) state.shown = identity
           return
         }
         // Adoption has no event of its own. A load seen for this very source before a

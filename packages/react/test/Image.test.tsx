@@ -429,7 +429,37 @@ describe('native images', () => {
     expect(onLoad).toHaveBeenCalledTimes(2)
   })
 
-  // A new revision keeps the attachment of a native image, which keeps calling the hooks.
+  it('reports a failed new revision as an error and leaves its URL in place', () => {
+    const onLoad = vi.fn()
+    const states: LoadState[] = []
+    const { img, rerender } = mount({ width: 320, height: 240, loading: 'native', version: 'r1', onLoad, onStateChange: (state) => states.push(state) })
+    load(img())
+    // The browser starts loading the new URL: the img is no longer complete.
+    Object.assign(img(), { complete: false })
+    rerender({ version: 'r2' })
+    expect(img().getAttribute('data-state')).toBe('loading')
+    fail(img())
+    expect(states).toEqual(['loading', 'loaded', 'loading', 'error'])
+    expect(img().getAttribute('data-state')).toBe('error')
+    // The failed URL stays: the DOM matches the props, and no onLoad came for r2.
+    expect(img().getAttribute('src')).toContain('v=r2')
+    expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a new revision that is complete at once (cached) as loaded, and calls onLoad on its load', () => {
+    const onLoad = vi.fn()
+    const states: LoadState[] = []
+    const { img, rerender } = mount({ width: 320, height: 240, loading: 'native', version: 'r1', onLoad, onStateChange: (state) => states.push(state) })
+    load(img())
+    // Still complete when the image attaches again: the controller adopts the new source.
+    rerender({ version: 'r2' })
+    expect(states).toEqual(['loading', 'loaded', 'loaded'])
+    load(img())
+    expect(states).toHaveLength(3)
+    expect(onLoad).toHaveBeenCalledTimes(2)
+  })
+
+  // A new revision of a native image attaches it again, with the hooks of the committed render.
   const picture = { sources: [{ media: '(min-width: 800px)', src: '/b.jpg' }] }
   const revisions: [string, Partial<ImageProps>, Partial<ImageProps>][] = [
     ['version', {}, { version: 'r2' }],
