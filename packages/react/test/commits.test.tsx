@@ -85,6 +85,21 @@ async function scenario(kind: Kind, change: Change, timing: Timing, strict: bool
     return new Promise<void>((resolve) => (finish = resolve))
   })
 
+  // As in a browser, an img is complete only for the URLs it loaded: a new URL from React loads anew.
+  const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'complete')!
+  const loadedFor = new WeakMap<HTMLImageElement, string>()
+  const urls = (element: HTMLImageElement) => `${element.getAttribute('src')} ${element.getAttribute('srcset')}`
+  Object.defineProperty(HTMLImageElement.prototype, 'complete', {
+    configurable: true,
+    get(this: HTMLImageElement) {
+      return loadedFor.get(this) === urls(this)
+    },
+    set(this: HTMLImageElement, value: boolean) {
+      if (value) loadedFor.set(this, urls(this))
+      else loadedFor.delete(this)
+    },
+  })
+
   const calls: Call[] = []
   let committed = ''
   const img = () => container.querySelector('img')!
@@ -146,7 +161,7 @@ async function scenario(kind: Kind, change: Change, timing: Timing, strict: bool
     core.resize(owner(), 320, 240)
     await tick()
     const src = img().getAttribute('src')
-    // A native image that React gave a new URL loads it, though it stays `loaded`.
+    // An image that is displayed has nothing left to load; a native one that React gave a new URL loads it.
     if (src === INERT || (owner().getAttribute('data-state') === 'loaded' && source(img().currentSrc) === source(src ?? ''))) return
     core.load(img())
     if (decoded) finish?.()
@@ -198,6 +213,7 @@ async function scenario(kind: Kind, change: Change, timing: Timing, strict: bool
     container.remove()
     env.IS_REACT_ACT_ENVIRONMENT = previous
     delete (HTMLImageElement.prototype as { animate?: unknown }).animate
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', complete)
   }
 }
 
@@ -248,11 +264,7 @@ describe.each([false, true])('the next update and the old source (Strict Mode: %
       const reported = upgraded ? 'a t1 r1' : expected
       if (upgraded) expect(calls.filter((call) => call.source === expected && call.hook !== 'loader')).toEqual([])
       expect(of('onLoad', reported)).toHaveLength(1)
-      // Known gap, not the contract: a native img that React gives a new version or token after it loaded is not
-      // re-attached (its attach options carry no URLs), so it stays `loaded` and reports nothing for the new source,
-      // and a failed load of the new URL is not reported as `error` either. The contract is `loaded` once per source.
-      const restated = kind === 'native' && (change === 'version' || change === 'token') && timing !== 'after it'
-      expect(of('loaded', reported)).toHaveLength(restated ? 0 : 1)
+      expect(of('loaded', reported)).toHaveLength(1)
       // An image whose decode ends as a new attachment of the same source starts (it finished loading while it was
       // hidden, or a new token re-attaches a measured image) is adopted: the placeholder gives way to it at once,
       // without a fade. Accepted: the token is not part of the source. A native image has no fade.
