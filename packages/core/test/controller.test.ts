@@ -1730,6 +1730,27 @@ describe('measured mode', () => {
     expect(img.getAttribute('src')).toBe('/_img/lake.jpg?ar=1&fmt=webp&q=75&w=640')
   })
 
+  it('sizes the other images of a resize batch when one image’s loader throws, and reports it from a timer', () => {
+    document.body.innerHTML = `<span data-le><img src="${INERT}"></span><span data-le><img src="${INERT}"></span>`
+    const [bad, good] = [...document.querySelectorAll('img')]
+    const [badBox, goodBox] = [...document.querySelectorAll('span')]
+    const error = new Error('loader')
+    const loader = createLoader({ formats: ['webp'] })
+    const url = (request: ImageRequest) => {
+      if (request.src === '/bad.jpg') throw error
+      return loader.url(request)
+    }
+    const le = createLazyEase({ loader: { ...loader, url } })
+    le.attach(bad!, { src: '/bad.jpg', aspectRatio: 1, loading: 'eager' })
+    le.attach(good!, { src: '/lake.jpg', aspectRatio: 1, loading: 'eager' })
+    const observer = MockResizeObserver.instances.find((o) => o.elements.has(badBox!) && o.elements.has(goodBox!))!
+    const entries = [badBox, goodBox].map((target) => ({ target, contentRect: { width: 300, height: 300 } }) as unknown as ResizeObserverEntry)
+    observer.callback(entries, observer as unknown as ResizeObserver)
+    expect(good!.getAttribute('src')).toBe('/_img/lake.jpg?ar=1&fmt=webp&q=75&w=640')
+    expect(bad!.getAttribute('src')).toBe(INERT)
+    expect(() => vi.advanceTimersByTime(0)).toThrow(error)
+  })
+
   it('passes the crop token and revision to the loader', () => {
     const { img, box, attach } = setup()
     attach({ src: '/cliff.jpg', aspectRatio: 1, focalPoint: { x: 30, y: 45 }, version: 'r7', token: '1.k1.WisYCsz8Vtmygcbr01tTuA', loading: 'eager' })
