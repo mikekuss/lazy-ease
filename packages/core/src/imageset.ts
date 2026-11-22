@@ -53,7 +53,7 @@ export function imageSet({ src, width, loader: input, aspectRatio, focalPoint, q
     const seen = new Set<string>()
     for (const density of [...densities].sort((a, b) => a - b)) {
       const target = width * density
-      const url = loader.url({ ...request, format, width: widths.find((w) => w >= target) ?? widths[widths.length - 1]! })
+      const url = loader.url({ ...request, format, width: widths.find((w) => w >= target) ?? widths.at(-1)! })
       if (seen.has(url)) continue
       seen.add(url)
       options.push(`${cssUrl(url)} ${formatNumber(density)}x${format === 'auto' ? '' : ` type("${TYPES[format]}")`}`)

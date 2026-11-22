@@ -33,7 +33,7 @@ export interface CandidateSet {
 export function candidateSet({ widths, srcWidth, srcHeight, loader, ...request }: CandidateSetOptions): CandidateSet {
   const sorted = [...new Set(widths)].sort((a, b) => a - b)
   const url = (width: number) => loader.url({ ...request, width })
-  if (srcWidth === undefined || srcHeight === undefined) return { src: url(sorted[sorted.length - 1]!) }
+  if (srcWidth === undefined || srcHeight === undefined) return { src: url(sorted.at(-1)!) }
   const seen = new Set<string>()
   const list: string[] = []
   let src = ''
