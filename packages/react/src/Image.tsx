@@ -290,8 +290,9 @@ function ImageBox({
 
   // The logical source: a new one fires its own first onLoad and shows its placeholder.
   // A measured image's src is its key, and its candidates upgrade in place. Like the
-  // controller's, it is the URLs alone: a new `sizes` or `media` keeps the source.
-  const identity = JSON.stringify([version, real?.src, real?.srcSet, pictureSources.map((s) => s.srcSet)])
+  // controller's, it is the URLs alone: a new `sizes` or `media` keeps the source, and
+  // so does a new `version` of a direct source, whose URL it doesn't change.
+  const identity = JSON.stringify([measured && version, real?.src, real?.srcSet, pictureSources.map((s) => s.srcSet)])
   const latest = useRef({
     onLoad,
     onStateChange,
@@ -301,7 +302,8 @@ function ImageBox({
     event: undefined as SyntheticEvent<HTMLImageElement> | undefined,
     // The currentSrc the stored load event was for.
     eventSrc: '',
-    // The last state reported: a re-attach of the same source repeats none.
+    // The last state reported and the source attached for it: a re-attach of the same
+    // source repeats none.
     state: '',
     // The identity of the source last displayed, '' before the first display.
     shown: '',
@@ -386,11 +388,10 @@ function ImageBox({
     const img = self.current!
     const state = latest.current
     // Destroying a displayed source removed the placeholder that React wrote for this new one.
-    if (state.shown !== identity) {
+    // A native image keeps its displayed image under a new source, with nothing painted under it.
+    if (native ? !state.shown : state.shown !== identity) {
       // The author's own styles win over the placeholder, as in the markup.
       Object.assign(img.closest<HTMLElement>('[data-le]')!.style, paint, boxed ? wrapperStyle : style)
-      // A new source after a displayed one reports its states afresh, `loaded` of a cached one too.
-      if (state.shown) state.state = ''
       // A deferred source left before it was displayed starts over, with its placeholder
       // and onLoad, when it comes back.
       if (!native) state.shown = ''
@@ -408,8 +409,8 @@ function ImageBox({
       loader: { widths, ratios, qualities, formats, url: (params) => state.loader.url(params) },
       root: config.root,
       onStateChange(next) {
-        if (state.state === next) return
-        state.state = next
+        // Compares the last state and its source with this one's, and keeps this one.
+        if (state.state === (state.state = next + identity)) return
         state.onStateChange?.(next, img)
       },
       onDisplay(_, event) {

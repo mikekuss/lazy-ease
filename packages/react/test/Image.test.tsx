@@ -421,12 +421,43 @@ describe('native images', () => {
     expect(img().style.backgroundColor).toBe('')
     rerender({ placeholder: '#00ff00' })
     expect(img().style.backgroundColor).toBe('')
+    // The browser starts loading the new URL: the img is no longer complete.
+    Object.assign(img(), { complete: false })
     rerender({ version: 'r2', placeholder: '#00ff00' })
     expect(img().getAttribute('src')).toContain('v=r2')
-    // The displayed r1 image stays until r2 loads, so no placeholder comes back.
+    // The displayed r1 image stays until r2 loads, so no placeholder comes back under it.
     expect(img().style.backgroundColor).toBe('')
     load(img())
+    expect(img().style.backgroundColor).toBe('')
     expect(onLoad).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the source of a direct image under a new revision, which does not change its URL', () => {
+    const onLoad = vi.fn()
+    const states: LoadState[] = []
+    const { img, rerender } = mount({ width: 320, height: 240, loading: 'native', unoptimized: true, version: 'r1', onLoad, onStateChange: (state) => states.push(state) })
+    load(img())
+    rerender({ version: 'r2' })
+    // A re-attach for another reason adopts the same displayed source and reports nothing.
+    rerender({ version: 'r2', rootMargin: '50px' })
+    expect(img().getAttribute('src')).toBe('/a.jpg')
+    expect(states).toEqual(['loading', 'loaded'])
+    expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the state of a new revision once, also when it attaches again before or after its load', () => {
+    for (const settle of [undefined, fail]) {
+      const states: LoadState[] = []
+      const { img, rerender, unmount } = mount({ width: 320, height: 240, loading: 'native', version: 'r1', onStateChange: (state) => states.push(state) })
+      load(img())
+      Object.assign(img(), { complete: false })
+      rerender({ version: 'r2' })
+      settle?.(img())
+      // A re-attach of the same source, loading or failed, repeats no state.
+      rerender({ version: 'r2', rootMargin: '50px' })
+      expect(states).toEqual(['loading', 'loaded', 'loading', ...(settle ? ['error'] : [])])
+      unmount()
+    }
   })
 
   it('reports a failed new revision as an error and leaves its URL in place', () => {
