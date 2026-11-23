@@ -103,8 +103,9 @@ export interface Attachment {
    * own placeholder. A native generation adopts the sources the element has
    * when `update` runs, so set them first. Options that differ from the
    * current ones only in their functions (callbacks, reveal, the loader's url),
-   * for the same picture sources, keep an image that has its target, loading,
-   * loaded or failed, and take effect from then on.
+   * with the same root and loader objects and the same picture sources, keep
+   * the image as it is (waiting, loading, loaded or failed) and take effect
+   * from then on. A new `version` reloads a failed image.
    */
   update(options: AttachOptions): void
   /** Releases listeners, observers, timers and ownership. The element keeps what it displays. */
@@ -165,6 +166,8 @@ const isNative = (o: Options) => o.priority || o.loading === 'native'
 /** The logical source of deferred options and picture sources: what an image displayed under them shows. */
 const identity = (o: Options, sources: Iterable<Element>) =>
   JSON.stringify([o.src, o.srcset, o.url, o.version, ...[...sources].map((source) => source.getAttribute('data-le-srcset'))])
+/** The options as JSON, so functions drop out, without the root and the loader: those count by identity. */
+const shape = (o: Options) => JSON.stringify(o, (key, value) => (key == 'root' || key == 'loader' ? undefined : value))
 
 /**
  * A controller instance, with measured mode when `measure` is given;
@@ -467,8 +470,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           }
 
           const end = (next?: Options) => {
-            // Options that differ only in their functions keep an image that has its target, loading, loaded or failed.
-            if (next && assigned && identity(next, deferredSources()) === target && JSON.stringify(next) === JSON.stringify(o)) return (o = next)
+            // Options that differ only in their functions keep the image as it is: waiting, loading, loaded or failed.
+            if (next && identity(next, deferredSources()) === target && shape(next) === shape(o) && next.root === o.root && next.loader === o.loader) return (o = next)
             live = false
             cleanups.forEach((cleanup) => cleanup())
             timers.forEach(clearTimeout)

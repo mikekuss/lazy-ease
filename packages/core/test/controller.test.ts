@@ -621,6 +621,47 @@ describe('generations', () => {
       expect([img.getAttribute('src'), handle.state, box.style.backgroundColor]).toEqual([INERT, 'idle', 'blue'])
       expect(states).toEqual(['idle', 'loading', 'loaded', 'idle'])
     })
+
+    it('compares the root by identity, so a root with cyclic properties keeps the image', async () => {
+      const { img, attach, states } = setup()
+      // Frameworks hang cyclic objects on their elements, which JSON cannot hold.
+      const panel = Object.assign(document.createElement('div'), { __fiber: {} as Record<string, unknown> })
+      panel.__fiber.node = panel
+      const options = { url: '/a.webp', loading: 'eager', placeholder: 'blue', root: panel } as const
+      const handle = attach(options)
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(400)
+      handle.update(options)
+      expect([img.getAttribute('src'), handle.state, states]).toEqual(['/a.webp', 'loaded', ['idle', 'loading', 'loaded']])
+    })
+
+    it('starts a measured image over for a new loader of the same source', async () => {
+      const { img, box, attach, states } = setup()
+      const options: AttachOptions = { src: '/lake.jpg', aspectRatio: 1, loading: 'eager', placeholder: 'blue' }
+      const handle = attach(options)
+      resize(box, 300, 300)
+      await loadAndDecode(img, img.getAttribute('src')!)
+      vi.advanceTimersByTime(400)
+      handle.update({ ...options, loader: { ...webpLoader, url: ({ width }) => `/cdn/lake-${width}.webp` } })
+      resize(box, 300, 300)
+      expect(img.getAttribute('src')).toBe('/cdn/lake-640.webp')
+      expect(states.slice(3)).toEqual(['idle', 'loading'])
+    })
+
+    it('starts an adopted image that waits on its observer over under a new root', async () => {
+      const { le, img, box, attach } = setup()
+      const roots = () => MockIntersectionObserver.instances.filter((o) => o.elements.has(box)).map((o) => o.options.root)
+      const source = { srcset: '/a-640.webp 640w', sizes: '100vw', url: '/a-640.webp' }
+      const first = attach({ ...source, loading: 'eager' })
+      await loadAndDecode(img)
+      vi.advanceTimersByTime(400)
+      first.destroy()
+      const adopted = le.attach(img, source)
+      expect(roots()).toEqual([null])
+      const panel = document.createElement('div')
+      adopted.update({ ...source, root: panel })
+      expect(roots()).toEqual([panel])
+    })
   })
 
   it('starts a new generation when a destroyed image is attached again with another source', async () => {
