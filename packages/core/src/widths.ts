@@ -20,7 +20,7 @@ function smallest(ladder: readonly number[]): number {
 export function snapWidth(width: number, ladder: readonly number[] = DEFAULT_WIDTHS): number {
   const min = smallest(ladder)
   if (!(width > min)) return min
-  return ladder.find((w) => w >= width) ?? ladder[ladder.length - 1]!
+  return ladder.find((w) => w >= width) ?? ladder.at(-1)!
 }
 
 /**
@@ -30,7 +30,7 @@ export function snapWidth(width: number, ladder: readonly number[] = DEFAULT_WID
  */
 function sourceCap(ladder: readonly number[], srcWidth: number | undefined): number {
   const min = smallest(ladder)
-  if (srcWidth === undefined) return ladder[ladder.length - 1]!
+  if (srcWidth === undefined) return ladder.at(-1)!
   return ladder.findLast((w) => w <= srcWidth) ?? min
 }
 

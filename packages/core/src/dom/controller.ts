@@ -101,7 +101,11 @@ export interface Attachment {
   /**
    * Starts a new generation for new options (a new logical source) with its
    * own placeholder. A native generation adopts the sources the element has
-   * when `update` runs, so set them first.
+   * when `update` runs, so set them first. Options that differ from the
+   * current ones only in their functions (callbacks, reveal), with the same
+   * root and loader objects and the same picture sources, keep the image as it
+   * is (waiting, loading, loaded or failed) and take effect from then on. A new
+   * loader object starts over. A new `version` reloads a failed image.
    */
   update(options: AttachOptions): void
   /** Releases listeners, observers, timers and ownership. The element keeps what it displays. */
@@ -162,6 +166,8 @@ const isNative = (o: Options) => o.priority || o.loading === 'native'
 /** The logical source of deferred options and picture sources: what an image displayed under them shows. */
 const identity = (o: Options, sources: Iterable<Element>) =>
   JSON.stringify([o.src, o.srcset, o.url, o.version, ...[...sources].map((source) => source.getAttribute('data-le-srcset'))])
+/** The options as JSON, so functions drop out, without the root and the loader: those count by identity. */
+const shape = (o: Options) => JSON.stringify(o, (key, value) => (key == 'root' || key == 'loader' ? undefined : value))
 
 /**
  * A controller instance, with measured mode when `measure` is given;
@@ -221,7 +227,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
 
       const owner = img.closest<HTMLElement>('[data-le]') ?? img
       const box = owner === img ? undefined : owner
-      const surface = box ?? img
+      // The box, or the img without one: the element that is painted, measured and observed.
+      const surface = owner
       const attribute = (name: string) => img.getAttribute(name)
       const initialSrc = attribute('src')
       // A data: src is the placeholder, unless an earlier attachment set it as the target;
@@ -245,7 +252,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           else if (element.getAttribute(name) !== value) element.setAttribute(name, value)
         })
       let state: LoadState | undefined
-      let stop: ((next?: Options) => void) | undefined
+      // Ends the generation, or keeps it under options that differ only in their functions and returns them.
+      let stop: ((next?: Options) => unknown) | undefined
 
       const report = (next: LoadState) => {
         if (state === next) return
@@ -268,7 +276,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
        * callbacks called through `guard` never throw into it.
        */
       const run = () => {
-        const before = [img, ...deferredSources()].map((element) => [element, snapshot(element)] as const)
+        const deferred = deferredSources()
+        const before = [img, ...deferred].map((element) => [element, snapshot(element)] as const)
         const recorded = targets[targetKey]
         let live = true
         try {
@@ -277,7 +286,6 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           const placeholderSrc = native ? INERT : inert
           const src = attribute('src')
           let own = img.hasAttribute('srcset') || (native ? (src ?? INERT) !== INERT : src != null && (src === recorded?.[1] || !src.startsWith('data:')))
-          const deferred = deferredSources()
           const target = native ? undefined : identity(o, deferred)
           // The element still has the target of an earlier attachment for another source:
           // back to the placeholder, so the old image is neither adopted nor shown.
@@ -325,7 +333,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           const fadeMs = o.fadeDuration!
           // Until `end` is the cleanup: a decoder that updates or destroys the image ends this generation too.
           stop = () => (live = false)
-          const placeholder = o.placeholder === undefined ? undefined : parsePlaceholder(o.placeholder, o.thumbhash)
+          // resolve() refused an empty or invalid placeholder.
+          const placeholder = o.placeholder ? parsePlaceholder(o.placeholder, o.thumbhash) : undefined
           if (!live) return
           const mode: Mode = o.fill ? 'fill' : o.height !== undefined ? 'fixed' : o.aspectRatio !== undefined ? 'ratio' : 'intrinsic'
           const focus = mode === 'intrinsic' ? undefined : normalizeFocalPoint(o.focalPoint)
@@ -402,13 +411,14 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
             else if (native) display(event)
             else {
               const expected = img.currentSrc
-              void Promise.race([
+              // The decode or its timeout, whichever settles first.
+              void new Promise<boolean>((resolve) => {
                 img.decode().then(
-                  () => true,
-                  () => false,
-                ),
-                new Promise<boolean>((resolve) => later(() => resolve(true), o.decodeTimeout!)),
-              ]).then((ok) => {
+                  () => resolve(true),
+                  () => resolve(false),
+                )
+                later(() => resolve(true), o.decodeTimeout!)
+              }).then((ok) => {
                 // A newer source is on its way, or this generation is over.
                 if (!live || shown || img.currentSrc !== expected) return
                 if (ok) display(event)
@@ -460,6 +470,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           }
 
           const end = (next?: Options) => {
+            // Options that differ only in their functions keep the image as it is: waiting, loading, loaded or failed.
+            if (next && identity(next, deferredSources()) === target && shape(next) === shape(o) && next.root === o.root && next.loader === o.loader) return (o = next)
             live = false
             cleanups.forEach((cleanup) => cleanup())
             timers.forEach(clearTimeout)
@@ -516,8 +528,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
         },
         update(next) {
           const resolved = resolve(next, img)
-          if (!stop) return
-          stop(resolved)
+          if (!stop || stop(resolved)) return
           unpaint()
           o = resolved
           run()

@@ -47,6 +47,7 @@ const handle = le.attach(image('#cell img'), { src: '/fern.jpg', fill: true, src
 le.attach(image('#hero img'), { priority: true })
 
 handle.update({ src: '/lake.jpg', fill: true }) // a new source: back to its placeholder; an invalid root or rootMargin throws first
+handle.update({ src: '/lake.jpg', fill: true, onStateChange: console.log }) // only a new callback: the image stays as it is
 handle.destroy() // releases listeners, observers, timers and the claim on the element
 ```
 
@@ -70,6 +71,8 @@ const le = createLazyEase({ loader: createLoader(), detectFormat: detectAvif })
 ```
 
 **Callbacks.** An error thrown by `onStateChange`, `onDisplay`, a `reveal` or the deferred decode of a ThumbHash is reported as an uncaught error, from a timer, as an event listener's is: `attach()` and `update()` don't throw it, and the image goes on as if the callback had done nothing. `update()` and `destroy()` inside any callback take effect at once, and the generation they ended writes nothing afterwards. The loader's `url`, `detectFormat` and the ThumbHash decoder are meant to be pure functions: a loader that throws leaves the image on its placeholder, and a decoder that throws is an error of the `attach()` or `update()` that called it. Callbacks are called without a `this`.
+
+**Updates.** `update()` starts a new generation from the placeholder, as `destroy()` and `attach()` would, unless the new options differ from the current ones only in their functions: `onStateChange`, `onDisplay` or `reveal`, for the same `data-le-srcset` on picture sources. The other options are compared as JSON, so the same values in another key order count as a change; `root` and `loader` count as the same only when they are the same objects. Keep the loader in a variable (or in the instance config): a new loader object, an inline one on every call included, starts over. Then, for example from a component that calls `update()` on every render, the image stays as it is: a loaded one stays on display with no placeholder, fade or report, a loading one keeps loading and fades in when it arrives, a failed one stays failed, one that waits for the viewport keeps waiting, and the new functions are called from then on. Any other change, `quality`, `focalPoint`, `sizes`, `placeholder`, `rootMargin`, a new `root` or a new loader among them, starts over as before. To load a failed image again, pass a new `version`. A changed `data-le-sizes` on a `<source>` alone is not applied to a kept image; destroy and attach it again, or pass a new `version`. A native image always starts a new generation that adopts what the element has.
 
 Measured images grow their candidates after a 200 ms trailing debounce and never shrink them; a failed upgrade keeps the image that is displayed. A failed first load or decode releases the placeholder and reports `error`. An element can be attached once; the claim is shared by every copy of the package on the page.
 

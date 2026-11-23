@@ -79,10 +79,10 @@ export function normalizeLoader(loader: ImageLoader | ImageLoaderFunction): Reso
 export function snapQuality(quality: number, allowed: readonly number[]): number {
   let best: number | undefined
   for (const q of allowed) {
-    if (best === undefined) best = q
     const d = Math.abs(q - quality)
-    const bestD = Math.abs(best - quality)
-    if (d < bestD || (d === bestD && q > best)) best = q
+    const bestD = Math.abs(best! - quality)
+    // The first value, then a closer one, or as close and higher.
+    if (best === undefined || d < bestD || (d === bestD && q > best)) best = q
   }
   if (best === undefined) throw new RangeError('The loader allows no qualities')
   return best

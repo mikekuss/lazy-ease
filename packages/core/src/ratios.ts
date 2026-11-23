@@ -44,7 +44,7 @@ export function snapRatio(ratio: number, ladder: readonly number[] = defaultRati
   const min = ladder[0]
   if (min === undefined) throw new RangeError('The ratio ladder is empty')
   const index = ladder.findIndex((r) => r >= ratio)
-  if (index === -1) return ladder[ladder.length - 1]!
+  if (index === -1) return ladder.at(-1)!
   if (index === 0) return min
   const lower = ladder[index - 1]!
   const upper = ladder[index]!
