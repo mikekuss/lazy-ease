@@ -648,6 +648,22 @@ describe('generations', () => {
       expect(states.slice(3)).toEqual(['idle', 'loading'])
     })
 
+    it('keeps an image that waits for the viewport waiting, and reports through the new callback', async () => {
+      const { img, box, attach, states } = setup()
+      const observers = () => MockIntersectionObserver.instances.filter((o) => o.elements.has(box))
+      const handle = attach({ url: '/a.webp', placeholder: 'blue' })
+      const [observer] = observers()
+      const later: LoadState[] = []
+      handle.update({ url: '/a.webp', placeholder: 'blue', onStateChange: (state) => later.push(state) })
+      // The same observer, no second idle.
+      expect(observers()).toEqual([observer])
+      expect([img.getAttribute('src'), box.style.backgroundColor, handle.state, states, later]).toEqual([INERT, 'blue', 'idle', ['idle'], []])
+      intersect(box)
+      await loadAndDecode(img)
+      expect([img.getAttribute('src'), handle.state, states, later]).toEqual(['/a.webp', 'loaded', ['idle'], ['loading', 'loaded']])
+      expect(observers()).toEqual([])
+    })
+
     it('starts an adopted image that waits on its observer over under a new root', async () => {
       const { le, img, box, attach } = setup()
       const roots = () => MockIntersectionObserver.instances.filter((o) => o.elements.has(box)).map((o) => o.options.root)

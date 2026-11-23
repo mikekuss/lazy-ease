@@ -102,10 +102,10 @@ export interface Attachment {
    * Starts a new generation for new options (a new logical source) with its
    * own placeholder. A native generation adopts the sources the element has
    * when `update` runs, so set them first. Options that differ from the
-   * current ones only in their functions (callbacks, reveal, the loader's url),
-   * with the same root and loader objects and the same picture sources, keep
-   * the image as it is (waiting, loading, loaded or failed) and take effect
-   * from then on. A new `version` reloads a failed image.
+   * current ones only in their functions (callbacks, reveal), with the same
+   * root and loader objects and the same picture sources, keep the image as it
+   * is (waiting, loading, loaded or failed) and take effect from then on. A new
+   * loader object starts over. A new `version` reloads a failed image.
    */
   update(options: AttachOptions): void
   /** Releases listeners, observers, timers and ownership. The element keeps what it displays. */
