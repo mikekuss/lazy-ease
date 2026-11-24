@@ -6,27 +6,93 @@
     <title>lazy-ease demo</title>
     <!--le:site-->
     <style>
-      .intro { max-width:920px; margin:0 auto; padding-top:40px }
-      h1 { margin:0; font-size:28px; letter-spacing:-.01em }
-      .lead { font-size:16px }
-      .pages { list-style:none; padding:0; margin:28px 0 0; display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px }
-      .pages a { display:block; height:100%; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); text-decoration:none }
+      .home { max-width:1200px; margin:0 auto; padding:48px 24px 96px }
+      .intro { display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:16px }
+      h1 { margin:0; font-size:36px; letter-spacing:-.02em }
+      .home .lead { margin-top:6px; font-size:17px }
+      .install { padding:7px 14px; font:14px var(--mono); background:var(--text); color:#e5e7eb; border-radius:8px }
+      h2 { margin:48px 0 4px; font-size:20px }
+      h2 + p { margin:0; color:var(--muted); font-size:14px }
+      .kinds-bar { display:flex; flex-wrap:wrap; align-items:center; gap:10px 20px; margin:18px 0 20px; font-size:14px }
+      .kinds-bar label { display:flex; gap:6px; align-items:center }
+      .kinds { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:28px 20px }
+      .kind { margin:0 }
+      .kind [data-le] { display:block; aspect-ratio:3 / 2; border-radius:12px; overflow:hidden; background:#e5e7eb }
+      .kind img { display:block; width:100%; height:100%; object-fit:cover }
+      .kind figcaption { margin-top:10px }
+      .kind b { font-size:15px }
+      .kind span { display:block; color:var(--muted); font-size:13px }
+      .kind code { display:block; margin-top:4px; font-size:12px; color:#374151; overflow-x:auto; white-space:nowrap }
+      .pages { list-style:none; padding:0; margin:18px 0 0; display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:14px }
+      .pages a { display:block; height:100%; padding:16px 18px; text-decoration:none; background:var(--panel); border:1px solid var(--line); border-radius:12px }
       .pages a:hover { border-color:var(--faint) }
-      .pages strong { display:block; font-size:15px }
-      .pages span { display:block; margin-top:2px; color:var(--muted); font-size:13px }
-      .pages .mono { margin-top:8px }
+      .pages strong { font-size:15px }
+      .pages span { display:block; margin-top:4px; color:var(--muted); font-size:14px }
+      @media (max-width:640px) { .home { padding:32px 16px 64px } .kinds { grid-template-columns:1fr } }
     </style>
   </head>
   <body>
     <!--le:nav-->
-    <main class="page intro">
-      <h1>lazy-ease</h1>
-      <p class="lead">Images at the size they are rendered at, with a placeholder and one fade.</p>
+    <main class="home">
+      <div class="intro">
+        <div>
+          <h1>lazy-ease</h1>
+          <p class="lead">Images at the size they are rendered at, with a placeholder and one fade.</p>
+        </div>
+        <code class="install">npm i @lazy-ease/react</code>
+      </div>
+
+      <h2>Placeholders</h2>
+      <p>The server writes <code>{ thumbhash, color }</code> with <code>computeMetadata()</code>. The page paints one of them until the image fades in.</p>
+      <form class="kinds-bar" id="kinds-bar">
+        <label>Image <select name="photo"></select></label>
+        <label>Network
+          <select name="net">
+            <option value="off">Real speed</option>
+            <option value="fast-4g">Fast 4G</option>
+            <option value="slow-4g" selected>Slow 4G</option>
+            <option value="3g">3G</option>
+          </select>
+        </label>
+        <button type="button" class="primary" id="replay">↻ Replay</button>
+      </form>
+      <div class="kinds">
+        <figure class="kind">
+          <span data-le data-kind="thumbhash"></span>
+          <figcaption><b>ThumbHash</b><span>Default. Smooth, about 30 bytes.</span><code>placeholder="thumbhash:…"</code><code>thumbhashDecoder(thumbhash)</code></figcaption>
+        </figure>
+        <figure class="kind">
+          <span data-le data-kind="focus"></span>
+          <figcaption><b>ThumbHash + focus</b><span>The image sharpens out of the blur.</span><code>reveal={focusReveal}</code></figcaption>
+        </figure>
+        <figure class="kind">
+          <span data-le data-kind="png"></span>
+          <figcaption><b>ThumbHash, raw</b><span>The decoded PNG without blur.</span><code>thumbhashDecoder(thumbhash, { blur: 0 })</code></figcaption>
+        </figure>
+        <figure class="kind">
+          <span data-le data-kind="color"></span>
+          <figcaption><b>Color</b><span>The average color. Works in any template.</span><code>placeholder="#5b7186"</code></figcaption>
+        </figure>
+        <figure class="kind">
+          <span data-le data-kind="uri"></span>
+          <figcaption><b>Data URI</b><span>Your own image, e.g. a gradient.</span><code>placeholder="data:image/svg+xml,…"</code></figcaption>
+        </figure>
+        <figure class="kind">
+          <span data-le data-kind="none"></span>
+          <figcaption><b>None</b><span>Only the fade.</span><code>placeholder="none"</code></figcaption>
+        </figure>
+      </div>
+
+      <h2>Demos</h2>
+      <p>Every page below uses the same images.</p>
       <ul class="pages">
-        <li><a href="fade/"><strong>Fade hero</strong><span>Placeholder, then one fade. Throttle and late start.</span><span class="mono">vanilla · data-le</span></a></li>
-        <li><a href="lcp/"><strong>LCP hero</strong><span>Sources in the first HTML. No script.</span><span class="mono">native · fetchpriority</span></a></li>
-        <li><a href="recipes/"><strong>Recipes</strong><span>Sizes, ratios, fill, backgrounds and more.</span><span class="mono">React · &lt;Image&gt;</span></a></li>
+        <li><a href="recipes/"><strong>Recipes</strong><span>Every use case with the React Image.</span></a></li>
+        <li><a href="fade/"><strong>Fade hero</strong><span>Template HTML, one fade.</span></a></li>
+        <li><a href="lcp/"><strong>LCP hero</strong><span>Sources in the first HTML, no script.</span></a></li>
+        <li data-live><a href="placeholders/"><strong>Placeholders</strong><span>All variants side by side.</span></a></li>
+        <li data-live><a href="controller.html"><strong>Cases</strong><span>The controller, case by case.</span></a></li>
       </ul>
     </main>
+    <script type="module" src="/src/home/main.ts"></script>
   </body>
 </html>
