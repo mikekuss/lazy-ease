@@ -1,0 +1,67 @@
+/* The look every demo page shares, after the placeholders page: light, one
+   compact bar, images first, small mono readouts. The prerender plugin
+   inlines this file at <!--le:site-->; page stylesheets come after it. */
+:root {
+  color-scheme: light;
+  --bg: #f3f4f6;
+  --panel: #fff;
+  --line: #e5e7eb;
+  --text: #111827;
+  --muted: #4b5563;
+  --faint: #6b7280;
+  --ok: #047857;
+  --warn: #b45309;
+  --error: #b91c1c;
+  --radius: 10px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+*, ::before, ::after { box-sizing:border-box }
+body { margin:0; font:15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; color:var(--text); background:var(--bg) }
+code { font-family:var(--mono); font-size:.9em }
+a { color:inherit }
+
+/* Site header: brand and page links. */
+.site { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; padding:8px 20px; background:var(--text); font-size:14px }
+.site a { color:#d1d5db; text-decoration:none; padding:2px 8px; border-radius:6px }
+.site a:hover { color:#fff }
+.site a[aria-current=page] { color:#fff; background:rgb(255 255 255 / .14) }
+.site .brand { color:#fff; font-weight:700; padding-left:0; margin-right:4px; background:none }
+.site nav { display:flex; flex-wrap:wrap; gap:2px }
+
+/* Control bar, sticky under the header. */
+.bar { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; padding:10px 20px; background:var(--panel); border-bottom:1px solid var(--line); font-size:14px }
+.bar label { display:flex; gap:6px; align-items:center }
+.bar output, .bar .stat { font:12px var(--mono); color:var(--muted); font-variant-numeric:tabular-nums }
+select, button, input { font:inherit }
+select { font-size:13px; padding:2px 4px; border:1px solid #d1d5db; border-radius:6px; background:#fff; color:var(--text) }
+button { font-size:13px; padding:3px 12px; border:1px solid #d1d5db; border-radius:6px; background:#fff; color:var(--text); cursor:pointer }
+button:hover { border-color:var(--faint) }
+button.primary { background:var(--text); border-color:var(--text); color:#fff }
+input[type=range] { width:120px }
+
+/* Content. */
+.page { padding:0 20px 64px }
+.lead { margin:16px 0 0; color:var(--muted); font-size:14px; max-width:70ch }
+.note { margin:0 0 10px; color:var(--muted); font-size:13px }
+.case { margin:28px 0 36px; scroll-margin-top:100px }
+.case > h2 { margin:0 0 8px; font-size:16px }
+.case > h2 small { font-weight:400; font-size:14px; color:var(--faint); margin-left:6px }
+
+/* Images: rounded, no card around them; a small caption with a mono readout. */
+.shot { border-radius:var(--radius); overflow:hidden }
+.cap { margin-top:4px; font-size:12px; font-weight:600 }
+.cap .mono, .mono { display:block; font:11px/1.4 var(--mono); font-weight:400; color:var(--muted) }
+
+/* Props of a case, as the JSX or HTML writes them. */
+.props { display:block; width:fit-content; max-width:100%; margin:0 0 12px; padding:4px 10px; overflow-x:auto; white-space:pre; font:12px/1.6 var(--mono); color:#374151; background:var(--panel); border:1px solid var(--line); border-radius:6px }
+
+/* Variant switch: one button per variant, the shown one dark. */
+.tabs { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px }
+.tabs button { border-radius:999px; padding:3px 12px }
+.tabs button[aria-pressed=true] { background:var(--text); border-color:var(--text); color:#fff }
+
+@media (max-width:640px) {
+  .site, .bar, .page { padding-left:16px; padding-right:16px }
+  /* Not sticky on a phone: wrapped, it would cover a third of the screen. */
+  .bar { position:relative; gap:8px 14px }
+}

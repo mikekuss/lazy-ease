@@ -4,25 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lazy-ease demo</title>
+    <!--le:site-->
     <style>
-      body { margin:0; font:16px/1.5 system-ui, sans-serif; color:#111827; background:#f9fafb }
-      main { max-width:640px; margin:0 auto; padding:48px 20px }
-      h1 { margin:0 0 8px; font-size:28px }
-      ul { list-style:none; padding:0; margin:24px 0 0; display:grid; gap:12px }
-      a { display:block; padding:14px 16px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:inherit; text-decoration:none }
-      a:hover { border-color:#2563eb }
-      a strong { display:block; color:#2563eb }
-      p { margin:0; color:#4b5563 }
+      .intro { max-width:920px; margin:0 auto; padding-top:40px }
+      h1 { margin:0; font-size:28px; letter-spacing:-.01em }
+      .lead { font-size:16px }
+      .pages { list-style:none; padding:0; margin:28px 0 0; display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px }
+      .pages a { display:block; height:100%; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); text-decoration:none }
+      .pages a:hover { border-color:var(--faint) }
+      .pages strong { display:block; font-size:15px }
+      .pages span { display:block; margin-top:2px; color:var(--muted); font-size:13px }
+      .pages .mono { margin-top:8px }
     </style>
   </head>
   <body>
-    <main>
+    <!--le:nav-->
+    <main class="page intro">
       <h1>lazy-ease</h1>
-      <p>Images at the size they are rendered at.</p>
-      <ul>
-        <li><a href="fade/"><strong>Fade hero</strong>Placeholder, then one fade. Throttle and late start.</a></li>
-        <li><a href="lcp/"><strong>LCP hero</strong>Sources in the first HTML. No script.</a></li>
-        <li><a href="recipes/"><strong>Recipes</strong>Every case from the image recipes.</a></li>
+      <p class="lead">Images at the size they are rendered at, with a placeholder and one fade.</p>
+      <ul class="pages">
+        <li><a href="fade/"><strong>Fade hero</strong><span>Placeholder, then one fade. Throttle and late start.</span><span class="mono">vanilla · data-le</span></a></li>
+        <li><a href="lcp/"><strong>LCP hero</strong><span>Sources in the first HTML. No script.</span><span class="mono">native · fetchpriority</span></a></li>
+        <li><a href="recipes/"><strong>Recipes</strong><span>Sizes, ratios, fill, backgrounds and more.</span><span class="mono">React · &lt;Image&gt;</span></a></li>
       </ul>
     </main>
   </body>

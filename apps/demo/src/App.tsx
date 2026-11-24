@@ -33,15 +33,36 @@ const IMAGE_LIST = STATIC ? `${BASE}api/images.json` : '/api/images'
 const GALLERY = STATIC ? GALLERY_SIZE.static : GALLERY_SIZE.live
 const DENSITIES = [0, 1, 2, 3]
 
-function Case({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
+function Case({ id, title, note, children }: { id: string; title: string; note?: ReactNode; children: ReactNode }) {
   return (
-    <section>
-      <h2>{title}</h2>
-      {note && <p>{note}</p>}
+    <section className="case" id={id}>
+      <h2>
+        {title}
+        {note && <small>{note}</small>}
+      </h2>
       {children}
     </section>
   )
 }
+
+/** The props a case passes, as the JSX writes them. */
+const Props = ({ children }: { children: string }) => <code className="props">{children}</code>
+
+/** One button per variant; only the chosen one is rendered. */
+function Tabs<T extends string>({ value, options, onChange }: { value: T; options: Record<T, string>; onChange: (value: T) => void }) {
+  return (
+    <div className="tabs" role="group">
+      {(Object.entries(options) as [T, string][]).map(([key, label]) => (
+        <button key={key} type="button" aria-pressed={key === value} onClick={() => onChange(key)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const LAYOUTS = { fixed: 'Fixed', ratio: 'Breakpoint ratio', resize: 'Resize', fill: 'Fill', article: 'Article' } as const
+const SOURCES = { background: 'Background', originals: 'SVG, GIF, external', shadow: 'Shadow panel', backend: 'Backend' } as const
 
 export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings)
@@ -50,6 +71,8 @@ export function App() {
   const [density, setDensity] = useState(0)
   const [growWidth, setGrowWidth] = useState(240)
   const [showHidden, setShowHidden] = useState(false)
+  const [layout, setLayout] = useState<keyof typeof LAYOUTS>('fixed')
+  const [kind, setKind] = useState<keyof typeof SOURCES>('background')
 
   useEffect(() => {
     // On the first start the server is still generating the images, so retry.
@@ -123,6 +146,9 @@ export function App() {
   const pick = (i: number) => gallery[i % gallery.length]!
   const external = byPath.get(`/${EXTERNAL_FILE}`)
 
+  const provider = `<LazyEaseProvider loading="${settings.loading}" rootMargin="${settings.rootMargin}px" dwellTime={${settings.dwellTime}} fadeDuration={${settings.fadeDuration}}>`
+  const placeholderProp = { thumbhash: 'placeholder="thumbhash:…"', color: 'placeholder="#rrggbb"', none: 'placeholder="none"' }[settings.placeholder]
+
   return (
     <LazyEaseProvider
       loader={loader}
@@ -133,17 +159,7 @@ export function App() {
       dwellTime={settings.dwellTime}
       fadeDuration={settings.fadeDuration}
     >
-      <header className="topbar">
-        <div className="brand">
-          <strong>lazy-ease</strong>
-          <span>Recipes</span>
-          <a href={`${BASE}fade/`}>Fade hero</a>
-          <a href={`${BASE}lcp/`}>LCP hero</a>
-          {/* The controller cases need the demo server, so the static build has none. */}
-          {!STATIC && <a href="/controller.html">Controller cases</a>}
-        </div>
-        <Controls settings={settings} onChange={changeSettings} onReload={reload} />
-      </header>
+      <Controls settings={settings} onChange={changeSettings} onReload={reload} />
       {STATIC && (
         <p className="static-banner">
           Static demo: pre-rendered variants. Run <code>pnpm dev</code> for the live server.
@@ -155,108 +171,153 @@ export function App() {
           {STATIC ? 'Loading the image list …' : 'Loading the image list … is the demo server running on port 3001?'}
         </p>
       ) : (
-        <main key={demoKey}>
-          <Case title="Hero" note="Drag past 800 px: wide crop and focus switch.">
+        <main className="page" key={demoKey}>
+          <nav className="toc" aria-label="Cases">
+            <a href="#hero">Hero</a>
+            <a href="#layout">Layout</a>
+            <a href="#sources">Sources</a>
+            <a href="#gallery">Gallery</a>
+          </nav>
+          <Props>{`${provider}\n  <Image src srcWidth srcHeight version ${placeholderProp} … />`}</Props>
+
+          <Case id="hero" title="Hero" note="Drag past 800 px: wide crop and focus switch.">
             <HeroFrame />
           </Case>
 
-          <Case title="Fixed and DPR" note="1× and 2× candidates. A 40 px original gets one URL.">
-            <div className="inline-controls">
-              <label className="field">
-                <span>Density</span>
-                <select value={density} onChange={(e) => setDensity(Number(e.target.value))}>
-                  {DENSITIES.map((value) => (
-                    <option key={value} value={value}>
-                      {value ? `${value}× (via sizes)` : `Device (${devicePixelRatio}×)`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="row" key={density}>
-              <DemoImage {...source(AVATAR)} alt="Pines" width={AVATAR.size} height={AVATAR.size} focalPoint={AVATAR.focalPoint} sizes={sizesFor(AVATAR.size)} label="56 px" />
-              <DemoImage {...source(TINY)} alt="Tiny" width={56} height={56} sizes={sizesFor(56)} label="40 px original" />
-              <DemoImage {...source(CARD)} alt="Glacier" {...CARD_SIZE} sizes={sizesFor(CARD_SIZE.width)} label="320×240" />
-            </div>
-          </Case>
-
-          <Case title="Breakpoint ratio" note="4:3 below 800 px, 2:1 above.">
-            <div className="split">
-              <DemoImage
-                {...source(SPLIT)}
-                alt="Ridge"
-                aspectRatio={4 / 3}
-                sizes="100vw"
-                sources={[{ media: '(min-width:800px)', src: SPLIT.src, srcWidth: SPLIT.width, srcHeight: SPLIT.height, aspectRatio: 2, sizes: '50vw', version: source(SPLIT).version }]}
-                label="card"
-              />
-            </div>
-          </Case>
-
-          <Case title="Resize" note="Growing upgrades in place, shrinking keeps the image.">
-            <div className="inline-controls">
-              <label className="field range">
-                <span>
-                  Width <output>{growWidth} px</output>
-                </span>
-                <input type="range" min={120} max={900} step={10} value={growWidth} onChange={(e) => setGrowWidth(Number(e.target.value))} />
-              </label>
-            </div>
-            <div style={{ width: growWidth, maxWidth: '100%' }}>
-              <DemoImage {...source(GROW)} alt="Peaks" aspectRatio={1} label="measured" />
-            </div>
-          </Case>
-
-          <Case title="Fill gallery" note="Browser crop of one uncropped ladder. Hidden cells stay idle.">
-            <label className="field checkbox">
-              <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Show hidden cells
-            </label>
-            <div className="cells">
-              {[...CELLS, ...CELLS].map((cell, i) => (
-                <div key={i} hidden={i >= CELLS.length && !showHidden}>
-                  <DemoImage {...source(cell)} alt="" fill frame={{ aspectRatio: '1' }} label={i >= CELLS.length ? 'hidden' : 'cell'} />
+          <Case id="layout" title="Layout" note="How the box gets its size.">
+            <Tabs value={layout} options={LAYOUTS} onChange={setLayout} />
+            {layout === 'fixed' && (
+              <>
+                <p className="note">1× and 2× candidates. A 40 px original gets one URL.</p>
+                <Props>{`<Image width={56} height={56} focalPoint={{ x: 40, y: 30 }} />\n<Image width={320} height={240} />`}</Props>
+                <div className="inline-controls">
+                  <label className="field">
+                    <span>Density</span>
+                    <select value={density} onChange={(e) => setDensity(Number(e.target.value))}>
+                      {DENSITIES.map((value) => (
+                        <option key={value} value={value}>
+                          {value ? `${value}× (via sizes)` : `Device (${devicePixelRatio}×)`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
-              ))}
-            </div>
+                <div className="row" key={density}>
+                  <DemoImage {...source(AVATAR)} alt="Pines" width={AVATAR.size} height={AVATAR.size} focalPoint={AVATAR.focalPoint} sizes={sizesFor(AVATAR.size)} label="56 px" />
+                  <DemoImage {...source(TINY)} alt="Tiny" width={56} height={56} sizes={sizesFor(56)} label="40 px original" />
+                  <DemoImage {...source(CARD)} alt="Glacier" {...CARD_SIZE} sizes={sizesFor(CARD_SIZE.width)} label="320×240" />
+                </div>
+              </>
+            )}
+            {layout === 'ratio' && (
+              <>
+                <p className="note">4:3 below 800 px, 2:1 above.</p>
+                <Props>{`<Image aspectRatio={4 / 3} sizes="100vw"\n  sources={[{ media: '(min-width:800px)', aspectRatio: 2, sizes: '50vw' }]} />`}</Props>
+                <div className="split">
+                  <DemoImage
+                    {...source(SPLIT)}
+                    alt="Ridge"
+                    aspectRatio={4 / 3}
+                    sizes="100vw"
+                    sources={[{ media: '(min-width:800px)', src: SPLIT.src, srcWidth: SPLIT.width, srcHeight: SPLIT.height, aspectRatio: 2, sizes: '50vw', version: source(SPLIT).version }]}
+                    label="card"
+                  />
+                </div>
+              </>
+            )}
+            {layout === 'resize' && (
+              <>
+                <p className="note">Measured: growing upgrades in place, shrinking keeps the image.</p>
+                <Props>{`<Image aspectRatio={1} />`}</Props>
+                <div className="inline-controls">
+                  <label className="field range">
+                    <span>
+                      Width <output>{growWidth} px</output>
+                    </span>
+                    <input type="range" min={120} max={900} step={10} value={growWidth} onChange={(e) => setGrowWidth(Number(e.target.value))} />
+                  </label>
+                </div>
+                <div style={{ width: growWidth, maxWidth: '100%' }}>
+                  <DemoImage {...source(GROW)} alt="Peaks" aspectRatio={1} label="measured" />
+                </div>
+              </>
+            )}
+            {layout === 'fill' && (
+              <>
+                <p className="note">Browser crop of one uncropped ladder. Hidden cells stay idle.</p>
+                <Props>{`<div style={{ position: 'relative', aspectRatio: '1' }}>\n  <Image fill />\n</div>`}</Props>
+                <div className="inline-controls">
+                  <label className="field">
+                    <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Show hidden cells
+                  </label>
+                </div>
+                <div className="cells">
+                  {[...CELLS, ...CELLS].map((cell, i) => (
+                    <div key={i} hidden={i >= CELLS.length && !showHidden}>
+                      <DemoImage {...source(cell)} alt="" fill frame={{ aspectRatio: '1' }} label={i >= CELLS.length ? 'hidden' : 'cell'} />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {layout === 'article' && (
+              <>
+                <p className="note">Native, intrinsic ratio. Without source size: one URL.</p>
+                <Props>{`<Image loading="native" sizes="${ARTICLE_SIZES}" />\n<Image width={320} height={480} />  // no srcWidth`}</Props>
+                <div className="article">
+                  <DemoImage {...source(ARTICLE)} alt="Night sky" loading="native" sizes={ARTICLE_SIZES} label="native" />
+                  <DemoImage src={SINGLE.src} alt="Canyon" width={SINGLE.width} height={SINGLE.height} placeholder={placeholderFor(byPath.get(SINGLE.src))} label="one URL" />
+                </div>
+              </>
+            )}
           </Case>
 
-          <Case title="Article" note="Native, intrinsic ratio. Without source size: one URL.">
-            <div className="article">
-              <DemoImage {...source(ARTICLE)} alt="Night sky" loading="native" sizes={ARTICLE_SIZES} label="native" />
-              <DemoImage src={SINGLE.src} alt="Canyon" width={SINGLE.width} height={SINGLE.height} placeholder={placeholderFor(byPath.get(SINGLE.src))} label="one URL" />
-            </div>
+          <Case id="sources" title="Sources" note="Beyond the plain <Image>.">
+            <Tabs value={kind} options={SOURCES} onChange={setKind} />
+            {kind === 'background' && (
+              <>
+                <p className="note">CSS image-set(), set once visible.</p>
+                <Props>{`--banner: imageSet({ src, width: 720, aspectRatio: 2, loader })\nwhenVisible(banner, …, () => banner.setAttribute('data-le-visible', ''))`}</Props>
+                <Banner loader={loader} />
+              </>
+            )}
+            {kind === 'originals' && (
+              <>
+                <p className="note">SVG, animated GIF and an external photo load as they are.</p>
+                <Props>{`<Image src="/_img/extra/logo.svg" width={120} height={40} />\n<Image src="https://…/mountains.jpg" width={320} height={213} />`}</Props>
+                <div className="row">
+                  <DemoImage src={`${BASE}_img${LOGO}`} alt="Club" width={120} height={40} label="SVG" />
+                  <DemoImage src={`${BASE}_img${WAVE}`} alt="Waving hand" width={64} height={64} label="GIF" />
+                  {external && (
+                    <DemoImage
+                      src={new URL(`${BASE}external/${EXTERNAL_FILE}`, location.href).href}
+                      alt="Mountains"
+                      width={320}
+                      height={Math.round((320 * external.height) / external.width)}
+                      placeholder={placeholderFor(external)}
+                      label="external"
+                    />
+                  )}
+                </div>
+              </>
+            )}
+            {kind === 'shadow' && (
+              <>
+                <p className="note">Own CSS and controller, the panel is the scroll root.</p>
+                <Props>{`createLazyEase({ loader, root: panel })\n  .attach(img, { src, width: 128, height: 128, token, version })`}</Props>
+                <ShadowPanel loader={panelLoader} />
+              </>
+            )}
+            {kind === 'backend' && (
+              <>
+                <p className="note">{STATIC ? 'Live server only.' : 'Denied crop, cache hit, eviction and the render after it.'}</p>
+                {!STATIC && <Backend />}
+              </>
+            )}
           </Case>
 
-          <Case title="Background" note="CSS image-set(), set once visible.">
-            <Banner loader={loader} />
-          </Case>
-
-          <Case title="Originals" note="SVG, animated GIF and an external photo load as they are.">
-            <div className="row">
-              <DemoImage src={`${BASE}_img${LOGO}`} alt="Club" width={120} height={40} label="SVG" />
-              <DemoImage src={`${BASE}_img${WAVE}`} alt="Waving hand" width={64} height={64} label="GIF" />
-              {external && (
-                <DemoImage
-                  src={new URL(`${BASE}external/${EXTERNAL_FILE}`, location.href).href}
-                  alt="Mountains"
-                  width={320}
-                  height={Math.round((320 * external.height) / external.width)}
-                  placeholder={placeholderFor(external)}
-                  label="external"
-                />
-              )}
-            </div>
-          </Case>
-
-          <Case title="Shadow panel" note="Own CSS and controller, the panel is the scroll root.">
-            <ShadowPanel loader={panelLoader} />
-          </Case>
-
-          <Case title="Backend" note={STATIC ? 'Live server only.' : 'Denied crop, cache hit, eviction and the render after it.'}>
-            {!STATIC && <Backend />}
-          </Case>
-
-          <Case title="Scroll gallery">
+          <Case id="gallery" title="Scroll gallery" note={'Crossed out: what sizes="100vw" would load.'}>
+            <Props>{`<Image aspectRatio={ratio} />`}</Props>
             <div className="gallery">
               {Array.from({ length: GALLERY }, (_, i) => {
                 const [label, ratio] = galleryRatio(i, gallery.length)

@@ -20,8 +20,8 @@ const PRESET_LABELS: Record<keyof typeof PRESETS | 'custom', string> = {
 }
 
 const LOADING_LABELS: Record<LoadingStrategy, string> = {
-  lazy: 'lazy (IntersectionObserver)',
-  native: 'native (loading="lazy")',
+  lazy: 'lazy',
+  native: 'native',
   eager: 'eager',
 }
 
@@ -45,7 +45,8 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
   const saved = naiveBytes > 0 ? Math.round((1 - bytes / naiveBytes) * 100) : undefined
 
   return (
-    <div className="controls">
+    <div className="bar recipes-bar">
+      <strong>Recipes</strong>
       <Select label="Network" value={settings.throttle} labels={PRESET_LABELS} onChange={(v) => set('throttle', v)} />
       {settings.throttle === 'custom' && (
         <>
@@ -59,34 +60,35 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
         </p>
       )}
       <Select label="Loading" value={settings.loading} labels={LOADING_LABELS} onChange={(v) => set('loading', v)} />
-      <Range
-        label="Preload distance"
-        unit="px"
-        min={0}
-        max={3000}
-        step={50}
-        value={settings.rootMargin}
-        disabled={settings.loading !== 'lazy'}
-        onChange={(v) => set('rootMargin', v)}
-      />
-      <Range
-        label="Dwell time"
-        unit="ms"
-        min={0}
-        max={1000}
-        step={50}
-        value={settings.dwellTime}
-        disabled={settings.loading !== 'lazy'}
-        onChange={(v) => set('dwellTime', v)}
-      />
-      <Range label="Fade" unit="ms" min={0} max={2000} step={50} value={settings.fadeDuration} onChange={(v) => set('fadeDuration', v)} />
       <Select label="Placeholder" value={settings.placeholder} labels={PLACEHOLDER_LABELS} onChange={(v) => set('placeholder', v)} />
-      <Select
-        label="Loader formats"
-        value={settings.formats}
-        labels={FORMAT_LABELS}
-        onChange={(v) => set('formats', v)}
-      />
+      <Range label="Fade" unit="ms" min={0} max={2000} step={50} value={settings.fadeDuration} onChange={(v) => set('fadeDuration', v)} />
+      {/* Rarely changed: in a popover, so the bar stays one line. */}
+      <details className="more">
+        <summary>More</summary>
+        <div className="popover">
+          <Range
+            label="Preload distance"
+            unit="px"
+            min={0}
+            max={3000}
+            step={50}
+            value={settings.rootMargin}
+            disabled={settings.loading !== 'lazy'}
+            onChange={(v) => set('rootMargin', v)}
+          />
+          <Range
+            label="Dwell time"
+            unit="ms"
+            min={0}
+            max={1000}
+            step={50}
+            value={settings.dwellTime}
+            disabled={settings.loading !== 'lazy'}
+            onChange={(v) => set('dwellTime', v)}
+          />
+          <Select label="Formats" value={settings.formats} labels={FORMAT_LABELS} onChange={(v) => set('formats', v)} />
+        </div>
+      </details>
 
       <div className="stats" aria-live="polite">
         {/* One text node per line in a fixed-width box: updating the numbers
@@ -97,7 +99,7 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
           {saved !== undefined && `${mb(bytes)} vs. ${mb(naiveBytes)} with 100vw (${saved >= 0 ? `−${saved}` : `+${-saved}`} %)`}
         </span>
       </div>
-      <button type="button" onClick={onReload} title="New URLs for every image, so the browser cache is cold">
+      <button type="button" className="primary" onClick={onReload} title="New URLs for every image, so the browser cache is cold">
         Reload images
       </button>
     </div>

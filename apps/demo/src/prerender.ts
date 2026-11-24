@@ -115,7 +115,7 @@ export function pairMarkup(options: PrerenderOptions): string {
        style="display:block;width:100%;height:auto;background-color:${article.color}"
        loading="lazy" decoding="async"
        src="${attr(native.src)}" srcset="${attr(native.srcset ?? native.src)}" sizes="${ARTICLE_SIZES}">
-  <figcaption>Native</figcaption>
+  <figcaption>Native<span class="mono">img srcset sizes loading=lazy</span></figcaption>
 </figure>
 <figure class="pair-item" data-case="fade">
   <span data-le style="display:block;aspect-ratio:${card.width}/${card.height};background-color:${card.color}">
@@ -123,13 +123,34 @@ export function pairMarkup(options: PrerenderOptions): string {
          style="display:block;width:100%;height:100%;object-fit:cover"
          src="${INERT}" data-le-url="${attr(single.src)}">
   </span>
-  <figcaption>Fade, one URL</figcaption>
+  <figcaption>Fade, one URL<span class="mono">data-le-url</span></figcaption>
 </figure>
 <figure class="pair-item" data-case="avatar">
   <span data-le style="display:block;width:${AVATAR.size}px;height:${AVATAR.size}px;border-radius:50%;background-color:${options.meta(AVATAR.src).color}">
     <img alt="Pines" width="${AVATAR.size}" height="${AVATAR.size}" data-le-sizes="${AVATAR.size}px"
          src="${INERT}" data-le-srcset="${attr(avatar.srcset ?? avatar.src)}">
   </span>
-  <figcaption>Fade, 1× and 2×</figcaption>
+  <figcaption>Fade, 1× and 2×<span class="mono">data-le-srcset data-le-sizes</span></figcaption>
 </figure>`
+}
+
+/** The demo pages, in nav order. `live` ones need the demo server, so the static build leaves them out. */
+const PAGES = [
+  { path: 'fade/', label: 'Fade' },
+  { path: 'lcp/', label: 'LCP' },
+  { path: 'recipes/', label: 'Recipes' },
+  { path: 'placeholders/', label: 'Placeholders', live: true },
+  { path: 'controller.html', label: 'Cases', live: true },
+]
+
+/**
+ * The site header every page shares. `current` is the page's path below
+ * `base` (`fade/`, or `''` for the start page). Plain links, so the LCP page
+ * stays without script.
+ */
+export function navMarkup(current: string, base: string, live: boolean): string {
+  const links = PAGES.filter((page) => live || !page.live)
+    .map((page) => `<a href="${base}${page.path}"${page.path === current ? ' aria-current="page"' : ''}>${page.label}</a>`)
+    .join('')
+  return `<header class="site"><a class="brand" href="${base}"${current === '' ? ' aria-current="page"' : ''}>lazy-ease</a><nav>${links}</nav></header>`
 }

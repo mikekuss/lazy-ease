@@ -28,10 +28,10 @@ interface Grant {
 }
 
 const PANEL_CSS = `
-  .panel { height: 220px; overflow: auto; border: 1px solid #2a313c; border-radius: 8px; padding: 12px; font: 13px/1.5 system-ui, sans-serif; color: #8b949e }
+  .panel { height: 220px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #fff; font: 13px/1.5 system-ui, sans-serif; color: #4b5563 }
   .spacer { height: 360px }
   [data-le] { width: 128px; height: 128px; border-radius: 8px; background-color: #3b4a3f }
-  small { display: block; margin-top: 6px; font: 12px/1.4 ui-monospace, monospace }
+  small { display: block; margin-top: 6px; font: 11px/1.4 ui-monospace, monospace }
 `
 
 /**

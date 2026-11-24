@@ -17,6 +17,8 @@ export function HeroFrame() {
   const box = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
   const [info, setInfo] = useState('')
+  // As tall as the route's hero, so the frame shows it without empty space.
+  const [height, setHeight] = useState(520)
 
   // On a phone the container is narrower than 390px: start at its width so
   // the frame fits. The slider still goes wider; the container scrolls then.
@@ -29,12 +31,24 @@ export function HeroFrame() {
     const timer = setInterval(() => {
       const img = frame.current?.contentDocument?.querySelector<HTMLImageElement>('[data-hero] img')
       if (!img) return setInfo('')
+      const hero = img.closest('[data-hero]')!.getBoundingClientRect()
+      setHeight(Math.ceil(hero.bottom + frame.current!.contentWindow!.scrollY) + 20)
       const { aspectRatio, focalPoint } = variantOf(img.currentSrc || 'about:blank')
       const crop = aspectRatio === undefined ? '' : `ar ${aspectRatio}${focalPoint ? ` · focus ${focalPoint.x}/${focalPoint.y}` : ''}`
       void pixels(img).then((size) => setInfo([route === 'fade' && stateOf(img), crop, size].filter(Boolean).join(' · ')))
     }, 250)
     return () => clearInterval(timer)
   }, [route])
+
+  // The route's own header and controls are not part of the hero; the frame
+  // shows the hero alone. Same origin, so a style in its document does it.
+  const hideChrome = () => {
+    const doc = frame.current?.contentDocument
+    if (!doc) return
+    const style = doc.createElement('style')
+    style.textContent = 'html { overflow: hidden } .site, .bar, .case > h2, .props { display: none }'
+    doc.head.append(style)
+  }
 
   return (
     <>
@@ -55,7 +69,7 @@ export function HeroFrame() {
         <span className="readout">{info}</span>
       </div>
       <div className="hero-frame" ref={box}>
-        <iframe ref={frame} title="Hero route" src={`${BASE}${route}/`} style={{ width }} />
+        <iframe ref={frame} title="Hero route" src={`${BASE}${route}/`} style={{ width, height }} onLoad={hideChrome} />
       </div>
     </>
   )

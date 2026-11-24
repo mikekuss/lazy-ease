@@ -4,14 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fade hero · lazy-ease</title>
+    <!--le:site-->
     <link rel="stylesheet" href="/src/fade/fade.css" />
   </head>
   <body>
-    <nav><strong>lazy-ease</strong><a href="../lcp/">LCP</a><a href="../recipes/">Recipes</a></nav>
-    <section data-le-auto class="hero-area">
-      <!--le:hero-fade-->
-    </section>
+    <!--le:nav-->
     <form class="bar" id="settings">
+      <strong>Fade hero</strong>
       <label>Network
         <select name="net">
           <option value="off">Real speed</option>
@@ -27,15 +26,23 @@
           <option value="3000">After 3 s</option>
         </select>
       </label>
-      <button type="submit">Reload</button>
-      <output id="status" aria-live="polite">Script waiting</output>
+      <button type="submit" class="primary">Reload</button>
+      <output id="status" class="stat" aria-live="polite">Script waiting</output>
     </form>
-    <p class="note" id="throttle-note" hidden>Throttle starts on the next reload.</p>
-    <main>
-      <h2>Native and JS</h2>
-      <p class="note">Same template, three modes. The native image shows before the script starts and stays.</p>
-      <section data-le-auto class="pair">
-        <!--le:pair-->
+    <main class="page">
+      <p class="note warn" id="throttle-note" hidden>Throttle starts on the next reload.</p>
+      <section class="case">
+        <h2>Hero <small>Color placeholder, then one fade. Wide crop from 800 px.</small></h2>
+        <code class="props">&lt;span data-le data-hero&gt; &lt;picture&gt; … data-le-srcset data-le-sizes</code>
+        <section data-le-auto class="hero-area shot">
+          <!--le:hero-fade-->
+        </section>
+      </section>
+      <section class="case">
+        <h2>Native and JS <small>Same template, three modes. The native image shows before the script and stays.</small></h2>
+        <section data-le-auto class="pair">
+          <!--le:pair-->
+        </section>
       </section>
     </main>
     <script type="module" src="/src/fade/main.ts"></script>

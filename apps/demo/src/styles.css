@@ -1,18 +1,4 @@
-:root {
-  color-scheme: dark;
-  --bg: #0e1116;
-  --panel: #161b22;
-  --border: #2a313c;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --accent: #58a6ff;
-  --ok: #3fb950;
-  --warn: #d29922;
-  --error: #f85149;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-}
+/* The recipes page, on top of the shared site.css (inlined into the HTML). */
 
 * {
   box-sizing: border-box;
@@ -24,109 +10,77 @@ html {
   scrollbar-gutter: stable;
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
-}
+/* ---- Control bar ------------------------------------------------------- */
 
-code {
-  font-size: 0.9em;
-  color: var(--accent);
-}
-
-.topbar {
-  /* Sticky also makes it the containing block of .throttle-note. */
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px 24px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border);
-}
-
-.brand {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  flex-wrap: wrap;
-}
-
-.brand strong {
-  font-size: 1.2rem;
-}
-
-.brand span {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-  align-items: end;
+/* Sticky (from .bar) also makes it the containing block of .throttle-note
+   and the popover. */
+.recipes-bar {
+  gap: 8px 16px;
 }
 
 .field {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.8rem;
-  color: var(--muted);
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .field output {
-  color: var(--text);
+  font: 12px var(--mono);
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-
-.field.checkbox {
-  flex-direction: row;
-  align-items: center;
-  padding-bottom: 4px;
 }
 
 /* Fixed width, so the value changing from "50 ms" to "2000 ms" never moves
    the controls after it. */
-.field.range {
-  width: 170px;
-}
-
-.field.range > span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.field input[type='range'] {
-  width: 100%;
+.field.range output {
+  display: inline-block;
+  width: 6.5em;
 }
 
 .field input:disabled {
   opacity: 0.4;
 }
 
-select,
-button {
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 10px;
+.more {
+  position: relative;
 }
 
-button {
+.more summary {
   cursor: pointer;
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0b1220;
-  font-weight: 600;
+  font-size: 13px;
+  padding: 3px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  list-style: none;
+  user-select: none;
+}
+
+.more summary::-webkit-details-marker {
+  display: none;
+}
+
+.more summary::after {
+  content: ' ▾';
+  color: var(--faint);
+}
+
+.more[open] summary {
+  background: var(--bg);
+}
+
+.more .popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
 }
 
 .stats {
@@ -134,52 +88,103 @@ button {
   flex-direction: column;
   /* Start-aligned, so the text's origin stays put as the numbers grow. */
   text-align: start;
-  gap: 2px;
+  gap: 1px;
   margin-left: auto;
   /* Fixed width, wide enough for "40/40 loaded · 12.34 MB" and
      "12.34 MB vs. 12.34 MB with 100vw (−100 %)": the counts filling in
      never move the box or wrap it onto a new line. */
-  width: 19rem;
+  width: 20rem;
   max-width: 100%;
-  font-size: 0.85rem;
+  font: 11px/1.3 var(--mono);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  padding-bottom: 5px;
 }
 
 .stats span {
-  height: 1.2em;
-  line-height: 1.2em;
+  height: 1.3em;
   max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-main {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 8px 24px 120px;
+/* Hangs below the bar instead of taking a row in it, so it coming and going
+   when the service worker takes over never changes the bar's height. */
+.throttle-note {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px 20px;
+  font-size: 13px;
+  color: var(--warn);
+  background: #fffbeb;
+  border-bottom: 1px solid var(--line);
 }
 
-section {
-  margin-top: 40px;
-}
-
-h2 {
-  margin: 0 0 4px;
-  font-size: 1.15rem;
-}
-
-section > p {
-  margin: 0 0 16px;
+.static-banner {
+  margin: 0;
+  padding: 6px 20px;
+  font-size: 13px;
   color: var(--muted);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
 
 .empty {
   padding: 48px 24px;
   color: var(--muted);
   text-align: center;
+}
+
+/* ---- Page ------------------------------------------------------------- */
+
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 16px 0 10px;
+  font-size: 13px;
+}
+
+.toc a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.toc a:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.inline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.readout,
+.hint {
+  font: 11px/1.4 var(--mono);
+  color: var(--muted);
+}
+
+.hint {
+  margin: 0 0 8px;
+  font: 13px/1.5 system-ui, sans-serif;
+}
+
+.hint.error,
+.log .error {
+  color: var(--error);
+}
+
+.log .ok {
+  color: var(--ok);
 }
 
 .row {
@@ -191,17 +196,21 @@ section > p {
 
 .gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 18px 14px;
   align-items: start;
 }
 
+/* ---- Image with readout ----------------------------------------------- */
+
 .demo-image {
   margin: 0;
-  border-radius: 10px;
+}
+
+/* The image, its box or the fill frame: rounded like the placeholder tiles. */
+.demo-image > :first-child {
+  border-radius: var(--radius);
   overflow: hidden;
-  background: var(--panel);
-  border: 1px solid var(--border);
 }
 
 /* The positioned parent `fill` requires. */
@@ -210,16 +219,15 @@ section > p {
   overflow: hidden;
 }
 
-
 .demo-image figcaption {
   /* The nowrap rows must not size the card: "200×200 LOADING box 200px" is
      wider than a 200px image, and growing the card would rewrap its row. */
   contain: inline-size;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
-  font-size: 0.75rem;
+  gap: 1px;
+  padding-top: 5px;
+  font: 11px/1.4 var(--mono);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -227,10 +235,10 @@ section > p {
 /* One line each, whatever fills in later. */
 .caption-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  height: 1.4em;
-  line-height: 1.4em;
+  height: 1.5em;
+  line-height: 1.5em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -253,25 +261,27 @@ section > p {
 }
 
 .label {
+  font: 600 12px system-ui, sans-serif;
   color: var(--text);
 }
 
 .delivered {
-  color: var(--text);
+  color: var(--muted);
 }
 
 .naive {
-  color: var(--muted);
+  color: var(--faint);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--muted) 50%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--faint) 50%, transparent);
 }
 
 .state {
-  padding: 1px 6px;
+  padding: 0 5px;
   border-radius: 4px;
   border: 1px solid currentColor;
   text-transform: uppercase;
-  font-size: 0.65rem;
+  font-size: 9px;
+  line-height: 14px;
   letter-spacing: 0.04em;
   display: inline-grid;
   justify-items: center;
@@ -286,7 +296,7 @@ section > p {
 }
 
 .state-idle {
-  color: var(--muted);
+  color: var(--faint);
 }
 
 .state-loading {
@@ -301,88 +311,22 @@ section > p {
   color: var(--error);
 }
 
-@media (max-width: 640px) {
-  .topbar,
-  main {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .stats {
-    margin-left: 0;
-  }
-}
-
-.static-banner {
-  margin: 0;
-  padding: 8px 24px;
-  text-align: center;
-  font-size: 0.9rem;
-  color: var(--muted);
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-}
-
-/* Hangs below the bar instead of taking a row in it, so it coming and going
-   when the service worker takes over never changes the bar's height. */
-.throttle-note {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin: 0;
-  padding: 6px 24px;
-  font-size: 0.85rem;
-  color: #e3b341;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-}
-
-.brand a {
-  font-size: 0.9rem;
-  color: var(--accent);
-}
-
-.inline-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-  align-items: end;
-  margin-bottom: 12px;
-}
-
-.readout,
-.hint {
-  font: 0.8rem/1.4 ui-monospace, monospace;
-  color: var(--muted);
-}
-
-.hint {
-  margin: 0 0 8px;
-  font-family: inherit;
-}
-
-.hint.error,
-.log .error {
-  color: var(--error);
-}
-
-.log .ok {
-  color: var(--ok);
-}
+/* ---- Cases ------------------------------------------------------------ */
 
 /* The frame is the hero route's viewport; wider than the page, it scrolls. */
 .hero-frame {
+  width: fit-content;
+  max-width: 100%;
   overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
 }
 
 .hero-frame iframe {
   display: block;
-  height: 520px;
   border: 0;
-  background: #f9fafb;
+  background: var(--bg);
 }
 
 /* Matches the sizes of the breakpoint card: 100vw below 800px, 50vw above. */
@@ -401,7 +345,7 @@ section > p {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 12px;
-  margin-top: 12px;
+  max-width: 900px;
 }
 
 .article {
@@ -434,29 +378,60 @@ section > p {
   grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
-}
-
-@media (max-width: 600px) {
-  .shadow-case {
-    grid-template-columns: 1fr;
-  }
+  max-width: 720px;
 }
 
 .backend {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 24px;
+  gap: 16px;
+  max-width: 900px;
+}
+
+.backend > div {
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 .backend h3 {
   margin: 0 0 8px;
-  font-size: 1rem;
+  font-size: 14px;
 }
 
 .log {
   margin: 8px 0 0;
   padding: 0;
   list-style: none;
-  font: 0.8rem/1.6 ui-monospace, monospace;
+  font: 12px/1.6 var(--mono);
   min-height: 3.2em;
+}
+
+@media (max-width: 640px) {
+  .stats {
+    flex: 1 1 10rem;
+    width: auto;
+    margin-left: 0;
+  }
+
+  .shadow-case {
+    grid-template-columns: 1fr;
+  }
+
+  /* The popover spans the bar instead of hanging off the button. */
+  .more {
+    position: static;
+  }
+
+  .more .popover {
+    left: 16px;
+    right: 16px;
+  }
+
+  .throttle-note,
+  .static-banner {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
