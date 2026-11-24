@@ -1,10 +1,13 @@
-import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 
-// Procedural landscapes so the demo works without shipping photos. The noise
-// layer keeps the JPEGs at realistic file sizes; flat gradients compress to
-// almost nothing and would load too fast to see anything.
+// The demo's originals: photos from picsum.photos (Unsplash license),
+// downloaded at the size each case expects, so the repository ships none.
+// Without network, a procedural landscape stands in and the next start tries
+// the photo again. The noise layer keeps those JPEGs at realistic file sizes;
+// flat gradients compress to almost nothing and would load too fast to see
+// anything.
 interface Scene {
   name: string
   width: number
@@ -99,6 +102,22 @@ function detail({ width, height }: Scene, seed: number): Promise<Buffer> {
     .toBuffer()
 }
 
+/** The picsum.photos id of each scene, chosen to match its name and the alt texts in src/catalog.ts. */
+const PHOTOS: Record<string, number> = {
+  'alpine-dawn': 29,
+  'blue-ridge': 1018,
+  'desert-dusk': 184,
+  'northern-night': 1022,
+  'misty-pines': 1043,
+  'violet-peaks': 1036,
+  'glacier-noon': 1015,
+  'ember-canyon': 1016,
+  starfield: 1019,
+  'meadow-haze': 110,
+  tiny: 152,
+  fern: 28,
+}
+
 /** Sources the recipe cases use, kept out of the gallery's list in subdirectories. */
 const EXTRA_SCENES: (Scene & { file: string })[] = [
   // A 40 px original: every width request encodes 40 px, so it gets one URL.
@@ -113,6 +132,24 @@ const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" vi
   <text x="36" y="26" font-family="sans-serif" font-size="16" font-weight="700" fill="#f9fafb">Club</text>
 </svg>
 `
+
+/** The photo for a scene at its size, re-encoded like a drawn one; false without network. */
+async function photo({ name, width, height }: Scene, file: string): Promise<boolean> {
+  const id = PHOTOS[name]
+  if (id === undefined) return false
+  try {
+    const response = await fetch(`https://picsum.photos/id/${id}/${width}/${height}.jpg`, { signal: AbortSignal.timeout(30_000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    await sharp(Buffer.from(await response.arrayBuffer()))
+      .resize(width, height, { fit: 'cover' })
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toFile(file)
+    return true
+  } catch (error) {
+    console.warn(`No photo for ${name} (${String(error)}), drawing it instead.`)
+    return false
+  }
+}
 
 async function scene(scene: Scene, seed: number, file: string): Promise<void> {
   const base = await sharp(Buffer.from(svg(scene, seed))).png().toBuffer()
@@ -146,27 +183,52 @@ const exists = (file: string) => access(file).then(
   () => false,
 )
 
-/** Renders every demo image that is missing from `dir`. */
+/** What each file in the image directory is: `photo:<id>` or `drawn`. */
+const SOURCES_FILE = '.sources.json'
+
+/**
+ * Renders every demo image that is missing from `dir`, and replaces a drawn
+ * scene (or one from an older photo list) once its photo can be downloaded.
+ */
 export async function ensureDemoImages(dir: string): Promise<void> {
-  const jobs: [string, (file: string) => Promise<void>][] = [
-    ...SCENES.map((s, i): [string, (file: string) => Promise<void>] => [`${s.name}.jpg`, (file) => scene(s, i + 1, file)]),
-    ...EXTRA_SCENES.map((s, i): [string, (file: string) => Promise<void>] => [s.file, (file) => scene(s, SCENES.length + i + 1, file)]),
-    ['extra/logo.svg', (file) => writeFile(file, LOGO)],
-    ['extra/wave.gif', wave],
+  const record = path.join(dir, SOURCES_FILE)
+  const sources = JSON.parse(await readFile(record, 'utf8').catch(() => '{}')) as Record<string, string>
+  type Job = [name: string, want: string | undefined, make: (file: string) => Promise<string | undefined>]
+  const drawing = (s: Scene, seed: number): Job[2] => async (file) => ((await photo(s, file)) ? `photo:${PHOTOS[s.name]}` : (await scene(s, seed, file), 'drawn'))
+  const jobs: Job[] = [
+    ...SCENES.map((s, i): Job => [`${s.name}.jpg`, `photo:${PHOTOS[s.name]}`, drawing(s, i + 1)]),
+    ...EXTRA_SCENES.map((s, i): Job => [s.file, `photo:${PHOTOS[s.name]}`, drawing(s, SCENES.length + i + 1)]),
+    ['extra/logo.svg', undefined, async (file) => void (await writeFile(file, LOGO))],
+    ['extra/wave.gif', undefined, async (file) => void (await wave(file))],
   ]
-  for (const [name, make] of jobs) {
+  let changed = false
+  for (const [name, want, make] of jobs) {
     const file = path.join(dir, name)
-    if (await exists(file)) continue
+    if ((await exists(file)) && (want === undefined || sources[name] === want)) continue
     await mkdir(path.dirname(file), { recursive: true })
     console.log(`Generating ${name} in ${dir} …`)
     // The demo server and the Vite prerender plugin may both generate at
     // once: each writes its own file (same extension, sharp picks the
     // format by it) and renames it into place, so neither reads a partial one.
     const temp = path.join(path.dirname(file), `.tmp-${process.pid}-${path.basename(file)}`)
-    await make(temp)
-    await rename(temp, file).catch(async (error: unknown) => {
+    const made = await make(temp)
+    // A drawn stand-in never replaces an existing file; the photo is retried next start.
+    if (made === 'drawn' && (await exists(file))) {
       await rm(temp, { force: true })
-      if (!(await exists(file))) throw error
-    })
+      continue
+    }
+    const moved = await rename(temp, file).then(
+      () => true,
+      async (error: unknown) => {
+        await rm(temp, { force: true })
+        if (!(await exists(file))) throw error
+        return false
+      },
+    )
+    if (moved && made) {
+      sources[name] = made
+      changed = true
+    }
   }
+  if (changed) await writeFile(record, JSON.stringify(sources, null, 2))
 }
