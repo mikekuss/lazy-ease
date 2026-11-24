@@ -1,4 +1,4 @@
-import { createLazyEase, createLoader, detectAvif, focusReveal, type Attachment, type ImageLoader, type LazyEase } from '@lazy-ease/core'
+import { createLazyEase, createLoader, detectAvif, focusReveal, parsePlaceholder, type Attachment, type ImageLoader, type LazyEase, type ThumbHashDecoder } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { cssText } from '@lazy-ease/vanilla/css'
 import * as thumbhash from 'thumbhash'
@@ -6,31 +6,31 @@ import { CARD, CELLS, type CatalogSource } from '../catalog'
 import { BASE, STATIC } from '../mode'
 import { INERT } from '../prerender'
 import { createStaticLoader } from '../staticLoader'
-import { PRESETS, type PresetName } from '../throttle'
 
-// The start page: one photo in every kind of placeholder lazy-ease paints,
-// each with the line that builds it. Replay loads them again with new URLs.
+// The start page: one photo in each kind of placeholder lazy-ease paints,
+// then the extra props. Each box gets its placeholder painted inline, as a
+// server template writes it, so it shows in full while the controller waits
+// (dwellTime); then the image fades in once. Replay does it again with new
+// URLs.
 
 const sheet = document.createElement('style')
 sheet.textContent = cssText
 document.head.append(sheet)
 
-/** One entry of /api/images (written to api/images.json in the static build). */
+/** One entry of /api/images (api/images.json in the static build). */
 interface SourceImage {
   src: string
   thumbhash: string
   color: string
 }
 
-const PHOTOS: [string, CatalogSource][] = [
-  ['Glacier', CARD],
-  ['Canyon', CELLS[0]!],
-  ['Meadow', CELLS[1]!],
-  ['Night', CELLS[2]!],
-]
-
 const smooth = thumbhashDecoder(thumbhash)
 const raw = thumbhashDecoder(thumbhash, { blur: 0 })
+
+// Long enough to see the placeholder before the image starts loading.
+const config = { detectFormat: detectAvif, fadeDuration: 900, dwellTime: 900 }
+const blurred = createLazyEase({ ...config, thumbhash: smooth })
+const blocky = createLazyEase({ ...config, thumbhash: raw })
 
 /**
  * A custom data URI: a vertical gradient between the top and bottom colors
@@ -50,70 +50,59 @@ function gradient(hash: string): string {
 
 interface Kind {
   le: LazyEase
+  decoder: ThumbHashDecoder
+  source: CatalogSource
   placeholder: (image: SourceImage) => string
   focus?: boolean
 }
 
-// One controller per decoder; each attach brings its own loader.
-const config = { detectFormat: detectAvif, fadeDuration: 900 }
-const blurred = createLazyEase({ ...config, thumbhash: smooth })
-const blocky = createLazyEase({ ...config, thumbhash: raw })
-
 const KINDS: Record<string, Kind> = {
-  color: { le: blurred, placeholder: (image) => image.color },
-  thumbhash: { le: blurred, placeholder: (image) => `thumbhash:${image.thumbhash}` },
-  png: { le: blocky, placeholder: (image) => `thumbhash:${image.thumbhash}` },
-  uri: { le: blurred, placeholder: (image) => gradient(image.thumbhash) },
-  focus: { le: blurred, placeholder: (image) => `thumbhash:${image.thumbhash}`, focus: true },
-  none: { le: blurred, placeholder: () => 'none' },
+  svg: { le: blurred, decoder: smooth, source: CARD, placeholder: (image) => `thumbhash:${image.thumbhash}` },
+  png: { le: blocky, decoder: raw, source: CARD, placeholder: (image) => `thumbhash:${image.thumbhash}` },
+  color: { le: blurred, decoder: smooth, source: CARD, placeholder: (image) => image.color },
+  focus: { le: blurred, decoder: smooth, source: CELLS[0]!, placeholder: (image) => `thumbhash:${image.thumbhash}`, focus: true },
+  uri: { le: blurred, decoder: smooth, source: CELLS[1]!, placeholder: (image) => gradient(image.thumbhash) },
 }
 
-const form = document.getElementById('kinds-bar') as HTMLFormElement
-const photo = form.elements.namedItem('photo') as HTMLSelectElement
-const net = form.elements.namedItem('net') as HTMLSelectElement
-photo.innerHTML = PHOTOS.map(([label], i) => `<option value="${i}">${label}</option>`).join('')
-// The static host throttles through a service worker that never controls the
-// site root (it would also control the LCP route), so it has no network select.
-if (STATIC) net.closest('label')!.hidden = true
 for (const element of document.querySelectorAll<HTMLElement>('[data-live]')) element.hidden = STATIC
 
 let images = new Map<string, SourceImage>()
-let attachments: Attachment[] = []
+const attachments = new Map<HTMLElement, Attachment>()
 let run = 0
 
-function makeLoader(): ImageLoader {
-  const params = { run: `home-${Date.now()}-${run}` }
-  if (STATIC) return createStaticLoader({ baseUrl: `${BASE}_img`, params })
-  const preset = net.value as PresetName
-  return createLoader({ params: { ...(PRESETS[preset] ? { throttle: preset } : {}), ...params } })
+const loaderFor = (key: string): ImageLoader => {
+  const params = { run: `home-${Date.now()}-${key}` }
+  return STATIC ? createStaticLoader({ baseUrl: `${BASE}_img`, params }) : createLoader({ params })
 }
 
-/** Attaches every tile again: new img elements, new URLs, so each starts from its placeholder. */
-function play() {
-  for (const attachment of attachments) attachment.destroy()
-  run++
-  const loader = makeLoader()
-  const [, source] = PHOTOS[Number(photo.value)]!
-  const image = images.get(source.src)
+/** Attaches one tile again: a new img and new URLs, so it starts from its placeholder. */
+function play(box: HTMLElement) {
+  const kind = KINDS[box.dataset.kind!]!
+  const image = images.get(kind.source.src)
   if (!image) return
-  attachments = [...document.querySelectorAll<HTMLElement>('.kind [data-le]')].map((box) => {
-    const kind = KINDS[box.dataset.kind!]!
-    box.style.aspectRatio = `${source.width} / ${source.height}`
-    box.style.background = ''
-    box.innerHTML = `<img alt="" src="${INERT}">`
-    return kind.le.attach(box.querySelector('img')!, {
-      loader,
-      src: source.src,
-      srcWidth: source.width,
-      srcHeight: source.height,
-      placeholder: kind.placeholder(image),
+  attachments.get(box)?.destroy()
+  if (box.dataset.kind === 'color') box.closest('.kind')!.querySelector('code')!.textContent = `placeholder="${image.color}"`
+  box.style.aspectRatio = `${kind.source.width} / ${kind.source.height}`
+  box.innerHTML = `<img alt="" src="${INERT}">`
+  const placeholder = parsePlaceholder(kind.placeholder(image), kind.decoder)
+  for (const key of ['backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition'] as const) box.style[key] = ''
+  Object.assign(box.style, placeholder?.style, placeholder?.lazy?.())
+  attachments.set(
+    box,
+    kind.le.attach(box.querySelector('img')!, {
+      loader: loaderFor(`${box.dataset.kind}-${run++}`),
+      src: kind.source.src,
+      srcWidth: kind.source.width,
+      srcHeight: kind.source.height,
       ...(kind.focus ? { reveal: focusReveal } : {}),
-    })
-  })
+    }),
+  )
 }
 
-form.addEventListener('change', play)
-document.getElementById('replay')!.addEventListener('click', play)
+const boxes = [...document.querySelectorAll<HTMLElement>('.kind [data-le]')]
+for (const box of boxes) {
+  box.closest('.kind')!.querySelector('button')!.addEventListener('click', () => play(box))
+}
 
 const list = STATIC ? `${BASE}api/images.json` : '/api/images'
 const load = (): Promise<void> =>
@@ -121,7 +110,7 @@ const load = (): Promise<void> =>
     .then((response) => (response.ok ? (response.json() as Promise<SourceImage[]>) : Promise.reject(response.status)))
     .then((entries) => {
       images = new Map(entries.map((entry) => [entry.src, entry]))
-      play()
+      boxes.forEach(play)
     })
     // On the first start the server may still be fetching the photos.
     .catch(() => new Promise((resolve) => setTimeout(resolve, 2000)).then(load))

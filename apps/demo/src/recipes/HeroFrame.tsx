@@ -15,7 +15,7 @@ export const HERO_MAX_WIDTH = 1440
 export const heroStartWidth = () => Math.max(HERO_MIN_WIDTH, Math.min(390, Math.floor((window.innerWidth - 80) / 10) * 10))
 
 /** `run` changes the frame's URL, so a replay loads the route again. */
-export function HeroFrame({ width, route, run }: { width: number; route: 'lcp' | 'fade'; run: number }) {
+export function HeroFrame({ width, route, run, details }: { width: number; route: 'lcp' | 'fade'; run: number; details: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const [info, setInfo] = useState('')
   // As tall as the route's hero, so the frame shows it without empty space.
@@ -49,7 +49,7 @@ export function HeroFrame({ width, route, run }: { width: number; route: 'lcp' |
       <div className="hero-frame">
         <iframe ref={frame} title="Hero route" src={`${BASE}${route}/${run ? `?run=${run}` : ''}`} style={{ width, height }} onLoad={hideChrome} />
       </div>
-      <span className="readout">{info}</span>
+      {details && <span className="readout">{info}</span>}
     </>
   )
 }

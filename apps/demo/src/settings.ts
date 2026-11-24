@@ -20,6 +20,8 @@ export interface Settings {
   reveal: RevealKind
   placeholder: PlaceholderKind
   formats: 'avif' | 'webp'
+  /** Captions with state, sizes and bytes, and the totals in the bar. */
+  details: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -34,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reveal: 'fade',
   placeholder: 'thumbhash',
   formats: 'avif',
+  details: false,
 }
 
 /**
@@ -56,6 +59,7 @@ export function loadSettings(): Settings {
       ['thumbhash', 'color', 'none'].includes(settings.placeholder) &&
       ['fade', 'focus', 'none'].includes(settings.reveal) &&
       (FADES as readonly number[]).includes(settings.fadeDuration) &&
+      typeof settings.details === 'boolean' &&
       settings.formats in FORMATS
     return valid ? settings : DEFAULT_SETTINGS
   } catch {

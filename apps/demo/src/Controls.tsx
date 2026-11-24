@@ -55,13 +55,6 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
   return (
     <div className="bar recipes-bar">
       <strong>Recipes</strong>
-      <Select label="Network" value={settings.throttle} labels={PRESET_LABELS} onChange={(v) => set('throttle', v)} />
-      {settings.throttle === 'custom' && (
-        <>
-          <Range label="Latency" unit="ms" min={0} max={2000} step={50} value={settings.latency} onChange={(v) => set('latency', v)} />
-          <Range label="Bandwidth" unit="kbit/s" min={50} max={20000} step={50} value={settings.kbps} onChange={(v) => set('kbps', v)} />
-        </>
-      )}
       {settings.throttle !== 'off' && !throttleActive && (
         <p className="throttle-note" role="status">
           Throttle not active yet, images load at full speed.
@@ -76,6 +69,16 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
       <details className="more">
         <summary>More</summary>
         <div className="popover">
+          <Select label="Network" value={settings.throttle} labels={PRESET_LABELS} onChange={(v) => set('throttle', v)} />
+          {settings.throttle === 'custom' && (
+            <>
+              <Range label="Latency" unit="ms" min={0} max={2000} step={50} value={settings.latency} onChange={(v) => set('latency', v)} />
+              <Range label="Bandwidth" unit="kbit/s" min={50} max={20000} step={50} value={settings.kbps} onChange={(v) => set('kbps', v)} />
+            </>
+          )}
+          <label className="field">
+            <input type="checkbox" checked={settings.details} onChange={(e) => set('details', e.target.checked)} /> Details: state, sizes, bytes
+          </label>
           <Select label="Loading" value={settings.loading} labels={LOADING_LABELS} onChange={(v) => set('loading', v)} />
           <Range
             label="Preload distance"
@@ -101,15 +104,17 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
         </div>
       </details>
 
-      <div className="stats" aria-live="polite">
-        {/* One text node per line in a fixed-width box: updating the numbers
-            moves nothing, not even the text's start. */}
-        <span>{`${totals.loaded}/${totals.started} loaded · ${mb(totals.bytes)}`}</span>
-        {/* Always rendered, so the sticky bar keeps its height when it fills in. */}
-        <span title='Images with a known size, compared with a sizes="100vw" srcset'>
-          {saved !== undefined && `${mb(bytes)} vs. ${mb(naiveBytes)} with 100vw (${saved >= 0 ? `−${saved}` : `+${-saved}`} %)`}
-        </span>
-      </div>
+      {settings.details && (
+        <div className="stats" aria-live="polite">
+          {/* One text node per line in a fixed-width box: updating the numbers
+              moves nothing, not even the text's start. */}
+          <span>{`${totals.loaded}/${totals.started} loaded · ${mb(totals.bytes)}`}</span>
+          {/* Always rendered, so the sticky bar keeps its height when it fills in. */}
+          <span title='Images with a known size, compared with a sizes="100vw" srcset'>
+            {saved !== undefined && `${mb(bytes)} vs. ${mb(naiveBytes)} with 100vw (${saved >= 0 ? `−${saved}` : `+${-saved}`} %)`}
+          </span>
+        </div>
+      )}
       <button type="button" className="primary" onClick={onReload} title="New URLs for every image, so the browser cache is cold">
         Reload all
       </button>

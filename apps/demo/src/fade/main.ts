@@ -68,7 +68,8 @@ if (extra.size) {
 const images = [...document.querySelectorAll<HTMLImageElement>('[data-le-auto] img')]
 const captions = new Map<HTMLImageElement, HTMLElement>()
 for (const img of images) {
-  const figure = img.closest('figure') ?? img.closest('.hero-area')
+  // The hero shows no readout: it is the demo, not a measurement.
+  const figure = img.closest('figure')
   if (!figure) continue
   const caption = document.createElement('small')
   caption.className = 'readout'

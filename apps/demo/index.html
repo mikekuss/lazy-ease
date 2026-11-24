@@ -13,22 +13,23 @@
       .install { padding:7px 14px; font:14px var(--mono); background:var(--text); color:#e5e7eb; border-radius:8px }
       h2 { margin:48px 0 4px; font-size:20px }
       h2 + p { margin:0; color:var(--muted); font-size:14px }
-      .kinds-bar { display:flex; flex-wrap:wrap; align-items:center; gap:10px 20px; margin:18px 0 20px; font-size:14px }
-      .kinds-bar label { display:flex; gap:6px; align-items:center }
-      .kinds { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:28px 20px }
+      .kinds { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:32px 24px; margin-top:20px }
+      .kinds.extras { grid-template-columns:repeat(auto-fill, minmax(260px, 300px)) }
       .kind { margin:0 }
-      .kind [data-le] { display:block; aspect-ratio:3 / 2; border-radius:12px; overflow:hidden; background:#e5e7eb }
+      .kind [data-le] { display:block; aspect-ratio:3 / 2; border-radius:14px; overflow:hidden; background:#e5e7eb }
       .kind img { display:block; width:100%; height:100%; object-fit:cover }
-      .kind figcaption { margin-top:10px }
-      .kind b { font-size:15px }
-      .kind span { display:block; color:var(--muted); font-size:13px }
-      .kind code { display:block; margin-top:4px; font-size:12px; color:#374151; overflow-x:auto; white-space:nowrap }
+      .kind figcaption { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 10px; margin-top:12px }
+      .kind b { font-size:16px }
+      .kind code { flex-basis:100%; font-size:12.5px; color:var(--muted) }
+      .kind button { margin-left:auto; padding:0; border:0; background:none; color:var(--faint); font-size:13px }
+      .kind button:hover { color:var(--text) }
       .pages { list-style:none; padding:0; margin:18px 0 0; display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:14px }
       .pages a { display:block; height:100%; padding:16px 18px; text-decoration:none; background:var(--panel); border:1px solid var(--line); border-radius:12px }
       .pages a:hover { border-color:var(--faint) }
       .pages strong { font-size:15px }
       .pages span { display:block; margin-top:4px; color:var(--muted); font-size:14px }
-      @media (max-width:640px) { .home { padding:32px 16px 64px } .kinds { grid-template-columns:1fr } }
+      @media (max-width:900px) { .kinds { grid-template-columns:1fr 1fr } }
+      @media (max-width:640px) { .home { padding:32px 16px 64px } .kinds, .kinds.extras { grid-template-columns:1fr } }
     </style>
   </head>
   <body>
@@ -43,43 +44,32 @@
       </div>
 
       <h2>Placeholders</h2>
-      <p>The server writes <code>{ thumbhash, color }</code> with <code>computeMetadata()</code>. The page paints one of them until the image fades in.</p>
-      <form class="kinds-bar" id="kinds-bar">
-        <label>Image <select name="photo"></select></label>
-        <label>Network
-          <select name="net">
-            <option value="off">Real speed</option>
-            <option value="fast-4g">Fast 4G</option>
-            <option value="slow-4g" selected>Slow 4G</option>
-            <option value="3g">3G</option>
-          </select>
-        </label>
-        <button type="button" class="primary" id="replay">↻ Replay</button>
-      </form>
+      <p>Shown until the image fades in. The server writes them with <code>computeMetadata()</code>.</p>
       <div class="kinds">
         <figure class="kind">
-          <span data-le data-kind="thumbhash"></span>
-          <figcaption><b>ThumbHash</b><span>Default. Smooth, about 30 bytes.</span><code>placeholder="thumbhash:…"</code><code>thumbhashDecoder(thumbhash)</code></figcaption>
-        </figure>
-        <figure class="kind">
-          <span data-le data-kind="focus"></span>
-          <figcaption><b>ThumbHash + focus</b><span>The image sharpens out of the blur.</span><code>reveal={focusReveal}</code></figcaption>
+          <span data-le data-kind="svg"></span>
+          <figcaption><b>SVG</b><button type="button">↻ Replay</button><code>placeholder="thumbhash:…"</code></figcaption>
         </figure>
         <figure class="kind">
           <span data-le data-kind="png"></span>
-          <figcaption><b>ThumbHash, raw</b><span>The decoded PNG without blur.</span><code>thumbhashDecoder(thumbhash, { blur: 0 })</code></figcaption>
+          <figcaption><b>Inlined PNG</b><button type="button">↻ Replay</button><code>thumbhashDecoder(thumbhash, { blur: 0 })</code></figcaption>
         </figure>
         <figure class="kind">
           <span data-le data-kind="color"></span>
-          <figcaption><b>Color</b><span>The average color. Works in any template.</span><code>placeholder="#5b7186"</code></figcaption>
+          <figcaption><b>Color</b><button type="button">↻ Replay</button><code>placeholder="#5b7186"</code></figcaption>
+        </figure>
+      </div>
+
+      <h2>Extras</h2>
+      <p>Props on top of a placeholder.</p>
+      <div class="kinds extras">
+        <figure class="kind">
+          <span data-le data-kind="focus"></span>
+          <figcaption><b>Focus reveal</b><button type="button">↻ Replay</button><code>reveal={focusReveal}</code></figcaption>
         </figure>
         <figure class="kind">
           <span data-le data-kind="uri"></span>
-          <figcaption><b>Data URI</b><span>Your own image, e.g. a gradient.</span><code>placeholder="data:image/svg+xml,…"</code></figcaption>
-        </figure>
-        <figure class="kind">
-          <span data-le data-kind="none"></span>
-          <figcaption><b>None</b><span>Only the fade.</span><code>placeholder="none"</code></figcaption>
+          <figcaption><b>Own data URI</b><button type="button">↻ Replay</button><code>placeholder="data:image/svg+xml,…"</code></figcaption>
         </figure>
       </div>
 

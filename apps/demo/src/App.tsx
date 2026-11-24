@@ -68,6 +68,12 @@ export function App() {
 
   useEffect(() => saveSettings(settings), [settings])
 
+  // The cases render once the image list is in; only then can a #case link scroll to its panel.
+  const ready = images.length > 0
+  useEffect(() => {
+    if (ready && location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView()
+  }, [ready])
+
   // `run` makes every URL new, so "Reload all" starts with a cold browser
   // cache, and a use case's replay count does the same for that case. The
   // demo server strips these and the throttle settings again; the static
@@ -146,7 +152,7 @@ export function App() {
           {STATIC ? 'Loading the image list …' : 'Loading the image list … is the demo server running on port 3001?'}
         </p>
       ) : (
-        <div className="recipes">
+        <div className={settings.details ? 'recipes' : 'recipes plain'}>
           <nav className="side" aria-label="Use cases">
             {GROUPS.map(([group, cases]) => (
               <div key={group}>
@@ -179,7 +185,7 @@ export function App() {
               }
               props={heroRoute === 'lcp' ? '<img srcset sizes fetchpriority="high">  in the first HTML' : '<span data-le> <img data-le-srcset data-le-sizes>'}
             >
-              {(replay) => <HeroFrame width={heroWidth} route={heroRoute} run={replay} />}
+              {(replay) => <HeroFrame width={heroWidth} route={heroRoute} run={replay} details={settings.details} />}
             </UseCase>
 
             <h2 className="group">Layout</h2>
@@ -299,7 +305,7 @@ export function App() {
               {() => (STATIC ? null : <Backend />)}
             </UseCase>
             <h2 className="group">Scrolling</h2>
-            <UseCase id="gallery" title="Scroll gallery" note={'Lazy as you scroll. Crossed out: what sizes="100vw" would load.'} props="<Image aspectRatio={ratio} />">
+            <UseCase id="gallery" title="Scroll gallery" note={settings.details ? 'Lazy as you scroll. Crossed out: what sizes="100vw" would load.' : 'Lazy as you scroll.'} props="<Image aspectRatio={ratio} />">
               {(replay) => (
                 <div className="gallery">
                   {Array.from({ length: GALLERY }, (_, i) => {
@@ -311,7 +317,7 @@ export function App() {
                         loader={loaderOf('gallery', replay)}
                         alt=""
                         aspectRatio={ratio}
-                        compare
+                        compare={settings.details}
                         {...(settings.loading === 'native' ? { sizes: '(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw' } : {})}
                         label={`#${i + 1} · ${label}`}
                       />

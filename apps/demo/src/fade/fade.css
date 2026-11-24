@@ -1,5 +1,4 @@
 .hero-area { position:relative; max-width:1600px }
-.hero-area .readout { position:absolute; left:10px; bottom:10px; padding:2px 8px; border-radius:6px; background:rgb(0 0 0 / .55); color:#fff }
 .warn { color:var(--warn) }
 .pair { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:16px; align-items:start; max-width:1100px }
 .pair-item { margin:0 }

@@ -83,6 +83,20 @@ html {
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
 }
 
+.recipes-bar > .primary {
+  margin-left: auto;
+}
+
+.recipes-bar > .stats + .primary {
+  margin-left: 0;
+}
+
+/* Without details a caption is just its label. */
+.plain .demo-image figcaption > .caption-row:not(:first-child),
+.plain .demo-image .caption-row > :not(.label) {
+  display: none;
+}
+
 .stats {
   display: flex;
   flex-direction: column;
