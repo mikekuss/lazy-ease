@@ -3,6 +3,11 @@ import { STATIC } from './mode'
 import { PRESETS, type NetworkProfile, type PresetName } from './throttle'
 
 export type PlaceholderKind = 'thumbhash' | 'color' | 'none'
+/** Crossfade, focus reveal (`focusReveal`) or no fade. */
+export type RevealKind = 'fade' | 'focus' | 'none'
+
+/** The fade lengths the bar offers. */
+export const FADES = [300, 600, 1200] as const
 
 export interface Settings {
   throttle: PresetName | 'custom'
@@ -12,18 +17,21 @@ export interface Settings {
   rootMargin: number
   dwellTime: number
   fadeDuration: number
+  reveal: RevealKind
   placeholder: PlaceholderKind
   formats: 'avif' | 'webp'
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  throttle: 'off',
+  // A little slow, so the placeholder and the fade are visible.
+  throttle: 'fast-4g',
   latency: 200,
   kbps: 1000,
   loading: 'lazy',
   rootMargin: 400,
   dwellTime: 0,
-  fadeDuration: 400,
+  fadeDuration: 600,
+  reveal: 'fade',
   placeholder: 'thumbhash',
   formats: 'avif',
 }
@@ -36,7 +44,7 @@ export const FORMATS: Record<Settings['formats'], readonly ImageFormat[]> = STAT
   ? { avif: ['avif', 'webp'], webp: ['webp'] }
   : { avif: ['avif', 'webp', 'jpeg'], webp: ['webp', 'jpeg'] }
 
-const STORAGE_KEY = 'lazy-ease-demo-settings-v3'
+const STORAGE_KEY = 'lazy-ease-demo-settings-v4'
 
 export function loadSettings(): Settings {
   try {
@@ -46,6 +54,8 @@ export function loadSettings(): Settings {
       (settings.throttle === 'custom' || settings.throttle in PRESETS) &&
       ['lazy', 'native', 'eager'].includes(settings.loading) &&
       ['thumbhash', 'color', 'none'].includes(settings.placeholder) &&
+      ['fade', 'focus', 'none'].includes(settings.reveal) &&
+      (FADES as readonly number[]).includes(settings.fadeDuration) &&
       settings.formats in FORMATS
     return valid ? settings : DEFAULT_SETTINGS
   } catch {

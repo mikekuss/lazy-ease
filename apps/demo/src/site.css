@@ -55,11 +55,6 @@ input[type=range] { width:120px }
 /* Props of a case, as the JSX or HTML writes them. */
 .props { display:block; width:fit-content; max-width:100%; margin:0 0 12px; padding:4px 10px; overflow-x:auto; white-space:pre; font:12px/1.6 var(--mono); color:#374151; background:var(--panel); border:1px solid var(--line); border-radius:6px }
 
-/* Variant switch: one button per variant, the shown one dark. */
-.tabs { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px }
-.tabs button { border-radius:999px; padding:3px 12px }
-.tabs button[aria-pressed=true] { background:var(--text); border-color:var(--text); color:#fff }
-
 @media (max-width:640px) {
   .site, .bar, .page { padding-left:16px; padding-right:16px }
   /* Not sticky on a phone: wrapped, it would cover a third of the screen. */

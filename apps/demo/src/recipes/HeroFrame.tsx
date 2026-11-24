@@ -3,29 +3,23 @@ import { BASE } from '../mode'
 import { pixels, stateOf, variantOf } from '../readout'
 
 /**
- * A hero route in a frame of adjustable width. Its media queries see the
+ * A hero route in a frame of the given width. Its media queries see the
  * frame as the viewport, so dragging past 800px switches the source, crop
  * and focus; growing within a breakpoint selects larger candidates. The
  * readout lives here, not on the route.
  */
-const MIN_WIDTH = 320
-const START_WIDTH = 390
+export const HERO_MIN_WIDTH = 320
+export const HERO_MAX_WIDTH = 1440
 
-export function HeroFrame() {
-  const [width, setWidth] = useState(START_WIDTH)
-  const [route, setRoute] = useState<'lcp' | 'fade'>('lcp')
-  const box = useRef<HTMLDivElement>(null)
+/** 390 px, or less on a phone, so the frame fits its container at first. */
+export const heroStartWidth = () => Math.max(HERO_MIN_WIDTH, Math.min(390, Math.floor((window.innerWidth - 80) / 10) * 10))
+
+/** `run` changes the frame's URL, so a replay loads the route again. */
+export function HeroFrame({ width, route, run }: { width: number; route: 'lcp' | 'fade'; run: number }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const [info, setInfo] = useState('')
   // As tall as the route's hero, so the frame shows it without empty space.
   const [height, setHeight] = useState(520)
-
-  // On a phone the container is narrower than 390px: start at its width so
-  // the frame fits. The slider still goes wider; the container scrolls then.
-  useEffect(() => {
-    const available = box.current?.clientWidth
-    if (available && available < START_WIDTH) setWidth(Math.max(MIN_WIDTH, Math.floor(available / 10) * 10))
-  }, [])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -52,25 +46,10 @@ export function HeroFrame() {
 
   return (
     <>
-      <div className="inline-controls">
-        <label className="field range">
-          <span>
-            Viewport <output>{width} px</output>
-          </span>
-          <input type="range" min={MIN_WIDTH} max={1440} step={10} value={width} onChange={(e) => setWidth(Number(e.target.value))} />
-        </label>
-        <label className="field">
-          <span>Route</span>
-          <select value={route} onChange={(e) => setRoute(e.target.value as 'lcp' | 'fade')}>
-            <option value="lcp">LCP</option>
-            <option value="fade">Fade</option>
-          </select>
-        </label>
-        <span className="readout">{info}</span>
+      <div className="hero-frame">
+        <iframe ref={frame} title="Hero route" src={`${BASE}${route}/${run ? `?run=${run}` : ''}`} style={{ width, height }} onLoad={hideChrome} />
       </div>
-      <div className="hero-frame" ref={box}>
-        <iframe ref={frame} title="Hero route" src={`${BASE}${route}/`} style={{ width, height }} onLoad={hideChrome} />
-      </div>
+      <span className="readout">{info}</span>
     </>
   )
 }

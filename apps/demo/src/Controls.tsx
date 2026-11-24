@@ -1,6 +1,6 @@
 import type { LoadingStrategy } from '@lazy-ease/react'
 import { STATIC, useThrottleWorkerActive } from './mode'
-import type { PlaceholderKind, Settings } from './settings'
+import { FADES, type PlaceholderKind, type RevealKind, type Settings } from './settings'
 import { useTotals } from './stats'
 import { PRESETS } from './throttle'
 
@@ -31,6 +31,14 @@ const PLACEHOLDER_LABELS: Record<PlaceholderKind, string> = {
   none: 'None',
 }
 
+const REVEAL_LABELS: Record<RevealKind, string> = {
+  fade: 'Crossfade',
+  focus: 'Focus',
+  none: 'None',
+}
+
+const FADE_LABELS = Object.fromEntries(FADES.map((ms) => [String(ms), ms >= 1000 ? `${ms / 1000} s` : `${ms} ms`])) as Record<string, string>
+
 const FORMAT_LABELS: Record<Settings['formats'], string> = STATIC
   ? { avif: 'AVIF → WebP', webp: 'WebP' }
   : { avif: 'AVIF → WebP → JPEG', webp: 'WebP → JPEG' }
@@ -59,13 +67,16 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
           Throttle not active yet, images load at full speed.
         </p>
       )}
-      <Select label="Loading" value={settings.loading} labels={LOADING_LABELS} onChange={(v) => set('loading', v)} />
       <Select label="Placeholder" value={settings.placeholder} labels={PLACEHOLDER_LABELS} onChange={(v) => set('placeholder', v)} />
-      <Range label="Fade" unit="ms" min={0} max={2000} step={50} value={settings.fadeDuration} onChange={(v) => set('fadeDuration', v)} />
+      <Select label="Reveal" value={settings.reveal} labels={REVEAL_LABELS} onChange={(v) => set('reveal', v)} />
+      {settings.reveal !== 'none' && (
+        <Select label="Fade" value={String(settings.fadeDuration)} labels={FADE_LABELS} onChange={(v) => set('fadeDuration', Number(v))} />
+      )}
       {/* Rarely changed: in a popover, so the bar stays one line. */}
       <details className="more">
         <summary>More</summary>
         <div className="popover">
+          <Select label="Loading" value={settings.loading} labels={LOADING_LABELS} onChange={(v) => set('loading', v)} />
           <Range
             label="Preload distance"
             unit="px"
@@ -100,7 +111,7 @@ export function Controls({ settings, onChange, onReload }: ControlsProps) {
         </span>
       </div>
       <button type="button" className="primary" onClick={onReload} title="New URLs for every image, so the browser cache is cold">
-        Reload images
+        Reload all
       </button>
     </div>
   )

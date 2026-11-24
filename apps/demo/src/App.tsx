@@ -1,7 +1,7 @@
 import { createLoader, LazyEaseProvider, type ImageLoader } from '@lazy-ease/react'
-import { detectAvif } from '@lazy-ease/core'
+import { detectAvif, focusReveal } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as thumbhash from 'thumbhash'
 import { ARTICLE, ARTICLE_SIZES, AVATAR, CARD, CELLS, GROW, LOGO, SPLIT, TINY, WAVE, type CatalogSource } from './catalog'
 import { Controls } from './Controls'
@@ -10,8 +10,9 @@ import { BASE, STATIC } from './mode'
 import { CARD_SIZE, EXTERNAL_FILE, GALLERY_SIZE, galleryRatio, SINGLE } from './plan'
 import { Backend } from './recipes/Backend'
 import { Banner } from './recipes/Banner'
-import { HeroFrame } from './recipes/HeroFrame'
+import { HERO_MAX_WIDTH, HERO_MIN_WIDTH, HeroFrame, heroStartWidth } from './recipes/HeroFrame'
 import { shadowLoader, ShadowPanel } from './recipes/ShadowPanel'
+import { Choice, UseCase } from './recipes/UseCase'
 import { FORMATS, loadSettings, saveSettings, throttleParams, throttleProfile, type Settings } from './settings'
 import { createStaticLoader, type StaticFormat } from './staticLoader'
 
@@ -31,48 +32,25 @@ interface SourceImage {
 // Written by scripts/build-static.ts in the static build.
 const IMAGE_LIST = STATIC ? `${BASE}api/images.json` : '/api/images'
 const GALLERY = STATIC ? GALLERY_SIZE.static : GALLERY_SIZE.live
-const DENSITIES = [0, 1, 2, 3]
+const DENSITIES = [0, 1, 2, 3].map((value) => [value, value ? `${value}×` : 'Device'] as const)
 
-function Case({ id, title, note, children }: { id: string; title: string; note?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="case" id={id}>
-      <h2>
-        {title}
-        {note && <small>{note}</small>}
-      </h2>
-      {children}
-    </section>
-  )
-}
-
-/** The props a case passes, as the JSX writes them. */
-const Props = ({ children }: { children: string }) => <code className="props">{children}</code>
-
-/** One button per variant; only the chosen one is rendered. */
-function Tabs<T extends string>({ value, options, onChange }: { value: T; options: Record<T, string>; onChange: (value: T) => void }) {
-  return (
-    <div className="tabs" role="group">
-      {(Object.entries(options) as [T, string][]).map(([key, label]) => (
-        <button key={key} type="button" aria-pressed={key === value} onClick={() => onChange(key)}>
-          {label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-const LAYOUTS = { fixed: 'Fixed', ratio: 'Breakpoint ratio', resize: 'Resize', fill: 'Fill', article: 'Article' } as const
-const SOURCES = { background: 'Background', originals: 'SVG, GIF, external', shadow: 'Shadow panel', backend: 'Backend' } as const
+/** The use cases in page order, grouped as in the side list. */
+const GROUPS = [
+  ['Start', [['hero', 'Hero']]],
+  ['Layout', [['fixed', 'Fixed size'], ['ratio', 'Breakpoint ratio'], ['resize', 'Resize'], ['fill', 'Fill'], ['article', 'Article']]],
+  ['Sources', [['background', 'Background'], ['originals', 'SVG, GIF, external'], ['shadow', 'Shadow panel'], ['backend', 'Backend']]],
+  ['Scrolling', [['gallery', 'Scroll gallery']]],
+] as const
 
 export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [run, setRun] = useState(0)
   const [images, setImages] = useState<SourceImage[]>([])
-  const [density, setDensity] = useState(0)
+  const [density, setDensity] = useState<number>(0)
   const [growWidth, setGrowWidth] = useState(240)
   const [showHidden, setShowHidden] = useState(false)
-  const [layout, setLayout] = useState<keyof typeof LAYOUTS>('fixed')
-  const [kind, setKind] = useState<keyof typeof SOURCES>('background')
+  const [heroWidth, setHeroWidth] = useState(heroStartWidth)
+  const [heroRoute, setHeroRoute] = useState<'lcp' | 'fade'>('lcp')
 
   useEffect(() => {
     // On the first start the server is still generating the images, so retry.
@@ -90,27 +68,26 @@ export function App() {
 
   useEffect(() => saveSettings(settings), [settings])
 
-  // `run` makes every URL new, so "Reload images" starts with a cold browser
-  // cache. The demo server strips it and the throttle settings again; the
-  // static host ignores the query string, and its service worker reads it.
-  const loader = useMemo<ImageLoader>(() => {
-    const runParam: Record<string, number> = run > 0 ? { run } : {}
-    if (STATIC) {
-      return createStaticLoader({
-        baseUrl: `${BASE}_img`,
-        formats: FORMATS[settings.formats] as readonly StaticFormat[],
-        params: { ...throttleProfile(settings), ...runParam },
-      })
-    }
-    return {
-      ...createLoader({ params: { ...throttleParams(settings), ...runParam } }),
-      formats: FORMATS[settings.formats],
-    }
-  }, [settings, run])
-  const panelLoader = useMemo(() => {
-    const runParam: Record<string, number> = run > 0 ? { run } : {}
-    return shadowLoader({ ...(STATIC ? throttleProfile(settings) : throttleParams(settings)), ...runParam })
-  }, [settings, run])
+  // `run` makes every URL new, so "Reload all" starts with a cold browser
+  // cache, and a use case's replay count does the same for that case. The
+  // demo server strips these and the throttle settings again; the static
+  // host ignores the query string, and its service worker reads it.
+  const throttle = STATIC ? throttleProfile(settings) : throttleParams(settings)
+  const makeLoader = (runParam: Record<string, string | number>): ImageLoader =>
+    STATIC
+      ? createStaticLoader({ baseUrl: `${BASE}_img`, formats: FORMATS[settings.formats] as readonly StaticFormat[], params: { ...throttle, ...runParam } })
+      : { ...createLoader({ params: { ...throttle, ...runParam } }), formats: FORMATS[settings.formats] }
+  const loader = useMemo(() => makeLoader(run > 0 ? { run } : {}), [settings, run])
+  // One loader per use case and replay, kept so a re-render passes the same object.
+  const loaders = useMemo(() => new Map<string, ImageLoader>(), [settings, run])
+  const loaderOf = (id: string, replay: number): ImageLoader => {
+    if (replay === 0) return loader
+    const key = `${id}-${replay}`
+    let own = loaders.get(key)
+    if (!own) loaders.set(key, (own = id === 'shadow' ? shadowLoader({ ...throttle, run: `${run}-${key}` }) : makeLoader({ run: `${run}-${key}` })))
+    return own
+  }
+  const panelLoader = useMemo(() => shadowLoader({ ...throttle, ...(run > 0 ? { run } : {}) }), [settings, run])
   // Any change restarts the demo so you can watch it from a clean state.
   const demoKey = `${run}-${JSON.stringify(settings)}`
   const changeSettings = (next: Settings) => {
@@ -146,9 +123,6 @@ export function App() {
   const pick = (i: number) => gallery[i % gallery.length]!
   const external = byPath.get(`/${EXTERNAL_FILE}`)
 
-  const provider = `<LazyEaseProvider loading="${settings.loading}" rootMargin="${settings.rootMargin}px" dwellTime={${settings.dwellTime}} fadeDuration={${settings.fadeDuration}}>`
-  const placeholderProp = { thumbhash: 'placeholder="thumbhash:…"', color: 'placeholder="#rrggbb"', none: 'placeholder="none"' }[settings.placeholder]
-
   return (
     <LazyEaseProvider
       loader={loader}
@@ -157,7 +131,8 @@ export function App() {
       loading={settings.loading}
       rootMargin={`${settings.rootMargin}px`}
       dwellTime={settings.dwellTime}
-      fadeDuration={settings.fadeDuration}
+      fadeDuration={settings.reveal === 'none' ? 0 : settings.fadeDuration}
+      reveal={settings.reveal === 'focus' ? focusReveal : undefined}
     >
       <Controls settings={settings} onChange={changeSettings} onReload={reload} />
       {STATIC && (
@@ -171,51 +146,65 @@ export function App() {
           {STATIC ? 'Loading the image list …' : 'Loading the image list … is the demo server running on port 3001?'}
         </p>
       ) : (
-        <main className="page" key={demoKey}>
-          <nav className="toc" aria-label="Cases">
-            <a href="#hero">Hero</a>
-            <a href="#layout">Layout</a>
-            <a href="#sources">Sources</a>
-            <a href="#gallery">Gallery</a>
+        <div className="recipes">
+          <nav className="side" aria-label="Use cases">
+            {GROUPS.map(([group, cases]) => (
+              <div key={group}>
+                <h2>{group}</h2>
+                {cases.map(([id, title]) => (
+                  <a key={id} href={`#${id}`}>
+                    {title}
+                  </a>
+                ))}
+              </div>
+            ))}
           </nav>
-          <Props>{`${provider}\n  <Image src srcWidth srcHeight version ${placeholderProp} … />`}</Props>
 
-          <Case id="hero" title="Hero" note="Drag past 800 px: wide crop and focus switch.">
-            <HeroFrame />
-          </Case>
-
-          <Case id="layout" title="Layout" note="How the box gets its size.">
-            <Tabs value={layout} options={LAYOUTS} onChange={setLayout} />
-            {layout === 'fixed' && (
-              <>
-                <p className="note">1× and 2× candidates. A 40 px original gets one URL.</p>
-                <Props>{`<Image width={56} height={56} focalPoint={{ x: 40, y: 30 }} />\n<Image width={320} height={240} />`}</Props>
-                <div className="inline-controls">
-                  <label className="field">
-                    <span>Density</span>
-                    <select value={density} onChange={(e) => setDensity(Number(e.target.value))}>
-                      {DENSITIES.map((value) => (
-                        <option key={value} value={value}>
-                          {value ? `${value}× (via sizes)` : `Device (${devicePixelRatio}×)`}
-                        </option>
-                      ))}
-                    </select>
+          <main key={demoKey}>
+            <h2 className="group">Start</h2>
+            <UseCase
+              id="hero"
+              title="Hero"
+              note="Art direction: wide crop and focus from 800 px."
+              controls={
+                <>
+                  <Choice label="Route" value={heroRoute} options={[['lcp', 'LCP'], ['fade', 'Fade']]} onChange={setHeroRoute} />
+                  <label className="field range">
+                    <span>
+                      Viewport <output>{heroWidth} px</output>
+                    </span>
+                    <input type="range" min={HERO_MIN_WIDTH} max={HERO_MAX_WIDTH} step={10} value={heroWidth} onChange={(e) => setHeroWidth(Number(e.target.value))} />
                   </label>
-                </div>
+                </>
+              }
+              props={heroRoute === 'lcp' ? '<img srcset sizes fetchpriority="high">  in the first HTML' : '<span data-le> <img data-le-srcset data-le-sizes>'}
+            >
+              {(replay) => <HeroFrame width={heroWidth} route={heroRoute} run={replay} />}
+            </UseCase>
+
+            <h2 className="group">Layout</h2>
+            <UseCase
+              id="fixed"
+              title="Fixed size"
+              note="1× and 2× candidates. A 40 px original gets one URL."
+              controls={<Choice label="Density" value={density} options={DENSITIES} onChange={setDensity} />}
+              props="<Image width={56} height={56} focalPoint={{ x: 40, y: 30 }} />"
+            >
+              {(replay) => (
                 <div className="row" key={density}>
-                  <DemoImage {...source(AVATAR)} alt="Pines" width={AVATAR.size} height={AVATAR.size} focalPoint={AVATAR.focalPoint} sizes={sizesFor(AVATAR.size)} label="56 px" />
-                  <DemoImage {...source(TINY)} alt="Tiny" width={56} height={56} sizes={sizesFor(56)} label="40 px original" />
-                  <DemoImage {...source(CARD)} alt="Glacier" {...CARD_SIZE} sizes={sizesFor(CARD_SIZE.width)} label="320×240" />
+                  <DemoImage {...source(AVATAR)} loader={loaderOf('fixed', replay)} alt="Pines" width={AVATAR.size} height={AVATAR.size} focalPoint={AVATAR.focalPoint} sizes={sizesFor(AVATAR.size)} label="56 px" />
+                  <DemoImage {...source(TINY)} loader={loaderOf('fixed', replay)} alt="Tiny" width={56} height={56} sizes={sizesFor(56)} label="40 px" />
+                  <DemoImage {...source(CARD)} loader={loaderOf('fixed', replay)} alt="Glacier" {...CARD_SIZE} sizes={sizesFor(CARD_SIZE.width)} label="320×240" />
                 </div>
-              </>
-            )}
-            {layout === 'ratio' && (
-              <>
-                <p className="note">4:3 below 800 px, 2:1 above.</p>
-                <Props>{`<Image aspectRatio={4 / 3} sizes="100vw"\n  sources={[{ media: '(min-width:800px)', aspectRatio: 2, sizes: '50vw' }]} />`}</Props>
+              )}
+            </UseCase>
+
+            <UseCase id="ratio" title="Breakpoint ratio" note="4:3 below 800 px, 2:1 above." props="<Image aspectRatio={4 / 3} sources={[{ media, aspectRatio: 2 }]} />">
+              {(replay) => (
                 <div className="split">
                   <DemoImage
                     {...source(SPLIT)}
+                    loader={loaderOf('ratio', replay)}
                     alt="Ridge"
                     aspectRatio={4 / 3}
                     sizes="100vw"
@@ -223,68 +212,68 @@ export function App() {
                     label="card"
                   />
                 </div>
-              </>
-            )}
-            {layout === 'resize' && (
-              <>
-                <p className="note">Measured: growing upgrades in place, shrinking keeps the image.</p>
-                <Props>{`<Image aspectRatio={1} />`}</Props>
-                <div className="inline-controls">
-                  <label className="field range">
-                    <span>
-                      Width <output>{growWidth} px</output>
-                    </span>
-                    <input type="range" min={120} max={900} step={10} value={growWidth} onChange={(e) => setGrowWidth(Number(e.target.value))} />
-                  </label>
-                </div>
+              )}
+            </UseCase>
+
+            <UseCase
+              id="resize"
+              title="Resize"
+              note="Growing upgrades in place, shrinking keeps the image."
+              controls={
+                <label className="field range">
+                  <span>
+                    Width <output>{growWidth} px</output>
+                  </span>
+                  <input type="range" min={120} max={900} step={10} value={growWidth} onChange={(e) => setGrowWidth(Number(e.target.value))} />
+                </label>
+              }
+              props="<Image aspectRatio={1} />"
+            >
+              {(replay) => (
                 <div style={{ width: growWidth, maxWidth: '100%' }}>
-                  <DemoImage {...source(GROW)} alt="Peaks" aspectRatio={1} label="measured" />
+                  <DemoImage {...source(GROW)} loader={loaderOf('resize', replay)} alt="Peaks" aspectRatio={1} label="measured" />
                 </div>
-              </>
-            )}
-            {layout === 'fill' && (
-              <>
-                <p className="note">Browser crop of one uncropped ladder. Hidden cells stay idle.</p>
-                <Props>{`<div style={{ position: 'relative', aspectRatio: '1' }}>\n  <Image fill />\n</div>`}</Props>
-                <div className="inline-controls">
-                  <label className="field">
-                    <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Show hidden cells
-                  </label>
-                </div>
+              )}
+            </UseCase>
+
+            <UseCase
+              id="fill"
+              title="Fill"
+              note="Browser crop of one ladder. Hidden cells stay idle."
+              controls={
+                <label className="field">
+                  <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Show hidden cells
+                </label>
+              }
+              props="<div style={{ position: 'relative' }}><Image fill /></div>"
+            >
+              {(replay) => (
                 <div className="cells">
                   {[...CELLS, ...CELLS].map((cell, i) => (
                     <div key={i} hidden={i >= CELLS.length && !showHidden}>
-                      <DemoImage {...source(cell)} alt="" fill frame={{ aspectRatio: '1' }} label={i >= CELLS.length ? 'hidden' : 'cell'} />
+                      <DemoImage {...source(cell)} loader={loaderOf('fill', replay)} alt="" fill frame={{ aspectRatio: '1' }} label={i >= CELLS.length ? 'hidden' : 'cell'} />
                     </div>
                   ))}
                 </div>
-              </>
-            )}
-            {layout === 'article' && (
-              <>
-                <p className="note">Native, intrinsic ratio. Without source size: one URL.</p>
-                <Props>{`<Image loading="native" sizes="${ARTICLE_SIZES}" />\n<Image width={320} height={480} />  // no srcWidth`}</Props>
-                <div className="article">
-                  <DemoImage {...source(ARTICLE)} alt="Night sky" loading="native" sizes={ARTICLE_SIZES} label="native" />
-                  <DemoImage src={SINGLE.src} alt="Canyon" width={SINGLE.width} height={SINGLE.height} placeholder={placeholderFor(byPath.get(SINGLE.src))} label="one URL" />
-                </div>
-              </>
-            )}
-          </Case>
+              )}
+            </UseCase>
 
-          <Case id="sources" title="Sources" note="Beyond the plain <Image>.">
-            <Tabs value={kind} options={SOURCES} onChange={setKind} />
-            {kind === 'background' && (
-              <>
-                <p className="note">CSS image-set(), set once visible.</p>
-                <Props>{`--banner: imageSet({ src, width: 720, aspectRatio: 2, loader })\nwhenVisible(banner, …, () => banner.setAttribute('data-le-visible', ''))`}</Props>
-                <Banner loader={loader} />
-              </>
-            )}
-            {kind === 'originals' && (
-              <>
-                <p className="note">SVG, animated GIF and an external photo load as they are.</p>
-                <Props>{`<Image src="/_img/extra/logo.svg" width={120} height={40} />\n<Image src="https://…/mountains.jpg" width={320} height={213} />`}</Props>
+            <UseCase id="article" title="Article" note="Native with intrinsic ratio. Without source size: one URL." props={`<Image loading="native" sizes="${ARTICLE_SIZES}" />`}>
+              {(replay) => (
+                <div className="article">
+                  <DemoImage {...source(ARTICLE)} loader={loaderOf('article', replay)} alt="Night sky" loading="native" sizes={ARTICLE_SIZES} label="native" />
+                  <DemoImage src={SINGLE.src} loader={loaderOf('article', replay)} alt="Canyon" width={SINGLE.width} height={SINGLE.height} placeholder={placeholderFor(byPath.get(SINGLE.src))} label="one URL" />
+                </div>
+              )}
+            </UseCase>
+
+            <h2 className="group">Sources</h2>
+            <UseCase id="background" title="Background" note="CSS image-set(), set once visible." props="--banner: imageSet({ src, width: 720, aspectRatio: 2, loader })">
+              {(replay) => <Banner loader={loaderOf('background', replay)} />}
+            </UseCase>
+
+            <UseCase id="originals" title="SVG, GIF, external" note="Loaded as they are." props={'<Image src="logo.svg" width={120} height={40} />'}>
+              {() => (
                 <div className="row">
                   <DemoImage src={`${BASE}_img${LOGO}`} alt="Club" width={120} height={40} label="SVG" />
                   <DemoImage src={`${BASE}_img${WAVE}`} alt="Waving hand" width={64} height={64} label="GIF" />
@@ -299,44 +288,40 @@ export function App() {
                     />
                   )}
                 </div>
-              </>
-            )}
-            {kind === 'shadow' && (
-              <>
-                <p className="note">Own CSS and controller, the panel is the scroll root.</p>
-                <Props>{`createLazyEase({ loader, root: panel })\n  .attach(img, { src, width: 128, height: 128, token, version })`}</Props>
-                <ShadowPanel loader={panelLoader} />
-              </>
-            )}
-            {kind === 'backend' && (
-              <>
-                <p className="note">{STATIC ? 'Live server only.' : 'Denied crop, cache hit, eviction and the render after it.'}</p>
-                {!STATIC && <Backend />}
-              </>
-            )}
-          </Case>
+              )}
+            </UseCase>
 
-          <Case id="gallery" title="Scroll gallery" note={'Crossed out: what sizes="100vw" would load.'}>
-            <Props>{`<Image aspectRatio={ratio} />`}</Props>
-            <div className="gallery">
-              {Array.from({ length: GALLERY }, (_, i) => {
-                const [label, ratio] = galleryRatio(i, gallery.length)
-                const image = pick(i)
-                return (
-                  <DemoImage
-                    key={i}
-                    {...source(image)}
-                    alt=""
-                    aspectRatio={ratio}
-                    compare
-                    {...(settings.loading === 'native' ? { sizes: '(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw' } : {})}
-                    label={`#${i + 1} · ${label}`}
-                  />
-                )
-              })}
-            </div>
-          </Case>
-        </main>
+            <UseCase id="shadow" title="Shadow panel" note="Own CSS and controller, the panel scrolls." props="createLazyEase({ loader, root: panel }).attach(img, { src, token })">
+              {(replay) => <ShadowPanel loader={replay ? loaderOf('shadow', replay) : panelLoader} />}
+            </UseCase>
+
+            <UseCase id="backend" title="Backend" note={STATIC ? 'Live server only.' : 'Denied crop, cache hit, eviction.'} props="createImageApp({ root, storage, policy })">
+              {() => (STATIC ? null : <Backend />)}
+            </UseCase>
+            <h2 className="group">Scrolling</h2>
+            <UseCase id="gallery" title="Scroll gallery" note={'Lazy as you scroll. Crossed out: what sizes="100vw" would load.'} props="<Image aspectRatio={ratio} />">
+              {(replay) => (
+                <div className="gallery">
+                  {Array.from({ length: GALLERY }, (_, i) => {
+                    const [label, ratio] = galleryRatio(i, gallery.length)
+                    return (
+                      <DemoImage
+                        key={i}
+                        {...source(pick(i))}
+                        loader={loaderOf('gallery', replay)}
+                        alt=""
+                        aspectRatio={ratio}
+                        compare
+                        {...(settings.loading === 'native' ? { sizes: '(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw' } : {})}
+                        label={`#${i + 1} · ${label}`}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </UseCase>
+          </main>
+        </div>
       )}
     </LazyEaseProvider>
   )
