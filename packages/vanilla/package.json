@@ -1,6 +1,6 @@
 {
   "name": "@lazy-ease/vanilla",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Declarative HTML integration for lazy-ease: enhances data-le markup, ships the stylesheet and a self-starting script",
   "license": "MIT",
   "author": "Mike Kuss",

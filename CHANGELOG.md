@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-24
+
 ### Added
 
 - `@lazy-ease/core`: `thumbhashDecoder()` draws the decoded image in an SVG with a Gaussian blur, so a ThumbHash placeholder looks soft instead of showing the steps of a 32 px PNG upscaled by the browser. The blur defaults to 8 % of the longer edge; `thumbhashDecoder(thumbhash, { blur })` changes it, and `blur: 0` paints the PNG as before. Only an absent `blur` takes the default; anything but a finite number from 0 (`null` too) throws a `RangeError`.
@@ -127,7 +129,8 @@ First release, implementing the [v1 design spec](docs/design-spec.md).
 
 - Measured mode now sets `sizes` before `srcset`. WebKit selects a candidate as soon as `srcset` is set, so it used to fetch the `100vw` candidate first and then the right one.
 
-[Unreleased]: https://github.com/mikekuss/lazy-ease/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/mikekuss/lazy-ease/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mikekuss/lazy-ease/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mikekuss/lazy-ease/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mikekuss/lazy-ease/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mikekuss/lazy-ease/compare/v0.1.0...v0.2.0

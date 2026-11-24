@@ -100,13 +100,6 @@ A version published by hand has no provenance. That tag skips it, so it doesn't 
 
 This is how 0.3.0 went out: `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server` were published by hand from a dry run's tarballs, and the `v0.3.0` tag published `@lazy-ease/react` through Trusted Publishing. A bootstrap pre-release (for example `0.3.0-bootstrap.0`) was ruled out: it stays visible on npm, and npm sets `latest` on a package's first publish even with `--tag`.
 
-### Rollout order for 0.3.1
+### How 0.3.1 went out
 
-0.3.1 is the first version that publishes `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server` through Trusted Publishing.
-
-1. Merge the release preparation to `main` (all packages at 0.3.1, changelog section `## [0.3.1] - date`) and run the local checks on it.
-2. Run the workflow by hand (dry run) on that commit. It should report no missing packages.
-3. On the day of the tag, at most 2 days before it, add the trusted publishers of the four packages as described above (`release.yml`, environment empty, `npm publish` allowed). Check that the one of `@lazy-ease/react` is still there.
-4. Tag `v0.3.1` and push the tag. The workflow publishes all five with provenance and creates the release with its assets.
-5. Check `npm view @lazy-ease/react@0.3.1 dependencies` (it needs `@lazy-ease/core` 0.3.1) and compare each `dist.integrity` with `release.json`.
-6. Optionally set Publishing access to "Require two-factor authentication and disallow tokens" on all five packages.
+0.3.1 was the first version that published `@lazy-ease/core`, `@lazy-ease/testing`, `@lazy-ease/vanilla` and `@lazy-ease/server` through Trusted Publishing. Its release preparation was merged to `main` on 2026-11-21 and checked with a dry run; the trusted publishers of the four packages were added on 2026-11-24, and the `v0.3.1` tag on that merge commit published all five with provenance the same day. Since then every package has a trusted publisher that has published, so a release needs no setup on npmjs.com.
