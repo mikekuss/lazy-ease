@@ -74,6 +74,14 @@ const le = createLazyEase({ loader: createLoader(), detectFormat: detectAvif })
 
 **Updates.** `update()` starts a new generation from the placeholder, as `destroy()` and `attach()` would, unless the new options differ from the current ones only in their functions: `onStateChange`, `onDisplay` or `reveal`, for the same `data-le-srcset` on picture sources. The other options are compared as JSON, so the same values in another key order count as a change; `root` and `loader` count as the same only when they are the same objects. Keep the loader in a variable (or in the instance config): a new loader object, an inline one on every call included, starts over. Then, for example from a component that calls `update()` on every render, the image stays as it is: a loaded one stays on display with no placeholder, fade or report, a loading one keeps loading and fades in when it arrives, a failed one stays failed, one that waits for the viewport keeps waiting, and the new functions are called from then on. Any other change, `quality`, `focalPoint`, `sizes`, `placeholder`, `rootMargin`, a new `root` or a new loader among them, starts over as before. To load a failed image again, pass a new `version`. A changed `data-le-sizes` on a `<source>` alone is not applied to a kept image; destroy and attach it again, or pass a new `version`. A native image always starts a new generation that adopts what the element has.
 
+**Keeping the image.** With `keepImage: true`, a new source keeps the image that is displayed until its own has loaded and decoded, then crossfades to it: no placeholder in between. The box paints the old image at once, sized and positioned from the img's `object-fit` and `object-position`; the img keeps its old attributes and focal styles until the new source activates (it may wait for the viewport) and is hidden over that copy while the new target loads, which then fades out with the crossfade. A bare img without a box keeps showing the old image itself and swaps directly. A new source that fails shows the error state, without the old image. An image that is still loading or failed when the source changes goes back to the placeholder as without the option. `attach()` takes the option too: after `destroy()`, attaching another source with `keepImage` keeps the image the element displays.
+
+```js
+const handle = le.attach(img, { src: '/a.jpg', aspectRatio: 1.5 })
+// Later: the new photo replaces the old one without a placeholder.
+handle.update({ src: '/b.jpg', aspectRatio: 1.5, keepImage: true })
+```
+
 Measured images grow their candidates after a 200 ms trailing debounce and never shrink them; a failed upgrade keeps the image that is displayed. A failed first load or decode releases the placeholder and reports `error`. An element can be attached once; the claim is shared by every copy of the package on the page.
 
 ### Without measured mode

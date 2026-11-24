@@ -40,6 +40,9 @@
  * A frame fails when it is an overlay that is not explained, or when it is
  * blank right after the placeholder and before the image (a gap between
  * placeholder and image; blank while scrolled out of a scroll root is fine).
+ * A box whose `data-new-placeholder` names a color (`update-keep`) keeps its
+ * old image until the new one is there: no frame may match that placeholder
+ * (N, a clone painted with it), and none after the first image may be blank.
  * An anchor is never explained by itself, so a settled frame of alt text
  * fails too, and so does a last frame that is an overlay. On failure the
  * contact sheet of all distinct frames is attached to the report, failing
@@ -75,6 +78,7 @@ const FILMED = [
   'grow',
   'failed-upgrade',
   'update',
+  'update-keep',
   'no-fade',
 ]
 
@@ -276,6 +280,8 @@ async function record(page: Page, id: string): Promise<Recording> {
 interface References {
   placeholders: Raw[]
   blanks: Raw[]
+  /** The new source's placeholder, which no frame may show. */
+  forbidden?: Raw
 }
 
 interface Raw {
@@ -324,7 +330,9 @@ async function renderReferences(page: Page, id: string, recording: Recording): P
   const blanks: Raw[] = []
   const blankStates = recording.placeholders.length > 0 ? recording.placeholders : recording.classes.map((cls) => ({ cls, css: '' }))
   for (const [i, state] of blankStates.entries()) blanks.push(await shoot(state, true, `E${i + 1}`))
-  return { placeholders, blanks }
+  const color = await page.evaluate((id) => document.querySelector<HTMLElement>(`#${id} .stage .le-box`)!.dataset.newPlaceholder, id)
+  const forbidden = color ? await shoot({ cls: blankStates[0]!.cls, css: `background-color: ${color}` }, false, 'N') : undefined
+  return { placeholders, blanks, forbidden }
 }
 
 /** Crops every frame to the box, drops repeats and judges what is left. */
@@ -383,6 +391,7 @@ async function judge(recording: Recording): Promise<Judged[]> {
       const near = toPlaceholder <= toBlank ? 'placeholder' : 'empty box'
       fail = `something small drawn over the ${near} (${Math.min(toPlaceholder, toBlank)} px differ): alt text or a broken-image icon`
     }
+    if (refs.forbidden && differing(frame.data, refs.forbidden.data) <= noise) fail ??= 'shows the placeholder of the new source over a kept image'
     return {
       index: i + 1,
       at: Math.round(frame.t - recording.clickedAt),
@@ -403,6 +412,9 @@ async function judge(recording: Recording): Promise<Judged[]> {
     const previous = settled.findLast((other) => other.index < frame.index)
     const next = settled.find((other) => other.index > frame.index)
     if (previous?.cls === 'placeholder' && next?.cls !== 'placeholder') frame.fail ??= 'blank box between the placeholder and the image'
+    // A kept image leaves no gap at all once this run's first image is there (the first frame is the last run's).
+    const shown = judged.find((other) => other.cls === 'image' && judged.some((p) => p.index < other.index && p.cls === 'placeholder'))
+    if (refs.forbidden && shown && shown.index < frame.index) frame.fail ??= 'blank box while an image is kept'
   }
   return judged
 }
@@ -446,7 +458,11 @@ async function attachSheet(testInfo: TestInfo, id: string, judged: Judged[], rec
   const gap = 6
   const cols = 6
   const tiles = [
-    ...[...refs.placeholders, ...refs.blanks].map((ref) => ({ png: ref.png, lines: [`${ref.label}: reference`, ref.label.startsWith('P') ? 'placeholder' : 'empty box'], fail: false })),
+    ...[...refs.placeholders, ...refs.blanks, ...(refs.forbidden ? [refs.forbidden] : [])].map((ref) => ({
+      png: ref.png,
+      lines: [`${ref.label}: reference`, ref.label.startsWith('P') ? 'placeholder' : ref.label === 'N' ? 'new placeholder (forbidden)' : 'empty box'],
+      fail: false,
+    })),
     ...judged.slice(0, 400).map((frame) => ({
       png: frame.png,
       lines: [

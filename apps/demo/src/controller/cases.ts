@@ -461,6 +461,40 @@ export const CASES: Case[] = [
     },
   },
   {
+    id: 'update-keep',
+    group: 'Lifecycle',
+    title: 'update() keeps the old image',
+    about: 'With keepImage, the old image stays until the new one has loaded and decoded, then crossfades to it. No placeholder in between.',
+    async run(ctx) {
+      const [first, second] = [landscape(ctx, 3), portrait(ctx, 3)]
+      const { box, img } = ctx.box(ctx.stage, 'frame ratio-3-2')
+      // The frame test checks that no frame shows this one.
+      box.dataset.newPlaceholder = second.color
+      const le = ctx.lazyEase({ loader: ctx.loader() })
+      // Slow, so the old image has to hold for a while.
+      const slow = ctx.loader({ params: { throttle: 'custom', latency: 1200, kbps: 400 } })
+      const options = (image: SourceImage) => ({ src: image.src, aspectRatio: 3 / 2, placeholder: image.color, ...metadata(image) })
+      const a = le.attach(img, options(first))
+      // Its fade is over once the placeholder is gone. No pause after it: a case without a check in
+      // progress counts as finished for the frame test, which then stops filming.
+      await ctx.expect('First source loaded', () => a.state === 'loaded' && box.style.backgroundColor === '' && box.style.backgroundImage === '')
+      const old = img.currentSrc
+      let painted = false
+      const stop = watchStyle(box, (style) => (painted ||= style.backgroundColor !== ''))
+      a.update({ ...options(second), loader: slow, keepImage: true })
+      ctx.log('update() to the second image, with keepImage')
+      ctx.assert('Old target still on the img', (img.getAttribute('srcset') ?? '').includes(first.src))
+      ctx.assert('The box shows the old image', box.style.backgroundImage.includes(old))
+      await ctx.expect('Second source loading', () => a.state === 'loading')
+      ctx.assert('Still the old image under the new one', box.style.backgroundImage.includes(old))
+      await ctx.expect('Second source loaded', () => a.state === 'loaded' && (img.getAttribute('srcset') ?? '').includes(second.src), 8000)
+      await ctx.expect('Old image released after the fade', () => box.style.backgroundImage === '' && img.style.opacity === '')
+      stop()
+      ctx.assert('No placeholder at any point', !painted)
+      ctx.assert('onDisplay once per source', a.displays.length === 2, `${a.displays.length} calls`)
+    },
+  },
+  {
     id: 'destroy',
     group: 'Lifecycle',
     title: 'destroy() during a slow load',

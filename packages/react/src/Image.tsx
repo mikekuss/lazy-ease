@@ -112,6 +112,12 @@ export interface ImageProps
   noScript?: boolean
   /** Every state change. `loaded` once per source, also for an image that loaded before hydration. */
   onStateChange?: (state: LoadState, img: HTMLImageElement) => void
+  /**
+   * A new source keeps the displayed image until its own has loaded and
+   * decoded, then crossfades to it, with no placeholder in between. A failed
+   * one shows the error state. Native and `priority` images always do.
+   */
+  keepImage?: boolean
   /** Keeps the box element, and its styles and class. */
   wrapperClassName?: string
   wrapperStyle?: CSSProperties
@@ -166,8 +172,8 @@ function setRef(ref: Ref<HTMLImageElement> | undefined, node: HTMLImageElement |
  * placeholder, through the lazy-ease controller of `@lazy-ease/core`.
  */
 export function Image(props: ImageProps) {
-  // A new src is a new logical source: it starts over with its placeholder.
-  return <ImageBox key={props.src} {...props} />
+  // A new src is a new logical source: it starts over with its placeholder, unless it keeps the image.
+  return <ImageBox key={props.keepImage ? '' : props.src} {...props} />
 }
 
 function ImageBox({
@@ -196,6 +202,7 @@ function ImageBox({
   sources = [],
   noScript = false,
   onStateChange,
+  keepImage,
   wrapperClassName,
   wrapperStyle,
   className,
@@ -292,7 +299,7 @@ function ImageBox({
   // A measured image's src is its key, and its candidates upgrade in place. Like the
   // controller's, it is the URLs alone: a new `sizes` or `media` keeps the source, and
   // so does a new `version` of a direct source, whose URL it doesn't change.
-  const identity = JSON.stringify([measured && version, real?.src, real?.srcSet, pictureSources.map((s) => s.srcSet)])
+  const identity = JSON.stringify([measured && [src, version], real?.src, real?.srcSet, pictureSources.map((s) => s.srcSet)])
   const latest = useRef({
     onLoad,
     onStateChange,
@@ -315,8 +322,10 @@ function ImageBox({
   const revealer = reveal ?? config.reveal
   // The controller owns the placeholder from display on and removes it after the fade:
   // a rerender renders the same styles again, so React neither writes it back nor
-  // removes it early. A native image keeps its displayed image under a new source.
-  if (kept.shown && (native || kept.shown === identity)) paint = kept.paint
+  // removes it early. A native image keeps its displayed image under a new source, as does `keepImage`.
+  // `placeholderStyle` is this source's own, for the layout effect.
+  const placeholderStyle = paint
+  if (kept.shown && (native || keepImage || kept.shown === identity)) paint = kept.paint
   // The controller calls the hooks of the committed render, and a render renders the
   // placeholder it committed: a render React discards or holds back changes neither.
   useLayoutEffect(() => {
@@ -367,6 +376,7 @@ function ImageBox({
   // Only a ThumbHash shown as its color goes to the controller, which swaps in the image on activation.
   // One painted here as its image only says whether it is transparent, so that it fades out with the fade.
   options.transparent = parsed.transparent
+  options.keepImage = keepImage
   if (!native && parsed.lazy && !ssrImage) options.placeholder = requested ? (placeholder ?? config.placeholder) : config.placeholder
   // Equivalent config keeps the attachment: the loader and decoder are compared by
   // what they offer and called through `latest`, so inline ones don't re-attach.
@@ -388,10 +398,11 @@ function ImageBox({
     const img = self.current!
     const state = latest.current
     // Destroying a displayed source removed the placeholder that React wrote for this new one.
-    // A native image keeps its displayed image under a new source, with nothing painted under it.
-    if (native ? !state.shown : state.shown !== identity) {
+    // A native image keeps its displayed image under a new source, with nothing painted under it,
+    // and so does `keepImage` while the img still displays an image: the controller paints it.
+    if (native || (keepImage && img.complete && img.naturalWidth > 0) ? !state.shown : state.shown !== identity) {
       // The author's own styles win over the placeholder, as in the markup.
-      Object.assign(img.closest<HTMLElement>('[data-le]')!.style, paint, boxed ? wrapperStyle : style)
+      Object.assign(img.closest<HTMLElement>('[data-le]')!.style, placeholderStyle, boxed ? wrapperStyle : style)
       // A deferred source left before it was displayed starts over, with its placeholder
       // and onLoad, when it comes back.
       if (!native) state.shown = ''

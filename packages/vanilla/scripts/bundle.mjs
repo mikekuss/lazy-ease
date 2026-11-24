@@ -30,12 +30,12 @@ export function buildScript({ entry = 'auto', ...options } = {}) {
 }
 
 /**
- * The markup API can neither enable a reveal nor mark a placeholder
- * transparent, so the scripts build core's controller without its import
- * of `fades`, which the define above then makes `false`, and the minifier
- * drops both paths. Not a replaced module or a local constant: esbuild
- * inlines those without folding the code that depends on them. The ES
- * modules keep both paths.
+ * The markup API can neither enable a reveal, mark a placeholder
+ * transparent nor keep an image for a new source (`keepImage`), so the
+ * scripts build core's controller without its import of `fades`, which the
+ * define above then makes `false`, and the minifier drops these paths. Not
+ * a replaced module or a local constant: esbuild inlines those without
+ * folding the code that depends on them. The ES modules keep all of them.
  */
 const withoutFades = {
   name: 'lazy-ease-without-fades',

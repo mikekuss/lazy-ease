@@ -1024,6 +1024,244 @@ describe('generations', () => {
   }
 })
 
+describe('keepImage', () => {
+  /** A boxed image with `/a.webp` on display, its fade over. */
+  async function shown(options: AttachOptions = {}, config: LazyEaseConfig = {}) {
+    const dom = setup(config)
+    const animations = mockAnimate(dom.img)
+    const boxAnimations = mockAnimate(dom.box)
+    const handle = dom.attach({ url: '/a.webp', loading: 'eager', ...options })
+    await loadAndDecode(dom.img, '/a.webp')
+    await vi.advanceTimersByTimeAsync(400)
+    dom.states.length = 0
+    dom.displays.length = 0
+    const { update } = handle
+    handle.update = (options) => update({ onDisplay: (_, event) => dom.displays.push(event), ...options })
+    return { ...dom, handle, animations, boxAnimations }
+  }
+  const held = 'url("/a.webp")'
+
+  it('keeps the displayed image until the new one has loaded and decoded, then crossfades with no placeholder', async () => {
+    const { img, box, handle, states, displays, animations, boxAnimations } = await shown({ placeholder: 'blue' })
+    handle.update({ url: '/b.webp', loading: 'eager', placeholder: 'red', keepImage: true })
+    // Installed at once (eager): the box shows the old image under the hidden img, never the red placeholder.
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    expect(img.style.opacity).toBe('0')
+    expect(box.style.backgroundImage).toBe(held)
+    expect(box.style.backgroundColor).toBe('')
+    expect(box.style.backgroundRepeat).toBe('no-repeat')
+    expect(states).toEqual(['idle', 'loading'])
+    await loadAndDecode(img, '/b.webp')
+    expect(states).toEqual(['idle', 'loading', 'loaded'])
+    expect(displays).toEqual([expect.any(Event)])
+    expect(animations.at(-1)!.keyframes).toEqual({ opacity: [0, 1], easing: 'ease-out' })
+    // The old image fades out like a transparent placeholder, from 40 to 80 % of the fade.
+    expect(boxAnimations.at(-1)).toMatchObject({ keyframes: { backgroundImage: `url(${INERT})` } })
+    expect(box.style.backgroundImage).toBe(held)
+    vi.advanceTimersByTime(400)
+    expect(box.style.backgroundImage).toBe('')
+    expect(box.style.backgroundRepeat).toBe('')
+    expect(img.style.opacity).toBe('')
+  })
+
+  it('leaves the old attributes on the img until activation, while the new source waits for the viewport', async () => {
+    const { img, box, handle, states } = await shown()
+    handle.update({ url: '/b.webp', keepImage: true })
+    expect(img.getAttribute('src')).toBe('/a.webp')
+    expect(img.style.opacity).toBe('')
+    expect(box.style.backgroundImage).toBe(held)
+    expect(handle.state).toBe('idle')
+    // Loads of the old image say nothing about the new source.
+    load(img, '/a.webp')
+    await flush()
+    expect(states).toEqual(['idle'])
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    expect(img.style.opacity).toBe('0')
+    await loadAndDecode(img, '/b.webp')
+    expect(handle.state).toBe('loaded')
+  })
+
+  it('shows the error state when the new source fails, without the old image', async () => {
+    const { img, box, handle, states } = await shown()
+    handle.update({ url: '/b.webp', loading: 'eager', keepImage: true })
+    fail(img)
+    expect(states).toEqual(['idle', 'loading', 'error'])
+    expect(box.getAttribute('data-state')).toBe('error')
+    expect(box.style.backgroundImage).toBe('')
+    expect(img.style.opacity).toBe('')
+  })
+
+  it('goes back to the placeholder when the old image is still loading or failed', async () => {
+    const { img, box, attach } = setup()
+    const handle = attach({ url: '/a.webp', loading: 'eager' })
+    handle.update({ url: '/b.webp', placeholder: 'red', keepImage: true })
+    expect(img.getAttribute('src')).toBe(INERT)
+    expect(box.style.backgroundColor).toBe('red')
+    expect(box.style.backgroundImage).toBe('')
+    intersect(box)
+    fail(img)
+    handle.update({ url: '/c.webp', placeholder: 'green', keepImage: true })
+    expect(img.getAttribute('src')).toBe(INERT)
+    expect(box.style.backgroundColor).toBe('green')
+    expect(box.style.backgroundImage).toBe('')
+  })
+
+  it('swaps directly with a zero fade, never showing an empty box', async () => {
+    const { img, box, handle } = await shown({}, { fadeDuration: 0 })
+    handle.update({ url: '/b.webp', loading: 'eager', keepImage: true })
+    expect(img.style.opacity).toBe('0')
+    expect(box.style.backgroundImage).toBe(held)
+    await loadAndDecode(img, '/b.webp')
+    expect(img.style.opacity).toBe('')
+    expect(box.style.backgroundImage).toBe('')
+  })
+
+  it('keeps the old image of a bare img in the img itself, without hiding it', async () => {
+    document.body.innerHTML = `<img data-le alt="Fern" src="${INERT}" style="background-color:${PLACEHOLDER}">`
+    const img = document.querySelector('img')!
+    fakeImage(img)
+    const states: LoadState[] = []
+    const handle = createLazyEase({ fadeDuration: 0 }).attach(img, { url: '/a.webp', loading: 'eager', onStateChange: (state) => states.push(state) })
+    await loadAndDecode(img, '/a.webp')
+    handle.update({ url: '/b.webp', keepImage: true, onStateChange: (state) => states.push(state) })
+    expect(img.getAttribute('src')).toBe('/a.webp')
+    expect(img.style.backgroundColor).toBe('')
+    intersect(img)
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    expect(img.style.opacity).toBe('')
+    await loadAndDecode(img, '/b.webp')
+    expect(states).toEqual(['idle', 'loading', 'loaded', 'idle', 'loading', 'loaded'])
+    expect(img.style.backgroundImage).toBe('')
+  })
+
+  it('paints the old image as the img shows it: object-fit and object-position', async () => {
+    const { img, box, handle } = await shown()
+    Object.assign(img.style, { objectFit: 'contain', objectPosition: '10% 20%' })
+    handle.update({ url: '/b.webp', keepImage: true })
+    expect([box.style.backgroundSize, box.style.backgroundPosition]).toEqual(['contain', '10% 20%'])
+    handle.update({ url: '/a.webp', loading: 'eager' })
+    await loadAndDecode(img, '/a.webp')
+    vi.advanceTimersByTime(400)
+    img.style.objectFit = 'fill'
+    handle.update({ url: '/b.webp', keepImage: true })
+    expect(box.style.backgroundSize).toBe('100% 100%')
+  })
+
+  it('does not let a later attach of the new source adopt the old image after a destroy before the install', async () => {
+    const { le, img, box, handle } = await shown()
+    handle.update({ url: '/b.webp', keepImage: true })
+    handle.destroy()
+    // The element keeps what it displays: the old image, painted once.
+    expect(img.getAttribute('src')).toBe('/a.webp')
+    expect(box.style.backgroundImage).toBe('')
+    const next = le.attach(img, { url: '/b.webp', placeholder: 'red' })
+    expect(next.state).toBe('idle')
+    expect(img.getAttribute('src')).toBe(INERT)
+    expect(box.style.backgroundColor).toBe('red')
+  })
+
+  it('keeps the old image on an attach after destroy, for another source', async () => {
+    const { le, img, box, handle } = await shown()
+    handle.destroy()
+    const displays: (Event | undefined)[] = []
+    const next = le.attach(img, { url: '/b.webp', placeholder: 'red', keepImage: true, onDisplay: (_, event) => displays.push(event) })
+    expect(next.state).toBe('idle')
+    expect(displays).toEqual([])
+    expect(img.getAttribute('src')).toBe('/a.webp')
+    expect(box.style.backgroundImage).toBe(held)
+    expect(box.style.backgroundColor).toBe('')
+    intersect(box)
+    expect(img.getAttribute('src')).toBe('/b.webp')
+    await loadAndDecode(img, '/b.webp')
+    expect(displays).toEqual([expect.any(Event)])
+  })
+
+  it('adopts the displayed image when keepImage alone changes', async () => {
+    const { img, box, handle, displays, animations } = await shown()
+    const fades = animations.length
+    handle.update({ url: '/a.webp', loading: 'eager', keepImage: true })
+    expect(handle.state).toBe('loaded')
+    expect(img.getAttribute('src')).toBe('/a.webp')
+    expect(box.style.backgroundImage).toBe('')
+    expect(displays).toEqual([undefined])
+    expect(animations).toHaveLength(fades)
+  })
+
+  it('holds a measured image with its focal styles until the new source is measured and installed', async () => {
+    const { img, box, attach, states } = setup()
+    const fern: AttachOptions = { src: '/fern.jpg', fill: true, srcWidth: 2400, srcHeight: 1600, focalPoint: { x: 70, y: 40 }, loading: 'eager' }
+    const handle = attach(fern)
+    resize(box, 300, 300)
+    const srcset = img.getAttribute('srcset')!
+    await loadAndDecode(img)
+    const url = img.currentSrc
+    vi.advanceTimersByTime(400)
+    const position = img.style.getPropertyValue('object-position')
+    expect(position).toContain('clamp(')
+    handle.update({ src: '/moss.jpg', fill: true, srcWidth: 2400, srcHeight: 1600, keepImage: true })
+    // Still the fern, positioned as before, until the moss activates; it is measured in the same frame.
+    expect(img.style.getPropertyValue('object-position')).toBe(position)
+    intersect(box)
+    expect(img.getAttribute('srcset')).toBe(srcset)
+    expect(box.style.backgroundImage).toBe(`url("${url}")`)
+    resize(box, 300, 300)
+    expect(img.getAttribute('srcset')).toContain('moss')
+    expect(img.style.opacity).toBe('0')
+    // The moss has no focal point: the fern's focal styles are gone.
+    expect(img.style.getPropertyValue('object-position')).toBe('')
+    await loadAndDecode(img)
+    expect(states.slice(-3)).toEqual(['idle', 'loading', 'loaded'])
+    handle.update(fern)
+    expect(img.getAttribute('src')).toBe(INERT)
+  })
+
+  it('keeps the picture sources of the old image until the install, and resets them as before', async () => {
+    document.body.innerHTML = `<span data-le><picture>
+      <source media="(min-width:800px)" srcset="${INERT}" data-le-sizes="100vw" data-le-srcset="/wide-1440.webp 1440w">
+      <img alt="Cliffs" src="${INERT}"></picture></span>`
+    const box = document.querySelector('span')!
+    const img = document.querySelector('img')!
+    const source = document.querySelector('source')!
+    fakeImage(img)
+    const handle = createLazyEase().attach(img, { srcset: '/sq-750.webp 750w', sizes: '100vw', loading: 'eager' })
+    await loadAndDecode(img)
+    source.setAttribute('data-le-srcset', '/wide2-1440.webp 1440w')
+    handle.update({ srcset: '/sq2-750.webp 750w', sizes: '100vw', keepImage: true })
+    expect(source.getAttribute('srcset')).toBe('/wide-1440.webp 1440w')
+    expect(img.getAttribute('srcset')).toBe('/sq-750.webp 750w')
+    intersect(box)
+    expect(source.getAttribute('srcset')).toBe('/wide2-1440.webp 1440w')
+    expect(img.getAttribute('srcset')).toBe('/sq2-750.webp 750w')
+    // A later source without keepImage puts back what the sources had before the first activation.
+    handle.update({ srcset: '/sq3-750.webp 750w', sizes: '100vw' })
+    expect(source.getAttribute('srcset')).toBe(INERT)
+    expect(source.hasAttribute('sizes')).toBe(false)
+  })
+
+  it('clears the picture sources of an image kept on attach when a later source goes back to the placeholder', async () => {
+    document.body.innerHTML = `<span data-le><picture>
+      <source media="(min-width:800px)" data-le-sizes="100vw" data-le-srcset="/wide-1440.webp 1440w">
+      <img alt="Cliffs" src="${INERT}"></picture></span>`
+    const box = document.querySelector('span')!
+    const img = document.querySelector('img')!
+    const source = document.querySelector('source')!
+    fakeImage(img)
+    const le = createLazyEase()
+    le.attach(img, { srcset: '/sq-750.webp 750w', sizes: '100vw', loading: 'eager' }).destroy()
+    load(img)
+    source.setAttribute('data-le-srcset', '/wide2-1440.webp 1440w')
+    const kept = le.attach(img, { srcset: '/sq2-750.webp 750w', sizes: '100vw', keepImage: true })
+    expect(source.getAttribute('srcset')).toBe('/wide-1440.webp 1440w')
+    kept.update({ srcset: '/sq3-750.webp 750w', sizes: '100vw' })
+    expect(source.hasAttribute('srcset')).toBe(false)
+    expect(source.hasAttribute('sizes')).toBe(false)
+    expect(img.getAttribute('src')).toBe(INERT)
+    intersect(box)
+    expect(source.getAttribute('srcset')).toBe('/wide2-1440.webp 1440w')
+  })
+})
+
 describe('focus reveal', () => {
   it('sharpens from 8 % of the longer edge while it fades in, and reads no layout', async () => {
     const { img, box, attach } = setup({ reveal: focusReveal })
