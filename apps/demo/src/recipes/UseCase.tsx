@@ -34,7 +34,12 @@ export function UseCase({ id, title, note, controls, props, replayable = true, c
       <div className="usecase-stage" key={replay}>
         {children(replay)}
       </div>
-      <code className="usecase-props">{props}</code>
+      <div className="copyable">
+        <code className="usecase-props">{props}</code>
+        <button type="button" className="copy light" onClick={() => void navigator.clipboard?.writeText(props)}>
+          Copy
+        </button>
+      </div>
     </section>
   )
 }

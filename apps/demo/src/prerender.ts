@@ -27,6 +27,9 @@ export interface PrerenderOptions {
   versions: boolean
 }
 
+/** The template avatar's size: large enough to read next to the two photos. */
+const PAIR_AVATAR = 120
+
 /** The inert pixel a deferred img shows until its target is assigned. */
 export const INERT = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
 
@@ -115,7 +118,7 @@ export function pairMarkup(options: PrerenderOptions): string {
   const native = ladder(options, ARTICLE.src)
   const card = options.meta(CARD.src)
   const single = ladder(options, CARD.src, undefined, [1080])
-  const avatar = ladder(options, AVATAR.src, { aspectRatio: 1, focalPoint: AVATAR.focalPoint }, classicCandidates({ width: AVATAR.size, ladder: DEFAULT_WIDTHS, srcWidth: options.meta(AVATAR.src).width }))
+  const avatar = ladder(options, AVATAR.src, { aspectRatio: 1, focalPoint: AVATAR.focalPoint }, classicCandidates({ width: PAIR_AVATAR, ladder: DEFAULT_WIDTHS, srcWidth: options.meta(AVATAR.src).width }))
   return `<figure class="pair-item" data-case="native">
   <img data-le alt="Night sky over hills" width="${article.width}" height="${article.height}"
        style="display:block;width:100%;height:auto;background-color:${article.color}"
@@ -132,8 +135,8 @@ export function pairMarkup(options: PrerenderOptions): string {
   <figcaption>Fade, one URL</figcaption>
 </figure>
 <figure class="pair-item" data-case="avatar">
-  <span data-le style="display:block;width:${AVATAR.size}px;height:${AVATAR.size}px;border-radius:50%;background-color:${options.meta(AVATAR.src).color}">
-    <img alt="Pines" width="${AVATAR.size}" height="${AVATAR.size}" data-le-sizes="${AVATAR.size}px"
+  <span data-le style="display:block;width:${PAIR_AVATAR}px;height:${PAIR_AVATAR}px;border-radius:50%;background-color:${options.meta(AVATAR.src).color}">
+    <img alt="Pines" width="${PAIR_AVATAR}" height="${PAIR_AVATAR}" data-le-sizes="${PAIR_AVATAR}px"
          src="${INERT}" data-le-srcset="${attr(avatar.srcset ?? avatar.src)}">
   </span>
   <figcaption>Fade, 1× and 2×</figcaption>
@@ -211,7 +214,7 @@ const select = (label: string, attribute: string, options: string[][], selected:
  * would also control the LCP route), so its bar has no network select.
  */
 export function navMarkup(base: string, live: boolean): string {
-  const net = live ? select('Network', 'data-net', NETWORKS, 'fast-4g') : '<span class="pick live-only">Network in the live demo</span>'
+  const net = live ? select('Network', 'data-net', NETWORKS, 'fast-4g') : '<a class="pick live-only" href="https://github.com/mikekuss/lazy-ease/tree/main/apps/demo">Network in the live demo</a>'
   return `<header class="site"><a class="brand" href="${base}">lazy-ease</a><nav class="links">${LINKS.map(([href, label]) => `<a href="${href}">${label}</a>`).join('')}</nav><div class="tools">${net}${select('Reveal', 'data-fade', FADES, String(DEMO_FADE))}<button type="button" class="replay" data-replay title="Replay the page" aria-label="Replay the page">↻</button></div></header>
 <script>${NAV_SCRIPT}</script>`
 }

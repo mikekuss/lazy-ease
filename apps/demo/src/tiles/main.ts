@@ -28,7 +28,7 @@ const loaderFor = (key: string): ImageLoader => {
 let run = 0
 
 // The reveal tiles' code lines name the page's speed.
-for (const code of document.querySelectorAll('.tile code')) code.textContent = code.textContent!.replace(/fadeDuration=\{\d+\}/, `fadeDuration={${fadeDuration()}}`)
+for (const code of document.querySelectorAll('.tile code')) code.innerHTML = code.innerHTML.replace(/\{(<wbr>)?\d+\}/, `{$1${fadeDuration()}}`)
 const plays = new Map<HTMLElement, () => void>()
 
 for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le], .intro .backdrop [data-le]')) {
@@ -68,6 +68,25 @@ for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le], .intr
   if (!box.closest('.intro')) box.addEventListener('click', play)
   plays.set(box, play)
   play()
+}
+
+// Copy buttons on the static code blocks (the React panels render their own).
+for (const code of document.querySelectorAll<HTMLElement>('.start pre, #template .usecase-props')) {
+  const wrap = document.createElement('div')
+  wrap.className = 'copyable'
+  code.replaceWith(wrap)
+  wrap.append(code)
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = code.matches('pre') ? 'copy' : 'copy light'
+  button.textContent = 'Copy'
+  button.addEventListener('click', () => {
+    void navigator.clipboard?.writeText(code.textContent ?? '').then(() => {
+      button.textContent = 'Copied'
+      setTimeout(() => (button.textContent = 'Copy'), 1500)
+    })
+  })
+  wrap.append(button)
 }
 
 // A panel's Replay plays all its tiles again.

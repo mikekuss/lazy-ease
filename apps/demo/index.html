@@ -25,49 +25,11 @@
       <div><b>Placeholders in the HTML</b><span>ThumbHash, color or your own.</span></div>
     </div>
 
-    <section class="start" aria-label="Quick start">
-      <div>
-        <h2>React</h2>
-        <pre><code>npm i @lazy-ease/react @lazy-ease/core thumbhash
-
-import * as thumbhash from 'thumbhash'
-import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
-import { Image, LazyEaseProvider } from '@lazy-ease/react'
-
-const decoder = thumbhashDecoder(thumbhash)
-
-export function App() {
-  return (
-    &lt;LazyEaseProvider thumbhash={decoder}&gt;
-      &lt;Image src="/photos/lake.jpg" alt="Lake at dawn"
-        width={320} height={240} srcWidth={2400} srcHeight={1800}
-        placeholder="thumbhash:IqYJLYhclndfmHd7d4iIdY8wygik" /&gt;
-    &lt;/LazyEaseProvider&gt;
-  )
-}</code></pre>
-      </div>
-      <div>
-        <h2>HTML and a script</h2>
-        <pre><code>npm i @lazy-ease/vanilla
-&lt;!-- copy lazy-ease.css and lazy-ease.min.js from its dist/ to /assets --&gt;
-
-&lt;link rel="stylesheet" href="/assets/lazy-ease.css"&gt;
-&lt;script defer src="/assets/lazy-ease.min.js"&gt;&lt;/script&gt;
-
-&lt;section data-le-auto&gt;
-  &lt;span data-le style="aspect-ratio:4/3;background-color:#5b6c8f"&gt;
-    &lt;img alt="Lake at dawn" width="400" height="300"
-      src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
-      data-le-url="/_img/photos/lake.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=640"&gt;
-  &lt;/span&gt;
-&lt;/section&gt;</code></pre>
-        <p class="start-note">Both read <code>/photos/lake.jpg</code> from the image server at <code>/_img</code> (<code>@lazy-ease/server</code>).</p>
-      </div>
-    </section>
 
     <div class="layout">
       <nav class="side" aria-label="Use cases">
         <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a></div>
+        <div><h2>Get started</h2><a href="#start">Quick start</a></div>
         <div><h2>Behaviour</h2><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a></div>
         <div><h2>Layout</h2><a href="#hero">Hero</a><a href="#layout">Layout modes</a></div>
         <div><h2>Integration</h2><a href="#template">Without React</a></div>
@@ -75,7 +37,7 @@ export function App() {
 
       <main>
         <nav class="chips" aria-label="Use cases">
-          <a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a><a href="#hero">Hero</a><a href="#layout">Layout modes</a><a href="#template">Without React</a>
+          <a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a><a href="#start">Quick start</a><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a><a href="#hero">Hero</a><a href="#layout">Layout modes</a><a href="#template">Without React</a>
         </nav>
 
         <h2 class="group">Placeholders</h2>
@@ -101,6 +63,50 @@ export function App() {
           <div class="usecase-stage"><div class="tiles"><!--le:tiles:reveals--></div></div>
         </section>
 
+        <h2 class="group">Get started</h2>
+        <section class="usecase" id="start">
+          <header>
+            <div><h3>Quick start</h3><p>Both read <code>/photos/lake.jpg</code> from the image server at <code>/_img</code> (<code>@lazy-ease/server</code>).</p></div>
+          </header>
+          <div class="usecase-stage start">
+            <div>
+              <h4>React</h4>
+              <p class="install-line"><code>npm i @lazy-ease/react @lazy-ease/core thumbhash</code></p>
+              <pre><code>import * as thumbhash from 'thumbhash'
+import { detectAvif } from '@lazy-ease/core'
+import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
+import { Image, LazyEaseProvider } from '@lazy-ease/react'
+
+const decoder = thumbhashDecoder(thumbhash)
+
+export default function App() {
+  return (
+    &lt;LazyEaseProvider thumbhash={decoder} detectFormat={detectAvif}&gt;
+      &lt;Image src="/photos/lake.jpg" alt="Lake at dawn"
+        width={320} height={240} srcWidth={2400} srcHeight={1800}
+        placeholder="thumbhash:IqYJLYhclndfmHd7d4iIdY8wygik" /&gt;
+    &lt;/LazyEaseProvider&gt;
+  )
+}</code></pre>
+            </div>
+            <div>
+              <h4>HTML and a script</h4>
+              <p class="install-line"><code>npm i @lazy-ease/vanilla</code>, then copy <code>lazy-ease.css</code> and <code>lazy-ease.min.js</code> from its <code>dist/</code> to <code>/assets</code>.</p>
+              <pre><code>&lt;link rel="stylesheet" href="/assets/lazy-ease.css"&gt;
+&lt;script defer src="/assets/lazy-ease.min.js"&gt;&lt;/script&gt;
+
+&lt;section data-le-auto&gt;
+  &lt;span data-le style="display:block;max-width:640px;aspect-ratio:4/3;background-color:#5b6c8f"&gt;
+    &lt;img alt="Lake at dawn" width="640" height="480"
+      style="display:block;width:100%;height:100%;object-fit:cover"
+      src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+      data-le-url="/_img/photos/lake.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=640"&gt;
+  &lt;/span&gt;
+&lt;/section&gt;</code></pre>
+            </div>
+          </div>
+        </section>
+
         <div id="cases-root"></div>
 
         <h2 class="group">Integration</h2>
@@ -124,9 +130,21 @@ export function App() {
             </section>
             <div id="more-root"></div>
           </div>
-          <code class="usecase-props">&lt;img data-le alt="Night sky over hills" srcset="/_img/northern-night.jpg?fmt=webp&amp;q=75&amp;w=640 640w, …" sizes="(min-width:720px) 720px, 100vw" loading="lazy"&gt;
-&lt;span data-le style="background-color:#084898"&gt;&lt;img alt="Glacier at noon" src="data:image/gif;base64,…" data-le-url="/_img/glacier-noon.jpg?fmt=webp&amp;q=75&amp;w=1080"&gt;&lt;/span&gt;
-banner.style.setProperty('--banner', imageSet({ src: '/starfield.jpg', width: 720, aspectRatio: 2, srcWidth: 3360, loader }))</code>
+          <code class="usecase-props">&lt;img data-le alt="Night sky over hills" loading="lazy"
+  srcset="/_img/northern-night.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=640 640w, …"
+  sizes="(min-width:720px) 720px, 100vw"&gt;
+
+&lt;span data-le style="display:block;aspect-ratio:3/2;background-color:#084898"&gt;
+  &lt;img alt="Glacier at noon" src="data:image/gif;base64,…"
+    data-le-url="/_img/glacier-noon.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=1080"&gt;
+&lt;/span&gt;
+
+import { createLoader, imageSet, whenVisible } from '@lazy-ease/core'
+
+const loader = createLoader({ baseUrl: '/_img' })
+banner.style.setProperty('--banner', imageSet({ src: '/starfield.jpg', width: 720, aspectRatio: 2, srcWidth: 3360, loader }))
+whenVisible(banner, {}, () =&gt; banner.setAttribute('data-le-visible', ''))
+/* CSS */ [data-le-visible] { background-image: var(--banner) }</code>
         </section>
       </main>
     </div>

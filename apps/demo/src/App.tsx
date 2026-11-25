@@ -75,7 +75,7 @@ export function HeroPanel() {
           <input type="range" min={HERO_MIN_WIDTH} max={HERO_MAX_WIDTH} step={10} value={heroWidth} onChange={(e) => setHeroWidth(Number(e.target.value))} />
         </label>
       }
-      props={'<span data-le style="background-color:#286898">\n  <picture>\n    <source media="(min-width:800px)" data-le-srcset="/_img/desert-dusk.jpg?ar=2&fx=65&fy=40&… 750w, …" data-le-sizes="100vw">\n    <img alt="Mountains at dawn" data-le-srcset="/_img/alpine-dawn.jpg?ar=1&fx=30&fy=45&… 750w, …" data-le-sizes="100vw">\n  </picture>\n</span>'}
+      props={'<style>\n  .hero { display:block; --le-ar:1; aspect-ratio:var(--le-ar) }\n  @media (min-width:800px) { .hero { --le-ar:2 } }\n</style>\n<span data-le class="hero" style="background-color:#286898">\n  <picture>\n    <source media="(min-width:800px)" data-le-srcset="/_img/desert-dusk.jpg?ar=2&fx=65&fy=40&… 750w, …" data-le-sizes="100vw">\n    <img alt="Mountains at dawn" data-le-srcset="/_img/alpine-dawn.jpg?ar=1&fx=30&fy=45&… 750w, …" data-le-sizes="100vw">\n  </picture>\n</span>'}
     >
       {(replay) => <HeroFrame width={heroWidth} route="fade" run={replay} details={false} />}
     </UseCase>
@@ -163,9 +163,10 @@ export function App({ part }: { part: 'main' | 'more' }) {
   const layoutProps = {
     fixed: `<Image src="/misty-pines.jpg" alt="Pines" width={56} height={56} srcWidth={1600} srcHeight={2400} focalPoint={{ x: 40, y: 30 }}${density ? ` sizes="${sizesFor(AVATAR.size)}"` : ''} />`,
     ratio: `<Image src="/blue-ridge.jpg" alt="Ridge" aspectRatio={4 / 3} sizes="100vw" srcWidth={3000} srcHeight={2000}
+  wrapperClassName="ridge"
   sources={[{ media: '(min-width:800px)', src: '/blue-ridge.jpg', srcWidth: 3000, srcHeight: 2000, aspectRatio: 2, sizes: '50vw' }]} />
 /* CSS: the box's ratio from 800 px */
-@media (min-width:800px) { [data-le] { --le-ar: 2 } }`,
+@media (min-width:800px) { .ridge { --le-ar: 2 } }`,
     fill: `<div style={{ position: 'relative', aspectRatio: 1 }}>
   <Image src="/ember-canyon.jpg" alt="" fill srcWidth={1600} srcHeight={2400} />
 </div>`,
@@ -174,7 +175,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
   const layoutNote = {
     fixed: '1× and 2× candidates for a fixed box. A 40 px original gets one URL.',
     ratio: 'One source, 4:3 below 800 px and 2:1 above.',
-    fill: 'Cells crop one ladder in the browser. Hidden cells load nothing.',
+    fill: 'Each cell fills its square; the browser crops the image. Hidden cells load nothing.',
     article: 'Native, with the ratio from the source size. Without it: one URL.',
   }[layout]
 
@@ -264,6 +265,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
                   alt="Ridge"
                   aspectRatio={4 / 3}
                   sizes="100vw"
+                  wrapperClassName="ridge"
                   sources={[{ media: '(min-width:800px)', src: SPLIT.src, srcWidth: SPLIT.width, srcHeight: SPLIT.height, aspectRatio: 2, sizes: '50vw', version: source(SPLIT).version }]}
                   label="4:3 or 2:1"
                 />

@@ -273,7 +273,7 @@ html {
   }
 
   /* The box's ratio is CSS: 2:1 where the 2:1 source applies. */
-  .split [data-le] {
+  .ridge {
     --le-ar: 2;
   }
 }

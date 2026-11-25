@@ -2,7 +2,8 @@
 .single h1 { margin:0; font-size:32px; letter-spacing:-.02em }
 .single .lead { margin:6px 0 28px }
 .hero-area { position:relative; max-width:1600px }
-.pair { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:20px; align-items:start }
+.pair { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr) auto; gap:20px; align-items:start }
+@media (max-width:640px) { .pair { grid-template-columns:minmax(0, 1fr) } }
 .pair-item { margin:0 }
 .pair-item [data-le], .pair-item > img { border-radius:var(--radius); overflow:hidden; cursor:pointer }
 .pair-item figcaption { margin-top:8px; font-size:14px; font-weight:600 }

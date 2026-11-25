@@ -106,6 +106,9 @@ const css = (style: StyleRecord) =>
     .map(([key, value]) => `${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${value}`)
     .join(';')
 
+/** Lets narrow tiles wrap code between tokens (after = { ( , and spaces), never inside one. */
+const breakable = (html: string) => html.replace(/([={(,]|&lt;\/?|\s)/g, (token) => (token.startsWith('&lt;') ? `<wbr>${token}` : `${token}<wbr>`))
+
 /** One group of tiles: each box with its placeholder inline and the data the page script attaches with. */
 export function tilesMarkup(name: string, meta: (src: string) => TileMeta, native: (src: string) => { src: string; srcset?: string }): string {
   const tiles = TILES[name]
@@ -132,7 +135,7 @@ export function tilesMarkup(name: string, meta: (src: string) => TileMeta, nativ
       const swatch = `<span class="swatch" aria-hidden="true" title="The placeholder" style="${escape(style)}"></span>`
       return `<figure class="tile${tile.transparent ? ' checker' : ''}">
   <span class="well"><span data-le ${data.join(' ')} style="${escape(style)}" title="Click to replay">${img}</span></span>
-  <figcaption>${swatch}<span class="text"><b>${tile.title}</b><code>${escape(tile.code(m))}</code></span></figcaption>
+  <figcaption>${swatch}<span class="text"><b>${tile.title}</b><code>${breakable(escape(tile.code(m)))}</code></span></figcaption>
 </figure>`
     })
     .join('\n')
