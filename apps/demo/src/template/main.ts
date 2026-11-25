@@ -85,6 +85,12 @@ const start = async () => {
   }
 }
 
+// The section's Replay: every template image again, and the other sources (React) with them.
+document.querySelector('[data-replay-template]')?.addEventListener('click', () => {
+  for (const element of templates.keys()) element.dispatchEvent(new MouseEvent('click'))
+  dispatchEvent(new Event('le-replay-sources'))
+})
+
 if (late) setTimeout(start, late)
 else void start()
 

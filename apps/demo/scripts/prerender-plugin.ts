@@ -6,7 +6,7 @@ import { computeMetadata } from '@lazy-ease/server'
 import type { Plugin } from 'vite'
 import { ARTICLE, AVATAR, CARD, HERO } from '../src/catalog.js'
 import { BACKDROP_SOURCE, backdropMarkup, TILE_SOURCES, tilesMarkup } from '../src/tiles/kinds.js'
-import { heroMarkup, navMarkup, pairMarkup, type PrerenderOptions, type SourceMeta } from '../src/prerender.js'
+import { heroMarkup, LINKS, nativeSet, navMarkup, pairMarkup, type PrerenderOptions, type SourceMeta } from '../src/prerender.js'
 import { createStaticLoader } from '../src/staticLoader.js'
 import { ensureDemoImages } from './generate-images.js'
 
@@ -64,6 +64,7 @@ export function prerender(): Plugin {
           .replace('<!--le:site-->', () => `<style>
 ${site}</style>`)
           .replace('<!--le:nav-->', () => navMarkup(base, staticBase === undefined))
+          .replace('<!--le:links-->', () => LINKS.map(([href, label]) => `<a href="${href}">${label}</a>`).join(''))
         if (!/<!--le:(hero|pair|tiles|backdrop)/.test(html)) return html
         const options = prerenderOptions(await (meta ??= prerenderMetadata()), staticBase)
         return html
@@ -71,7 +72,7 @@ ${site}</style>`)
           .replace('<!--le:hero-fade-->', () => heroMarkup('fade', options))
           .replace('<!--le:pair-->', () => pairMarkup(options))
           .replace('<!--le:backdrop-->', () => backdropMarkup(options.meta))
-          .replace(/<!--le:tiles:([\w-]+)-->/g, (_, name: string) => tilesMarkup(name, options.meta))
+          .replace(/<!--le:tiles:([\w-]+)-->/g, (_, name: string) => tilesMarkup(name, options.meta, (src) => nativeSet(options, src)))
       },
     },
   }

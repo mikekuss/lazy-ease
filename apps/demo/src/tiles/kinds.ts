@@ -26,6 +26,8 @@ export interface Tile {
   /** A placeholder the controller paints on activation (the ThumbHash image after an SSR color). */
   placeholder?: (meta: TileMeta) => string
   reveal?: 'focus'
+  /** Native sources in the HTML, high priority, no fade. */
+  priority?: boolean
   /** The placeholder stands for a transparent image, so it fades out with the fade. */
   transparent?: boolean
 }
@@ -75,6 +77,12 @@ export const TILES: Record<string, Tile[]> = {
     COLOR,
     URI,
     { title: 'Transparent, alpha kept', source: TRANSPARENT, style: svg, code: () => 'placeholder="thumbhash:…"', transparent: true },
+    // No placeholder: the fade alone.
+    { title: 'None', source: NIGHT, style: () => ({}), code: () => 'placeholder="none"' },
+  ],
+  // What React writes into the server HTML before hydration.
+  ssr: [
+    { title: 'SSR image', source: NIGHT, style: svg, code: () => 'thumbhashSsr="image"' },
     // Color in the server HTML, the ThumbHash image once the script runs.
     { title: 'SSR color', source: NIGHT, style: color, placeholder: (m) => `thumbhash:${m.thumbhash}`, code: () => 'thumbhashSsr="color"' },
   ],
@@ -82,6 +90,8 @@ export const TILES: Record<string, Tile[]> = {
   reveals: [
     { title: 'Crossfade', source: CANYON, style: svg, code: () => 'fadeDuration={…}' },
     { ...FOCUS, source: CANYON, code: () => 'reveal={focusReveal} fadeDuration={…}' },
+    // For the image that is the LCP: the browser's own loading, no fade.
+    { title: 'Priority', source: CANYON, style: svg, code: () => 'priority', priority: true },
   ],
 }
 
@@ -96,7 +106,7 @@ const css = (style: StyleRecord) =>
     .join(';')
 
 /** One group of tiles: each box with its placeholder inline and the data the page script attaches with. */
-export function tilesMarkup(name: string, meta: (src: string) => TileMeta): string {
+export function tilesMarkup(name: string, meta: (src: string) => TileMeta, native: (src: string) => { src: string; srcset?: string }): string {
   const tiles = TILES[name]
   if (!tiles) throw new Error(`No tile group ${name}`)
   return tiles
@@ -108,13 +118,19 @@ export function tilesMarkup(name: string, meta: (src: string) => TileMeta): stri
         tile.placeholder ? `data-placeholder="${escape(tile.placeholder(m))}"` : '',
         tile.reveal ? `data-reveal="${tile.reveal}"` : '',
         tile.transparent ? 'data-transparent' : '',
+        tile.priority ? 'data-priority' : '',
       ].filter(Boolean)
+      // A priority tile has its sources in the HTML, as for the LCP image.
+      const set = tile.priority ? native(src) : undefined
+      const img = set
+        ? `<img alt="" width="${width}" height="${height}" src="${escape(set.src)}" srcset="${escape(set.srcset ?? set.src)}" sizes="(min-width: 900px) 33vw, 100vw" fetchpriority="high" decoding="async">`
+        : ''
       // Every tile is 3:2 (the well); the image fills it, cropped in the browser.
       const style = css(tile.style(m) ?? {})
       // The placeholder once more, small and for good, so it can be compared with the image after the reveal.
       const swatch = `<span class="swatch" aria-hidden="true" title="The placeholder" style="${escape(style)}"></span>`
       return `<figure class="tile${tile.transparent ? ' checker' : ''}">
-  <span class="well"><span data-le ${data.join(' ')} style="${escape(style)}" title="Click to replay"></span></span>
+  <span class="well"><span data-le ${data.join(' ')} style="${escape(style)}" title="Click to replay">${img}</span></span>
   <figcaption>${swatch}<span class="text"><b>${tile.title}</b><code>${escape(tile.code(m))}</code></span></figcaption>
 </figure>`
     })

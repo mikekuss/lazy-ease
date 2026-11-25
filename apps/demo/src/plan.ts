@@ -1,5 +1,5 @@
 import { DEFAULT_WIDTHS, fullLadder, normalizeFocalPoint, snapRatio, type FocalPoint } from '@lazy-ease/core'
-import { AVATAR, BANNER, CARD, CELLS, GROW, HERO, PRIVATE, SPLIT, ARTICLE, TINY, TRANSPARENT, type CatalogSource } from './catalog'
+import { AVATAR, BANNER, CARD, CELLS, GROW, HERO, SPLIT, ARTICLE, TINY, TRANSPARENT, type CatalogSource } from './catalog'
 
 /**
  * Which source and crop each demo section uses. The pages render from these,
@@ -24,7 +24,7 @@ export const SINGLE = { src: CELLS[0]!.src, width: 320, height: 480 }
 /** Width of the banner slot, for its image-set(). */
 export const BANNER_WIDTH = 720
 
-export const GALLERY_SIZE = { live: 12, static: 12 }
+export const GALLERY_SIZE = { live: 9, static: 9 }
 
 export const galleryRatio = (i: number, imageCount: number) =>
   RATIOS[(i * 2 + Math.floor(i / imageCount)) % RATIOS.length]!
@@ -35,9 +35,6 @@ export interface StaticVariantSet {
   focalPoint?: FocalPoint
   widths: number[]
 }
-
-/** The shadow panel's own width ladder (docs/image-recipes.md), off the default one at 512 and 1024. */
-export const SHADOW_WIDTHS = [128, 256, 512, 1024]
 
 /** Source, ratio, focus and widths beyond the default ladder. */
 type Use = [CatalogSource, number?, FocalPoint?, number[]?]
@@ -69,7 +66,6 @@ export function staticVariantSets(gallery: CatalogSource[]): StaticVariantSet[] 
     // The start and placeholders pages' tiles: uncropped, as CELLS and CARD above.
     [TRANSPARENT],
     // The shadow panel's square (public on the static host).
-    [PRIVATE, 1, undefined, SHADOW_WIDTHS],
   ]
   for (let i = 0; i < GALLERY_SIZE.static && gallery.length > 0; i++) {
     uses.push([gallery[i % gallery.length]!, galleryRatio(i, gallery.length)[1]])

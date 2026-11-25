@@ -34,11 +34,22 @@ const plays = new Map<HTMLElement, () => void>()
 for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le], .intro .backdrop [data-le]')) {
   // The box as the HTML wrote it, placeholder included; the reveal removes the placeholder.
   const initial = box.getAttribute('style') ?? ''
+  // A priority tile's native img from the HTML; a replay writes it again with new URLs.
+  const native = box.innerHTML
   const { src, width, height, placeholder, reveal } = box.dataset
   let attachment: Attachment | undefined
+  let played = false
   const play = () => {
     attachment?.destroy()
     box.setAttribute('style', initial)
+    if (box.hasAttribute('data-priority')) {
+      // The first play adopts the HTML as it is; a replay gives every URL a new run.
+      const key = `${pageRun()}-tile-${run++}`
+      box.innerHTML = played ? native.replace(/\/_img\/[^"\s,]+/g, (url) => `${url}${url.includes('?') ? '&amp;' : '?'}run=${key}`) : native
+      played = true
+      attachment = le.attach(box.querySelector('img')!, { priority: true, fill: true })
+      return
+    }
     box.innerHTML = `<img alt="" src="${INERT}">`
     attachment = le.attach(box.querySelector('img')!, {
       loader: loaderFor(`tile-${run++}`),

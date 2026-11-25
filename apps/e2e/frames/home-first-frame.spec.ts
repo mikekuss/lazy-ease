@@ -15,7 +15,7 @@ test('every placeholder tile shows its placeholder in the first HTML', async ({ 
   // Load, so the render-blocking stylesheets apply as they do before the first paint.
   await page.goto('/', { waitUntil: 'load' })
   const boxes = page.locator('.tile [data-le]')
-  await expect(boxes).toHaveCount(8)
+  await expect(boxes).toHaveCount(11)
   const tiles = await boxes.evaluateAll((all) =>
     all.map((box) => {
       const style = getComputedStyle(box)
@@ -25,10 +25,12 @@ test('every placeholder tile shows its placeholder in the first HTML', async ({ 
   )
   for (const tile of tiles) {
     expect(tile.height, `${tile.title} reserves its height`).toBeGreaterThan(50)
+    // "None" shows placeholder="none": no placeholder, on purpose.
+    if (tile.title === 'None') continue
     expect(tile.image !== 'none' || tile.color !== EMPTY, `${tile.title} paints a placeholder, not an empty box`).toBe(true)
   }
-  // Only the SSR color tile starts as a plain color; every other tile paints an image.
-  for (const tile of tiles.filter((tile) => tile.title !== 'Color' && tile.title !== 'SSR color')) {
+  // The color tiles start as a plain color; every other tile with a placeholder paints an image.
+  for (const tile of tiles.filter((tile) => !['Color', 'SSR color', 'None'].includes(tile.title!))) {
     expect(tile.image, tile.title!).toMatch(/^url\("data:image\//)
   }
 })

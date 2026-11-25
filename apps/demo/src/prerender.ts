@@ -49,6 +49,11 @@ function ladder({ loader, meta, versions }: PrerenderOptions, src: string, crop?
   })
 }
 
+/** The uncropped list of one source, as a template writes it into a native img. */
+export function nativeSet(options: PrerenderOptions, src: string): CandidateSet {
+  return ladder(options, src)
+}
+
 /** Both hero candidate lists, as the LCP and the fade route emit them. */
 export function heroSets(options: PrerenderOptions): { mobile: CandidateSet; desktop: CandidateSet } {
   return {
@@ -135,6 +140,13 @@ export function pairMarkup(options: PrerenderOptions): string {
 </figure>`
 }
 
+/** Where the library lives. */
+export const LINKS = [
+  ['https://github.com/mikekuss/lazy-ease#readme', 'Docs'],
+  ['https://github.com/mikekuss/lazy-ease', 'GitHub'],
+  ['https://www.npmjs.com/package/@lazy-ease/react', 'npm'],
+]
+
 const NETWORKS = [
   ['off', 'Real speed'],
   ['fast-4g', 'Fast 4G'],
@@ -200,6 +212,6 @@ const select = (label: string, attribute: string, options: string[][], selected:
  */
 export function navMarkup(base: string, live: boolean): string {
   const net = live ? select('Network', 'data-net', NETWORKS, 'fast-4g') : '<span class="pick live-only">Network in the live demo</span>'
-  return `<header class="site"><a class="brand" href="${base}">lazy-ease</a><div class="tools">${net}${select('Reveal', 'data-fade', FADES, String(DEMO_FADE))}<button type="button" class="replay" data-replay title="Replay the page" aria-label="Replay the page">↻</button></div></header>
+  return `<header class="site"><a class="brand" href="${base}">lazy-ease</a><nav class="links">${LINKS.map(([href, label]) => `<a href="${href}">${label}</a>`).join('')}</nav><div class="tools">${net}${select('Reveal', 'data-fade', FADES, String(DEMO_FADE))}<button type="button" class="replay" data-replay title="Replay the page" aria-label="Replay the page">↻</button></div></header>
 <script>${NAV_SCRIPT}</script>`
 }

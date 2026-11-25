@@ -10,7 +10,6 @@ import { CARD_SIZE, EXTERNAL_FILE, GALLERY_SIZE, galleryRatio, SINGLE } from './
 import { ErrorFallback } from './recipes/ErrorFallback'
 import { Banner } from './recipes/Banner'
 import { HERO_MAX_WIDTH, HERO_MIN_WIDTH, HeroFrame, heroStartWidth } from './recipes/HeroFrame'
-import { shadowLoader, ShadowPanel } from './recipes/ShadowPanel'
 import { Choice, UseCase } from './recipes/UseCase'
 import { createStaticLoader } from './staticLoader'
 
@@ -39,8 +38,6 @@ const PRELOADS = [['0', '0 px'], ['400', '400 px (default)']] as const
 type Preload = (typeof PRELOADS)[number][0]
 const LAYOUTS = [['fixed', 'Fixed size'], ['ratio', 'Breakpoint ratio'], ['fill', 'Fill'], ['article', 'Article']] as const
 type Layout = (typeof LAYOUTS)[number][0]
-const SOURCES = [['background', 'CSS background'], ['originals', 'SVG, GIF, external'], ['shadow', 'Shadow DOM']] as const
-type Source = (typeof SOURCES)[number][0]
 
 /**
  * A loader for one replay of one use case. The live server throttles by the
@@ -65,28 +62,22 @@ function Provider({ loader, children }: { loader: ImageLoader; children: ReactNo
 /** The hero use case: the fade or LCP route in a frame of adjustable width. */
 export function HeroPanel() {
   const [heroWidth, setHeroWidth] = useState(heroStartWidth)
-  const [heroRoute, setHeroRoute] = useState<'lcp' | 'fade'>('fade')
   return (
     <UseCase
       id="hero"
       title="Hero"
-      note="Art direction: another crop and focus from 800 px. Never painted in steps."
-      // The LCP route's sources are in its HTML: loading it again only hits the cache.
-      replayable={heroRoute === 'fade'}
+      note="Another crop and focus from 800 px. One fade, never painted in steps."
       controls={
-        <>
-          <Choice label="Route" value={heroRoute} options={[['fade', 'Fade'], ['lcp', 'LCP']]} onChange={setHeroRoute} />
-          <label className="field range">
-            <span>
-              Viewport <output>{heroWidth} px</output>
-            </span>
-            <input type="range" min={HERO_MIN_WIDTH} max={HERO_MAX_WIDTH} step={10} value={heroWidth} onChange={(e) => setHeroWidth(Number(e.target.value))} />
-          </label>
-        </>
+        <label className="field range">
+          <span>
+            Viewport <output>{heroWidth} px</output>
+          </span>
+          <input type="range" min={HERO_MIN_WIDTH} max={HERO_MAX_WIDTH} step={10} value={heroWidth} onChange={(e) => setHeroWidth(Number(e.target.value))} />
+        </label>
       }
-      props={heroRoute === 'lcp' ? '<img srcset sizes fetchpriority="high">  in the first HTML' : '<span data-le> <img data-le-srcset data-le-sizes>'}
+      props="<picture> <source media srcset> <img srcset sizes>  with the placeholder in the HTML"
     >
-      {(replay) => <HeroFrame width={heroWidth} route={heroRoute} run={replay} details={false} />}
+      {(replay) => <HeroFrame width={heroWidth} route="fade" run={replay} details={false} />}
     </UseCase>
   )
 }
@@ -100,7 +91,13 @@ export function App({ part }: { part: 'main' | 'more' }) {
   const [loading, setLoading] = useState<Loading>('lazy')
   const [preload, setPreload] = useState<Preload>('0')
   const [layout, setLayout] = useState<Layout>('fixed')
-  const [kind, setKind] = useState<Source>('background')
+  // The template section's Replay (static HTML) replays the other sources too.
+  const [sourcesReplay, setSourcesReplay] = useState(0)
+  useEffect(() => {
+    const replay = () => setSourcesReplay((value) => value + 1)
+    addEventListener('le-replay-sources', replay)
+    return () => removeEventListener('le-replay-sources', replay)
+  }, [])
 
   useEffect(() => {
     // On the first start the server is still generating the images, so retry.
@@ -129,10 +126,9 @@ export function App({ part }: { part: 'main' | 'more' }) {
     if (replay === 0) return loader
     const key = `${id}-${replay}`
     let own = loaders.get(key)
-    if (!own) loaders.set(key, (own = id === 'shadow' ? shadowLoader({ ...staticThrottle(), run: `${pageRun()}-${key}` }) : demoLoader(key)))
+    if (!own) loaders.set(key, (own = demoLoader(key)))
     return own
   }
-  const panelLoader = useMemo(() => shadowLoader({ ...staticThrottle(), run: `${pageRun()}-shadow` }), [])
   const run = pageRun()
 
   /** Originals load as they are; a replay changes only their query, which the hosts ignore. */
@@ -177,17 +173,6 @@ export function App({ part }: { part: 'main' | 'more' }) {
     article: 'Native, with the ratio from the source size. Without it: one URL.',
   }[layout]
 
-  const sourcesProps = {
-    background: '--banner: imageSet({ src, width: 720, aspectRatio: 2, loader })',
-    originals: '<Image src="logo.svg" width={120} height={40} />',
-    shadow: 'createLazyEase({ loader, root: panel }).attach(img, { src, token })',
-  }[kind]
-  const sourcesNote = {
-    background: 'A CSS background with image-set(), set once it is visible.',
-    originals: 'SVG, an animated GIF and an external photo load as they are.',
-    shadow: 'A widget with its own shadow DOM, CSS and controller; the panel scrolls.',
-  }[kind]
-
   const main = (
     <>
       <h2 className="group">Behaviour</h2>
@@ -207,7 +192,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
       >
         {(replay) => (
           <div style={{ width: growWidth, maxWidth: '100%' }}>
-            <DemoImage {...source(GROW)} loader={loaderOf('resize', replay)} alt="Peaks" aspectRatio={1} label="measured" />
+            <DemoImage {...source(GROW)} loader={loaderOf('resize', replay)} alt="Peaks" aspectRatio={1} />
           </div>
         )}
       </UseCase>
@@ -236,7 +221,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
         {(replay) => (
           <div className="gallery" key={`${loading}-${preload}`}>
             {Array.from({ length: GALLERY }, (_, i) => {
-              const [label, ratio] = galleryRatio(i, gallery.length)
+              const [, ratio] = galleryRatio(i, gallery.length)
               return (
                 <DemoImage
                   key={i}
@@ -247,7 +232,6 @@ export function App({ part }: { part: 'main' | 'more' }) {
                   loading={loading}
                   rootMargin={`${preload}px`}
                   {...(loading === 'native' ? { sizes: '(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw' } : {})}
-                  label={label}
                 />
               )
             })}
@@ -301,31 +285,28 @@ export function App({ part }: { part: 'main' | 'more' }) {
     </>
   )
 
+  const replay = sourcesReplay
   const more = (
-    <UseCase id="sources" title="Other sources" note={sourcesNote} controls={<Choice label="Source" value={kind} options={SOURCES} onChange={setKind} />} props={sourcesProps}>
-      {(replay) => (
-        <div key={kind}>
-          {kind === 'background' && <Banner loader={loaderOf('background', replay)} />}
-          {kind === 'originals' && (
-            <div className="row">
-              <DemoImage src={`${BASE}_img${LOGO}${runQuery(replay)}`} alt="Club" width={120} height={40} label="SVG" />
-              <DemoImage src={`${BASE}_img${WAVE}${runQuery(replay)}`} alt="Waving hand" width={64} height={64} label="GIF" />
-              {external && (
-                <DemoImage
-                  src={new URL(`${BASE}external/${EXTERNAL_FILE}${runQuery(replay)}`, location.href).href}
-                  alt="Mountains"
-                  width={320}
-                  height={Math.round((320 * external.height) / external.width)}
-                  placeholder={placeholderFor(external)}
-                  label="external"
-                />
-              )}
-            </div>
-          )}
-          {kind === 'shadow' && <ShadowPanel loader={replay ? loaderOf('shadow', replay) : panelLoader} />}
-        </div>
-      )}
-    </UseCase>
+    <div className="more-sources" key={replay}>
+      <div className="more-source">
+        <Banner loader={loaderOf('background', replay)} />
+        <p>CSS background: <code>imageSet()</code>, set once visible</p>
+      </div>
+      <div className="row">
+        <DemoImage src={`${BASE}_img${LOGO}${runQuery(replay)}`} alt="Club" width={120} height={40} label="SVG" />
+        <DemoImage src={`${BASE}_img${WAVE}${runQuery(replay)}`} alt="Waving hand" width={64} height={64} label="GIF" />
+        {external && (
+          <DemoImage
+            src={new URL(`${BASE}external/${EXTERNAL_FILE}${runQuery(replay)}`, location.href).href}
+            alt="Mountains"
+            width={240}
+            height={Math.round((240 * external.height) / external.width)}
+            placeholder={placeholderFor(external)}
+            label="External"
+          />
+        )}
+      </div>
+    </div>
   )
 
   return (

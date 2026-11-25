@@ -1,6 +1,7 @@
 /* The demo tiles of the start and placeholders pages (src/tiles/kinds.ts). */
 .tiles { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:32px 24px }
 .tiles.small { grid-template-columns:repeat(4, minmax(0, 1fr)) }
+.tiles.two { grid-template-columns:repeat(2, minmax(0, 1fr)) }
 .tile { margin:0 }
 .tile .well { position:relative; display:block; aspect-ratio:3 / 2; border-radius:14px; overflow:hidden; background:#e7e5e4 }
 .tile.checker .well { background:repeating-conic-gradient(#d6d3d1 0 25%, #fafaf9 0 50%) 0 0 / 20px 20px }
@@ -17,5 +18,12 @@
 .tile.checker .swatch { background-color:#fafaf9 }
 .tile b { display:block; font-size:16px }
 .tile code { display:block; margin-top:2px; font-size:12.5px; color:var(--muted); overflow-wrap:anywhere }
-@media (max-width:900px) { .tiles, .tiles.small { grid-template-columns:1fr 1fr } }
-@media (max-width:640px) { .tiles, .tiles.small { grid-template-columns:1fr } }
+@media (max-width:900px) { .tiles, .tiles.small, .tiles.two { grid-template-columns:1fr 1fr } }
+/* Two small columns on a phone, so the page stays short. */
+@media (max-width:640px) {
+  .tiles, .tiles.small, .tiles.two { grid-template-columns:1fr 1fr; gap:20px 12px }
+  .tile .swatch { width:32px; height:22px }
+  .tile figcaption { gap:8px }
+  .tile b { font-size:14px }
+  .tile code { font-size:11px }
+}

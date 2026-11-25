@@ -24,6 +24,9 @@ a { color:inherit }
 /* The sticky top bar: name, then network, reveal speed and Replay, all one height. */
 .site { position:sticky; top:0; z-index:20; display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; padding:10px 24px; background:var(--text); font-size:14px }
 .site .brand { color:#fff; font-weight:700; font-size:16px; letter-spacing:-.01em; text-decoration:none }
+.site .links { display:flex; gap:16px; margin-left:12px }
+.site .links a { color:#d1d5db; text-decoration:none }
+.site .links a:hover { color:#fff }
 .site .tools { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin-left:auto }
 .site .pick { display:flex; align-items:center; gap:6px; color:#9ca3af; font-size:13px }
 .site select, .site .replay { box-sizing:border-box; height:32px; border:1px solid #374151; border-radius:8px; background:#1f2937; color:#f9fafb; font-size:13px }
@@ -185,4 +188,19 @@ input[type=range] { width:120px }
   .intro-inner { padding:56px 16px 48px }
   .intro p { font-size:16px }
   .features { grid-template-columns:1fr; gap:16px; padding:24px 16px 0 }
+}
+
+/* Quick start under the feature row. */
+.start { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:24px; max-width:1360px; margin:0 auto; padding:32px 32px 0 }
+.start h2 { margin:0 0 8px; font-size:14px; color:var(--muted) }
+.start pre { margin:0; padding:16px 18px; overflow-x:auto; font:12.5px/1.6 var(--mono); color:#e5e7eb; background:var(--text); border-radius:12px }
+
+.foot { display:flex; flex-wrap:wrap; gap:8px 20px; max-width:1360px; margin:0 auto; padding:24px 32px 48px; color:var(--faint); font-size:13px; border-top:1px solid var(--line) }
+.foot a { color:var(--muted); text-decoration:none }
+.foot a:hover { color:var(--text) }
+
+@media (max-width:900px) {
+  .start { grid-template-columns:minmax(0, 1fr); padding:24px 16px 0 }
+  .foot { padding:24px 16px 40px }
+  .site .links { display:none }
 }

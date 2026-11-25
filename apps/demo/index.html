@@ -25,30 +25,61 @@
       <div><b>Placeholders in the HTML</b><span>ThumbHash, color or your own.</span></div>
     </div>
 
+    <section class="start" aria-label="Quick start">
+      <div>
+        <h2>React</h2>
+        <pre><code>npm i @lazy-ease/react
+
+&lt;LazyEaseProvider&gt;
+  &lt;Image src="/photos/lake.jpg" alt="Lake at dawn"
+    width={320} height={240} srcWidth={2400} srcHeight={1800}
+    placeholder="thumbhash:…" /&gt;
+&lt;/LazyEaseProvider&gt;</code></pre>
+      </div>
+      <div>
+        <h2>HTML and a script</h2>
+        <pre><code>npm i @lazy-ease/vanilla @lazy-ease/core
+
+&lt;script defer src="/assets/lazy-ease.min.js"&gt;&lt;/script&gt;
+&lt;section data-le-auto&gt;
+  &lt;span data-le style="aspect-ratio:4/3;background:#5b6c8f"&gt;
+    &lt;img alt="Lake at dawn" src="data:…" data-le-url="/_img/lake.jpg?w=640"&gt;
+  &lt;/span&gt;
+&lt;/section&gt;</code></pre>
+      </div>
+    </section>
+
     <div class="layout">
       <nav class="side" aria-label="Use cases">
-        <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#reveal">Reveal</a></div>
+        <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a></div>
         <div><h2>Behaviour</h2><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a></div>
         <div><h2>Layout</h2><a href="#hero">Hero</a><a href="#layout">Layout modes</a></div>
-        <div><h2>Integration</h2><a href="#template">Template HTML</a><a href="#sources">Other sources</a></div>
+        <div><h2>Integration</h2><a href="#template">Without React</a></div>
       </nav>
 
       <main>
         <nav class="chips" aria-label="Use cases">
-          <a href="#kinds">Kinds</a><a href="#reveal">Reveal</a><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a><a href="#hero">Hero</a><a href="#layout">Layout modes</a><a href="#template">Template HTML</a><a href="#sources">Other sources</a>
+          <a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a><a href="#hero">Hero</a><a href="#layout">Layout modes</a><a href="#template">Without React</a>
         </nav>
 
         <h2 class="group">Placeholders</h2>
         <section class="usecase" id="kinds">
           <header>
-            <div><h3>Kinds</h3><p>In the first HTML, from <code>computeMetadata()</code> on the server. With React SSR, <code>thumbhashSsr</code> picks the image or its color.</p></div>
+            <div><h3>Kinds</h3><p>Something to look at from the first frame: a few hundred bytes in the HTML, no extra request.</p></div>
             <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
           </header>
           <div class="usecase-stage"><div class="tiles"><!--le:tiles:kinds--></div></div>
         </section>
+        <section class="usecase" id="ssr">
+          <header>
+            <div><h3>Server rendering</h3><p>What React writes into the HTML: the image right away, or its color first.</p></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+          </header>
+          <div class="usecase-stage"><div class="tiles two"><!--le:tiles:ssr--></div></div>
+        </section>
         <section class="usecase" id="reveal">
           <header>
-            <div><h3>Reveal</h3><p>How the image takes over from the placeholder.</p></div>
+            <div><h3>Reveal</h3><p>How the image takes over from the placeholder, at the speed in the top bar.</p></div>
             <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
           </header>
           <div class="usecase-stage"><div class="tiles"><!--le:tiles:reveals--></div></div>
@@ -59,7 +90,8 @@
         <h2 class="group">Integration</h2>
         <section class="usecase" id="template">
           <header>
-            <div><h3>Template HTML</h3><p>A PHP or any server template and the vanilla script. The native image is the browser's own.</p></div>
+            <div><h3>Without React</h3><p>A server template and the vanilla script, a CSS background, SVG, GIF and an external photo.</p></div>
+            <button type="button" data-replay-template title="Load again with new URLs">↻ Replay</button>
           </header>
           <form class="usecase-bar" id="template-settings">
             <label class="field"><span>Start script</span>
@@ -74,13 +106,16 @@
             <section data-le-auto class="pair">
               <!--le:pair-->
             </section>
+            <div id="more-root"></div>
           </div>
-          <code class="usecase-props">&lt;img data-le srcset&gt;  ·  data-le-url  ·  data-le-srcset</code>
+          <code class="usecase-props">&lt;img data-le srcset&gt;  ·  data-le-url  ·  data-le-srcset  ·  imageSet()</code>
         </section>
-
-        <div id="more-root"></div>
       </main>
     </div>
+    <footer class="foot">
+      <span>lazy-ease · MIT</span>
+      <!--le:links-->
+    </footer>
     <script type="module" src="/src/tiles/main.ts"></script>
     <script type="module" src="/src/template/main.ts"></script>
     <script type="module" src="/src/main.tsx"></script>
