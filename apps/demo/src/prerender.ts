@@ -15,6 +15,7 @@ export interface SourceMeta {
   height: number
   color: string
   revision: string
+  thumbhash: string
 }
 
 export type Metadata = (src: string) => SourceMeta

@@ -29,12 +29,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      # The demo photos (scripts/generate-images.ts), so a deploy needs no download.
-      - uses: actions/cache@v4
+      # The demo photos (scripts/generate-images.ts), so a deploy needs no
+      # download. Saved only when every scene is a photo: a set with drawn
+      # stand-ins is never cached, so the next deploy downloads again.
+      - id: images
+        uses: actions/cache/restore@v4
         with:
           path: apps/demo/images
           key: demo-images-${{ hashFiles('apps/demo/scripts/generate-images.ts') }}
       - run: pnpm --filter demo build:static
+      - id: complete
+        run: echo "photos=$(node -e "const s=require('./apps/demo/images/.sources.json');console.log(Object.values(s).every((v)=>v.startsWith('photo:')))")" >> "$GITHUB_OUTPUT"
+      - if: steps.images.outputs.cache-hit != 'true' && steps.complete.outputs.photos == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: apps/demo/images
+          key: demo-images-${{ hashFiles('apps/demo/scripts/generate-images.ts') }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: apps/demo/dist

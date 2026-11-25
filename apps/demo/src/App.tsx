@@ -50,7 +50,7 @@ export function App() {
   const [growWidth, setGrowWidth] = useState(240)
   const [showHidden, setShowHidden] = useState(false)
   const [heroWidth, setHeroWidth] = useState(heroStartWidth)
-  const [heroRoute, setHeroRoute] = useState<'lcp' | 'fade'>('lcp')
+  const [heroRoute, setHeroRoute] = useState<'lcp' | 'fade'>('fade')
 
   useEffect(() => {
     // On the first start the server is still generating the images, so retry.
