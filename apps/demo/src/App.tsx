@@ -31,6 +31,19 @@ const IMAGE_LIST = STATIC ? `${BASE}api/images.json` : '/api/images'
 const GALLERY = STATIC ? GALLERY_SIZE.static : GALLERY_SIZE.live
 const DENSITIES = [0, 1, 2, 3].map((value) => [value, value ? `${value}×` : 'Device'] as const)
 
+/** The HTML flavor of two panels, for the vanilla script. */
+const RESIZE_HTML = `<script defer src="/assets/lazy-ease.min.js" data-base-url="/_img"></script>
+
+<span data-le style="display:block;aspect-ratio:1">
+  <img alt="Peaks" src="data:image/gif;base64,…"
+    data-le-src="/violet-peaks.jpg" data-le-srcw="2400" data-le-srch="2400">
+</span>`
+const ERRORS_HTML = `<span data-le style="display:block;width:240px;aspect-ratio:3/2">
+  <img alt="A photo that is not there" src="data:image/gif;base64,…"
+    data-le-src="/missing-photo.jpg" data-le-srcw="1600" data-le-srch="1067">
+</span>
+/* CSS */ [data-le][data-state="error"] { background: #f5f5f4 }`
+
 const LOADINGS = [['lazy', 'Lazy'], ['native', 'Native'], ['eager', 'Eager']] as const
 type Loading = (typeof LOADINGS)[number][0]
 /** Preload distances: 0 px in the demo, so each image visibly loads as it scrolls in; the library's 400 px is marked. */
@@ -172,6 +185,13 @@ export function App({ part }: { part: 'main' | 'more' }) {
 </div>`,
     article: `<Image src="/northern-night.jpg" alt="Night sky" loading="native" sizes="${ARTICLE_SIZES}" srcWidth={3000} srcHeight={2000} />`,
   }[layout]
+  const layoutHtml = {
+    fixed: '<span data-le style="display:block;width:56px;height:56px">\n  <img alt="Pines" width="56" height="56" src="data:image/gif;base64,…"\n    data-le-src="/misty-pines.jpg" data-le-srcw="1600" data-le-srch="2400"\n    data-le-ar="1" data-le-fx="40" data-le-fy="30">\n</span>',
+    // Art direction in HTML is prepared: the template writes each source's list.
+    ratio: undefined,
+    fill: '<div style="position:relative;aspect-ratio:1">\n  <span data-le>\n    <img alt="" src="data:image/gif;base64,…" data-le-fill\n      data-le-src="/ember-canyon.jpg" data-le-srcw="1600" data-le-srch="2400">\n  </span>\n</div>',
+    article: `<img data-le alt="Night sky" width="3000" height="2000" loading="lazy"\n  srcset="/_img/northern-night.jpg?fmt=webp&q=75&w=640 640w, …" sizes="${ARTICLE_SIZES}">`,
+  }[layout]
   const layoutNote = {
     fixed: '1× and 2× candidates for a fixed box. A 40 px original gets one URL.',
     ratio: 'One source, 4:3 below 800 px and 2:1 above.',
@@ -195,6 +215,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
           </label>
         }
         props={'<Image src="/violet-peaks.jpg" alt="Peaks" aspectRatio={1} srcWidth={2400} srcHeight={2400} />'}
+        html={RESIZE_HTML}
       >
         {(replay) => (
           <div style={{ width: growWidth, maxWidth: '100%' }}>
@@ -208,6 +229,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
         title="Error fallback"
         note="A source that fails: the box keeps its size, the placeholder goes. Click to try again."
         props={'<Image src="/missing-photo.jpg" alt="A photo that is not there" width={240} height={160} srcWidth={1600} srcHeight={1067} />'}
+        html={ERRORS_HTML}
       >
         {(replay) => <ErrorFallback loader={loaderOf('errors', replay)} />}
       </UseCase>
@@ -223,6 +245,11 @@ export function App({ part }: { part: 'main' | 'more' }) {
           </>
         }
         props={`<Image src={photo.src} alt="" aspectRatio={photo.ratio} srcWidth={photo.width} srcHeight={photo.height}${loading === 'lazy' ? ` rootMargin="${preload}px"` : ` loading="${loading}"`}${loading === 'native' ? ' sizes="(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw"' : ''} />`}
+        html={
+          loading === 'lazy'
+            ? `<script defer src="/assets/lazy-ease.min.js" data-base-url="/_img" data-root-margin="${preload}px"></script>\n\n<span data-le style="display:block;aspect-ratio:3/4">\n  <img alt="" src="data:image/gif;base64,…"\n    data-le-src="/photo.jpg" data-le-srcw="1600" data-le-srch="2400" data-le-ar="0.75">\n</span>`
+            : undefined
+        }
       >
         {(replay) => (
           <div className="gallery" key={`${loading}-${preload}`}>
@@ -247,7 +274,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
 
       <h2 className="group">Layout</h2>
       <HeroPanel />
-      <UseCase id="layout" title="Layout modes" note={layoutNote} controls={layoutControls} props={layoutProps}>
+      <UseCase id="layout" title="Layout modes" note={layoutNote} controls={layoutControls} props={layoutProps} html={layoutHtml}>
         {(replay) => (
           <div key={layout}>
             {layout === 'fixed' && (

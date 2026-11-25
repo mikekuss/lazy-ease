@@ -177,6 +177,15 @@ export const DEMO_FADE = 800
  */
 const NAV_SCRIPT = `(() => {
   const bar = document.querySelector('.site')
+  // React or HTML for every code example, remembered; set here, before the examples paint.
+  const root = document.documentElement
+  try { root.dataset.flavor = localStorage.getItem('le-flavor') === 'html' ? 'html' : 'react' } catch { root.dataset.flavor = 'react' }
+  document.addEventListener('click', (event) => {
+    const pick = event.target instanceof Element && event.target.closest('[data-flavor-pick]')
+    if (!pick) return
+    root.dataset.flavor = pick.getAttribute('data-flavor-pick')
+    try { localStorage.setItem('le-flavor', root.dataset.flavor) } catch {}
+  })
   // A reload or Replay starts at the top, so the images further down load as they scroll in, not all at once.
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
   const net = bar.querySelector('[data-net]')

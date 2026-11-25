@@ -28,7 +28,7 @@ const loaderFor = (key: string): ImageLoader => {
 let run = 0
 
 // The reveal tiles' code lines name the page's speed.
-for (const code of document.querySelectorAll('.tile code')) code.innerHTML = code.innerHTML.replace(/\{(<wbr>)?\d+\}/, `{$1${fadeDuration()}}`)
+for (const code of document.querySelectorAll('.tile code, #reveal .usecase-props')) code.textContent = code.textContent!.replace(/(fadeDuration[=:] ?\{?)\d+/g, `$1${fadeDuration()}`)
 const plays = new Map<HTMLElement, () => void>()
 
 for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le], .intro .backdrop [data-le]')) {
@@ -71,9 +71,10 @@ for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le], .intr
 }
 
 // Copy buttons on the static code blocks (the React panels render their own).
-for (const code of document.querySelectorAll<HTMLElement>('.start pre, #template .usecase-props')) {
+for (const code of document.querySelectorAll<HTMLElement>('.start pre, section.usecase > .usecase-props')) {
   const wrap = document.createElement('div')
   wrap.className = 'copyable'
+  for (const flavor of ['flavor-react', 'flavor-html']) if (code.classList.contains(flavor)) wrap.classList.add(flavor)
   code.replaceWith(wrap)
   wrap.append(code)
   const button = document.createElement('button')

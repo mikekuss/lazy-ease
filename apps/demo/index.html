@@ -26,53 +26,11 @@
     </div>
 
 
-    <div class="layout">
-      <nav class="side" aria-label="Use cases">
-        <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a></div>
-        <div><h2>Get started</h2><a href="#start">Quick start</a></div>
-        <div><h2>Behaviour</h2><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a></div>
-        <div><h2>Layout</h2><a href="#hero">Hero</a><a href="#layout">Layout modes</a></div>
-        <div><h2>Integration</h2><a href="#template">Without React</a></div>
-      </nav>
-
-      <main>
-        <nav class="chips" aria-label="Use cases">
-          <a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a><a href="#start">Quick start</a><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a><a href="#hero">Hero</a><a href="#layout">Layout modes</a><a href="#template">Without React</a>
-        </nav>
-
-        <h2 class="group">Placeholders</h2>
-        <section class="usecase" id="kinds">
-          <header>
-            <div><h3>Kinds</h3><p>Something to look at from the first frame: a few hundred bytes in the HTML, no extra request.</p></div>
-            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
-          </header>
-          <div class="usecase-stage"><div class="tiles"><!--le:tiles:kinds--></div></div>
-        </section>
-        <section class="usecase" id="ssr">
-          <header>
-            <div><h3>Server rendering</h3><p>What React writes into the HTML: the image right away, or its color first.</p></div>
-            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
-          </header>
-          <div class="usecase-stage"><div class="tiles two"><!--le:tiles:ssr--></div></div>
-        </section>
-        <section class="usecase" id="reveal">
-          <header>
-            <div><h3>Reveal</h3><p>How the image takes over from the placeholder, at the speed in the top bar.</p></div>
-            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
-          </header>
-          <div class="usecase-stage"><div class="tiles"><!--le:tiles:reveals--></div></div>
-        </section>
-
-        <h2 class="group">Get started</h2>
-        <section class="usecase" id="start">
-          <header>
-            <div><h3>Quick start</h3><p>Both read <code>/photos/lake.jpg</code> from the image server at <code>/_img</code> (<code>@lazy-ease/server</code>).</p></div>
-          </header>
-          <div class="usecase-stage start">
-            <div>
-              <h4>React</h4>
-              <p class="install-line"><code>npm i @lazy-ease/react @lazy-ease/core thumbhash</code></p>
-              <pre><code>import * as thumbhash from 'thumbhash'
+    <section class="start" id="start" aria-label="Quick start">
+      <div class="start-head"><h2>Quick start</h2><div class="flavors" role="group" aria-label="Code"><button type="button" data-flavor-pick="react">React</button><button type="button" data-flavor-pick="html">HTML</button></div></div>
+      <div class="flavor-react">
+        <pre class="install"><code>npm i @lazy-ease/react @lazy-ease/core thumbhash</code></pre>
+        <pre><code>import * as thumbhash from 'thumbhash'
 import { detectAvif } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import { Image, LazyEaseProvider } from '@lazy-ease/react'
@@ -82,29 +40,105 @@ const decoder = thumbhashDecoder(thumbhash)
 export default function App() {
   return (
     &lt;LazyEaseProvider thumbhash={decoder} detectFormat={detectAvif}&gt;
-      &lt;Image src="/photos/lake.jpg" alt="Lake at dawn"
-        width={320} height={240} srcWidth={2400} srcHeight={1800}
-        placeholder="thumbhash:IqYJLYhclndfmHd7d4iIdY8wygik" /&gt;
+      &lt;Image
+        src="/photos/lake.jpg" alt="Lake at dawn"
+        width={320} height={240}
+        srcWidth={2400} srcHeight={1800}
+        placeholder="thumbhash:IqYJLYhclndfmHd7d4iIdY8wygik"
+      /&gt;
     &lt;/LazyEaseProvider&gt;
   )
 }</code></pre>
-            </div>
-            <div>
-              <h4>HTML and a script</h4>
-              <p class="install-line"><code>npm i @lazy-ease/vanilla</code>, then copy <code>lazy-ease.css</code> and <code>lazy-ease.min.js</code> from its <code>dist/</code> to <code>/assets</code>.</p>
-              <pre><code>&lt;link rel="stylesheet" href="/assets/lazy-ease.css"&gt;
-&lt;script defer src="/assets/lazy-ease.min.js"&gt;&lt;/script&gt;
+      </div>
+      <div class="flavor-html">
+        <pre class="install"><code>npm i @lazy-ease/vanilla</code></pre>
+        <p class="start-note">Copy <code>lazy-ease.css</code> and <code>lazy-ease.min.js</code> from its <code>dist/</code> to <code>/assets</code>.</p>
+        <pre><code>&lt;link rel="stylesheet" href="/assets/lazy-ease.css"&gt;
+&lt;script defer src="/assets/lazy-ease.min.js"
+  data-base-url="/_img"&gt;&lt;/script&gt;
 
 &lt;section data-le-auto&gt;
-  &lt;span data-le style="display:block;max-width:640px;aspect-ratio:4/3;background-color:#5b6c8f"&gt;
+  &lt;span data-le style="display:block;max-width:640px;
+    aspect-ratio:4/3;background-color:#5b6c8f"&gt;
     &lt;img alt="Lake at dawn" width="640" height="480"
-      style="display:block;width:100%;height:100%;object-fit:cover"
       src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
-      data-le-url="/_img/photos/lake.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=640"&gt;
+      data-le-src="/photos/lake.jpg"
+      data-le-srcw="2400" data-le-srch="1800"&gt;
   &lt;/span&gt;
 &lt;/section&gt;</code></pre>
-            </div>
-          </div>
+      </div>
+      <p class="start-note">Both read <code>/photos/lake.jpg</code> from the image server at <code>/_img</code> (<code>@lazy-ease/server</code>).</p>
+    </section>
+
+    <div class="layout">
+      <nav class="side" aria-label="Use cases">
+        <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a></div>
+        <div><h2>Behaviour</h2><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a></div>
+        <div><h2>Layout</h2><a href="#hero">Hero</a><a href="#layout">Layout modes</a></div>
+        <div><h2>Integration</h2><a href="#template">Without React</a></div>
+      </nav>
+
+      <main>
+        <nav class="chips" aria-label="Use cases">
+          <a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a><a href="#hero">Hero</a><a href="#layout">Layout modes</a><a href="#template">Without React</a>
+        </nav>
+
+        <h2 class="group">Placeholders</h2>
+        <section class="usecase" id="kinds">
+          <header>
+            <div><h3>Kinds</h3><p>Something to look at from the first frame: a few hundred bytes in the HTML, no extra request.</p></div>
+            <div class="flavors" role="group" aria-label="Code"><button type="button" data-flavor-pick="react">React</button><button type="button" data-flavor-pick="html">HTML</button></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+          </header>
+          <div class="usecase-stage"><div class="tiles"><!--le:tiles:kinds--></div></div>
+          <code class="usecase-props flavor-react">const decoder = thumbhashDecoder(thumbhash)               // SVG
+// const decoder = thumbhashDecoder(thumbhash, { blur: 0 }) // inlined PNG
+
+&lt;LazyEaseProvider thumbhash={decoder}&gt;
+  &lt;Image src="/glacier-noon.jpg" alt="Glacier at noon"
+    srcWidth={3000} srcHeight={2000} aspectRatio={3 / 2}
+    placeholder="thumbhash:IqYJLYhclndfmHd7d4iIdY8wygik" /&gt;
+&lt;/LazyEaseProvider&gt;
+// or placeholder="#084898", placeholder="data:image/…", placeholder="none"</code>
+          <code class="usecase-props flavor-html">&lt;!-- The server writes the decoded ThumbHash (thumbhashDecoder) or the color --&gt;
+&lt;span data-le style="display:block;aspect-ratio:3/2;background-color:#084898;
+  background-image:url(&amp;quot;data:image/svg+xml,…&amp;quot;);background-size:cover"&gt;
+  &lt;img alt="Glacier at noon" src="data:image/gif;base64,…"
+    data-le-src="/glacier-noon.jpg" data-le-srcw="3000" data-le-srch="2000"&gt;
+&lt;/span&gt;</code>
+        </section>
+        <section class="usecase" id="ssr">
+          <header>
+            <div><h3>Server rendering</h3><p>What React writes into the HTML: the image right away, or its color first.</p></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+          </header>
+          <div class="usecase-stage"><div class="tiles two"><!--le:tiles:ssr--></div></div>
+          <code class="usecase-props">&lt;LazyEaseProvider thumbhash={decoder} thumbhashSsr="image"&gt;
+// thumbhashSsr="color" (the default): only the color in the server HTML,
+// the decoded image once the script runs</code>
+        </section>
+        <section class="usecase" id="reveal">
+          <header>
+            <div><h3>Reveal</h3><p>How the image takes over from the placeholder, at the speed in the top bar.</p></div>
+            <div class="flavors" role="group" aria-label="Code"><button type="button" data-flavor-pick="react">React</button><button type="button" data-flavor-pick="html">HTML</button></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+          </header>
+          <div class="usecase-stage"><div class="tiles"><!--le:tiles:reveals--></div></div>
+          <code class="usecase-props flavor-react">import { focusReveal } from '@lazy-ease/core'
+
+&lt;LazyEaseProvider fadeDuration={800} reveal={focusReveal}&gt;
+
+// The LCP image: real sources in the HTML, high priority, no fade
+&lt;Image src="/ember-canyon.jpg" alt="Canyon" priority
+  srcWidth={1600} srcHeight={2400} aspectRatio={3 / 2} sizes="33vw" /&gt;</code>
+          <code class="usecase-props flavor-html">import { createLazyEase, createLoader, focusReveal } from '@lazy-ease/core'
+import { enhance } from '@lazy-ease/vanilla'
+
+const loader = createLoader({ baseUrl: '/_img' })
+enhance(createLazyEase({ loader, fadeDuration: 800, reveal: focusReveal }), document.body)
+
+&lt;!-- The LCP image: native, high priority, no fade --&gt;
+&lt;img alt="Canyon" fetchpriority="high" srcset="/_img/ember-canyon.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=640 640w, …" sizes="33vw"&gt;</code>
         </section>
 
         <div id="cases-root"></div>
