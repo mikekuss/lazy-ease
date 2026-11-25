@@ -192,6 +192,15 @@ html {
   color: var(--text);
 }
 
+.chips {
+  display: none;
+}
+
+/* Wide enough for the label and the state badge beside a 56 px image. */
+.row > .demo-image {
+  min-width: 120px;
+}
+
 .group {
   margin: 56px 0 16px;
   font-size: 11px;
@@ -201,7 +210,7 @@ html {
   color: var(--faint);
 }
 
-.recipes main > .group:first-child {
+.recipes main > .chips + .group {
   margin-top: 0;
 }
 
@@ -521,6 +530,25 @@ html {
 
   .side {
     display: none;
+  }
+
+  .chips {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding-bottom: 6px;
+    overflow-x: auto;
+  }
+
+  .chips a {
+    flex: none;
+    padding: 4px 12px;
+    font-size: 13px;
+    color: var(--muted);
+    text-decoration: none;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
   }
 }
 

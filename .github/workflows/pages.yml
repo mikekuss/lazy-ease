@@ -29,6 +29,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # The demo photos (scripts/generate-images.ts), so a deploy needs no download.
+      - uses: actions/cache@v4
+        with:
+          path: apps/demo/images
+          key: demo-images-${{ hashFiles('apps/demo/scripts/generate-images.ts') }}
       - run: pnpm --filter demo build:static
       - uses: actions/upload-pages-artifact@v3
         with:

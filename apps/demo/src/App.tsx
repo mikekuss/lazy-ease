@@ -106,6 +106,8 @@ export function App() {
     setRun((value) => value + 1)
   }
 
+  /** Originals load as they are; a replay changes only their query, which the hosts ignore. */
+  const runQuery = (replay: number) => (replay > 0 || run > 0 ? `?run=${run}-${replay}` : '')
   const byPath = useMemo(() => new Map(images.map((image) => [image.src, image])), [images])
   const placeholderFor = (image: SourceImage | undefined) =>
     !image
@@ -167,11 +169,23 @@ export function App() {
           </nav>
 
           <main key={demoKey}>
+            {/* The side list's stand-in on narrow screens. */}
+            <nav className="chips" aria-label="Use cases">
+              {GROUPS.flatMap(([, cases]) =>
+                cases.map(([id, title]) => (
+                  <a key={id} href={`#${id}`}>
+                    {title}
+                  </a>
+                )),
+              )}
+            </nav>
             <h2 className="group">Start</h2>
             <UseCase
               id="hero"
               title="Hero"
-              note="Art direction: wide crop and focus from 800 px."
+              note="Art direction from 800 px. The route runs with its own settings."
+              // The LCP route's sources are in its HTML: loading it again only hits the cache.
+              replayable={heroRoute === 'fade'}
               controls={
                 <>
                   <Choice label="Route" value={heroRoute} options={[['lcp', 'LCP'], ['fade', 'Fade']]} onChange={setHeroRoute} />
@@ -194,7 +208,7 @@ export function App() {
               title="Fixed size"
               note="1× and 2× candidates. A 40 px original gets one URL."
               controls={<Choice label="Density" value={density} options={DENSITIES} onChange={setDensity} />}
-              props="<Image width={56} height={56} focalPoint={{ x: 40, y: 30 }} />"
+              props={`<Image width={56} height={56} focalPoint={{ x: 40, y: 30 }}${density ? ` sizes="${sizesFor(AVATAR.size)}"` : ''} />`}
             >
               {(replay) => (
                 <div className="row" key={density}>
@@ -279,13 +293,13 @@ export function App() {
             </UseCase>
 
             <UseCase id="originals" title="SVG, GIF, external" note="Loaded as they are." props={'<Image src="logo.svg" width={120} height={40} />'}>
-              {() => (
+              {(replay) => (
                 <div className="row">
-                  <DemoImage src={`${BASE}_img${LOGO}`} alt="Club" width={120} height={40} label="SVG" />
-                  <DemoImage src={`${BASE}_img${WAVE}`} alt="Waving hand" width={64} height={64} label="GIF" />
+                  <DemoImage src={`${BASE}_img${LOGO}${runQuery(replay)}`} alt="Club" width={120} height={40} label="SVG" />
+                  <DemoImage src={`${BASE}_img${WAVE}${runQuery(replay)}`} alt="Waving hand" width={64} height={64} label="GIF" />
                   {external && (
                     <DemoImage
-                      src={new URL(`${BASE}external/${EXTERNAL_FILE}`, location.href).href}
+                      src={new URL(`${BASE}external/${EXTERNAL_FILE}${runQuery(replay)}`, location.href).href}
                       alt="Mountains"
                       width={320}
                       height={Math.round((320 * external.height) / external.width)}
@@ -301,7 +315,7 @@ export function App() {
               {(replay) => <ShadowPanel loader={replay ? loaderOf('shadow', replay) : panelLoader} />}
             </UseCase>
 
-            <UseCase id="backend" title="Backend" note={STATIC ? 'Live server only.' : 'Denied crop, cache hit, eviction.'} props="createImageApp({ root, storage, policy })">
+            <UseCase id="backend" title="Backend" note={STATIC ? 'Live server only.' : 'Denied crop, cache hit, eviction.'} props="createImageApp({ root, storage, policy })" replayable={!STATIC}>
               {() => (STATIC ? null : <Backend />)}
             </UseCase>
             <h2 className="group">Scrolling</h2>
