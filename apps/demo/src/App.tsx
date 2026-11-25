@@ -212,7 +212,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
         id="errors"
         title="Error fallback"
         note="A source that fails: the box keeps its size, the placeholder goes. Click to try again."
-        props={'<Image src="/missing-photo.jpg" alt="…" width={320} height={213} />'}
+        props={'<Image src="/missing-photo.jpg" alt="…" width={240} height={160} />'}
       >
         {(replay) => <ErrorFallback loader={loaderOf('errors', replay)} />}
       </UseCase>

@@ -65,6 +65,7 @@ input[type=range] { width:120px }
   .site select { max-width:104px }
   .bar, .page { padding-left:16px; padding-right:16px }
   .site .pick span { display:none }
+  .site .live-only { display:none }
   /* Not sticky on a phone: wrapped, it would cover a third of the screen. */
   .bar { position:relative; gap:8px 14px }
 }
@@ -150,7 +151,9 @@ input[type=range] { width:120px }
 
 /* ---- The demo page: intro, then a side list and one panel per use case ---- */
 .intro { position:relative; overflow:hidden; color:#fff; background:#1c1917 }
-.intro .backdrop { position:absolute; inset:-40px; background-size:cover; background-position:50% }
+.intro .backdrop { position:absolute; inset:0 }
+.intro .backdrop [data-le] { position:absolute; inset:0; display:block; background-size:cover; background-position:50% }
+.intro .backdrop img { display:block; width:100%; height:100%; object-fit:cover }
 .intro::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg, rgb(12 10 9 / .78) 0%, rgb(12 10 9 / .4) 50%, rgb(12 10 9 / 0) 100%) }
 .intro-inner { position:relative; z-index:1; max-width:1360px; margin:0 auto; padding:88px 32px 80px }
 .intro h1 { margin:0; max-width:14ch; font-size:clamp(36px, 6vw, 60px); line-height:1.05; letter-spacing:-.03em }

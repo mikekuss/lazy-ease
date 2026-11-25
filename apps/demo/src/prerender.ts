@@ -197,7 +197,7 @@ const select = (label: string, attribute: string, options: string[][], selected:
  * would also control the LCP route), so its bar has no network select.
  */
 export function navMarkup(base: string, live: boolean): string {
-  const net = live ? select('Network', 'data-net', NETWORKS, 'fast-4g') : ''
+  const net = live ? select('Network', 'data-net', NETWORKS, 'fast-4g') : '<span class="pick live-only">Network in the live demo</span>'
   return `<header class="site"><a class="brand" href="${base}">lazy-ease</a><div class="tools">${net}${select('Reveal', 'data-fade', FADES, String(DEMO_FADE))}<button type="button" class="replay" data-replay title="Replay the page" aria-label="Replay the page">↻</button></div></header>
 <script>${NAV_SCRIPT}</script>`
 }

@@ -74,7 +74,7 @@ export const TILES: Record<string, Tile[]> = {
     PNG,
     COLOR,
     URI,
-    { title: 'Transparent', source: TRANSPARENT, style: svg, code: () => 'ThumbHash with alpha', transparent: true },
+    { title: 'Transparent, alpha kept', source: TRANSPARENT, style: svg, code: () => 'placeholder="thumbhash:…"', transparent: true },
     // Color in the server HTML, the ThumbHash image once the script runs.
     { title: 'SSR color', source: NIGHT, style: color, placeholder: (m) => `thumbhash:${m.thumbhash}`, code: () => 'thumbhashSsr="color"' },
   ],
@@ -109,22 +109,28 @@ export function tilesMarkup(name: string, meta: (src: string) => TileMeta): stri
         tile.reveal ? `data-reveal="${tile.reveal}"` : '',
         tile.transparent ? 'data-transparent' : '',
       ].filter(Boolean)
-      const style = `aspect-ratio:${width} / ${height};${css(tile.style(m) ?? {})}`
+      // Every tile is 3:2 (the well); the image fills it, cropped in the browser.
+      const style = css(tile.style(m) ?? {})
+      // The placeholder once more, small and for good, so it can be compared with the image after the reveal.
+      const swatch = `<span class="swatch" aria-hidden="true" title="The placeholder" style="${escape(style)}"></span>`
       return `<figure class="tile${tile.transparent ? ' checker' : ''}">
   <span class="well"><span data-le ${data.join(' ')} style="${escape(style)}" title="Click to replay"></span></span>
-  <figcaption><b>${tile.title}</b><code>${escape(tile.code(m))}</code></figcaption>
+  <figcaption>${swatch}<span class="text"><b>${tile.title}</b><code>${escape(tile.code(m))}</code></span></figcaption>
 </figure>`
     })
     .join('\n')
 }
 
 /**
- * The start page's backdrop: the ThumbHash of the desktop hero photo, as an
- * inline SVG. It is in the first HTML and never loads anything, so it never
- * paints progressively.
+ * The intro's backdrop: the photo's ThumbHash inline, as a server template
+ * writes it, so it is there from the first frame. The page script attaches
+ * the photo, which fades in once after decode (no priority, so it never
+ * paints in steps).
  */
 export const BACKDROP_SOURCE = '/meadow-haze.jpg'
+const BACKDROP = MEADOW
 
 export function backdropMarkup(meta: (src: string) => TileMeta): string {
-  return `<span class="backdrop" aria-hidden="true" style="${escape(css(svg(meta(BACKDROP_SOURCE)) ?? {}))}"></span>`
+  const { src, width, height } = BACKDROP
+  return `<span class="backdrop" aria-hidden="true"><span data-le data-src="${src}" data-width="${width}" data-height="${height}" style="${escape(css(svg(meta(BACKDROP_SOURCE)) ?? {}))}"></span></span>`
 }

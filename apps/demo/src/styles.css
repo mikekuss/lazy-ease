@@ -335,6 +335,25 @@ html {
   color: var(--faint);
 }
 
+/* Default: the browser's own presentation; the outline marks the box it keeps. */
+.reserved {
+  outline: 1px dashed #a8a29e;
+  outline-offset: -1px;
+  background-color: #fafaf9;
+}
+
+.errors {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 240px));
+  gap: 24px;
+}
+
+@media (max-width: 640px) {
+  .errors {
+    grid-template-columns: minmax(0, 240px);
+  }
+}
+
 /* Your own UI over the box. */
 .own-fallback {
   position: relative;
@@ -344,8 +363,8 @@ html {
   position: absolute;
   top: 0;
   left: 0;
-  width: 320px;
-  height: 213px;
+  width: 240px;
+  height: 160px;
   display: grid;
   place-content: center;
   gap: 2px;

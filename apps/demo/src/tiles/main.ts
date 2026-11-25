@@ -31,7 +31,7 @@ let run = 0
 for (const code of document.querySelectorAll('.tile code')) code.textContent = code.textContent!.replace('fadeDuration={…}', `fadeDuration={${fadeDuration()}}`)
 const plays = new Map<HTMLElement, () => void>()
 
-for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le]')) {
+for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le], .intro .backdrop [data-le]')) {
   // The box as the HTML wrote it, placeholder included; the reveal removes the placeholder.
   const initial = box.getAttribute('style') ?? ''
   const { src, width, height, placeholder, reveal } = box.dataset
@@ -45,12 +45,16 @@ for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le]')) {
       src: src!,
       srcWidth: Number(width),
       srcHeight: Number(height),
+      // The box fills its well (3:2) or the intro; the browser crops the uncropped image.
+      fill: true,
+      // The intro's photo comes at once; the tiles wait a moment, so their placeholder is seen.
+      ...(box.closest('.intro') ? { dwellTime: 0 } : {}),
       ...(placeholder ? { placeholder } : {}),
       ...(reveal === 'focus' ? { reveal: focusReveal } : {}),
       ...(box.hasAttribute('data-transparent') ? { transparent: true } : {}),
     })
   }
-  box.addEventListener('click', play)
+  if (!box.closest('.intro')) box.addEventListener('click', play)
   plays.set(box, play)
   play()
 }

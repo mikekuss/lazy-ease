@@ -7,14 +7,14 @@ import { DemoImage } from '../DemoImage'
  * today: the box keeps its size and the placeholder goes, the image gets
  * `data-state="error"`. The source does not exist, so every load fails.
  */
-const MISSING = { src: '/missing-photo.jpg', srcWidth: 1600, srcHeight: 1067, width: 320, height: 213, placeholder: '#a8a29e' }
+const MISSING = { src: '/missing-photo.jpg', srcWidth: 1600, srcHeight: 1067, width: 240, height: 160, placeholder: '#a8a29e' }
 
 export function ErrorFallback({ loader }: { loader: ImageLoader }) {
   const [failed, setFailed] = useState(false)
   return (
-    <div className="row errors">
+    <div className="errors">
       <div>
-        <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" label="Default: the layout holds" />
+        <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" wrapperClassName="reserved" label="Default: the layout holds" />
         <code className="variant-code">data-state="error"</code>
       </div>
       <div>
