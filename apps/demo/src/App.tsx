@@ -166,7 +166,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
   )
   const layoutProps = {
     fixed: `<Image width={56} height={56} focalPoint={{ x: 40, y: 30 }}${density ? ` sizes="${sizesFor(AVATAR.size)}"` : ''} />`,
-    ratio: '<Image aspectRatio={4 / 3} sources={[{ media, aspectRatio: 2 }]} />',
+    ratio: '<Image aspectRatio={4 / 3} sources={[{ media, aspectRatio: 2 }]} />   @media (min-width:800px) { [data-le] { --le-ar: 2 } }',
     fill: "<div style={{ position: 'relative' }}><Image fill /></div>",
     article: `<Image loading="native" sizes="${ARTICLE_SIZES}" />`,
   }[layout]

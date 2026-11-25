@@ -172,7 +172,7 @@ const NAV_SCRIPT = `(() => {
   }
   bar.querySelector('[data-replay]').addEventListener('click', replay)
   if (net) {
-    const chosen = /(?:^|;\s*)le-net=([\w-]+)/.exec(document.cookie)
+    const chosen = /(?:^|;\\s*)le-net=([\\w-]+)/.exec(document.cookie)
     if (chosen) net.value = chosen[1]
     net.addEventListener('change', () => {
       document.cookie = 'le-net=' + net.value + '; path=/; max-age=31536000; SameSite=Lax'
