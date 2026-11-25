@@ -315,19 +315,22 @@ html {
 
 /* ---- Error fallback --------------------------------------------------- */
 
-/* Styled with CSS: a calm box instead of the broken image. */
+/* Styled with CSS: a calm box instead of the broken image. The box is
+   positioned (inline style), so the label can cover it. */
 .fallback[data-state='error'] {
-  display: grid;
-  place-items: center;
   background: #f5f5f4;
 }
 
 .fallback[data-state='error'] img {
-  display: none;
+  visibility: hidden;
 }
 
 .fallback[data-state='error']::after {
-  content: 'Image unavailable';
+  content: '⊘  Image unavailable';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
   font-size: 13px;
   color: var(--faint);
 }
@@ -356,4 +359,11 @@ html {
 
 .own-fallback-ui b {
   font-size: 15px;
+}
+
+.variant-code {
+  display: block;
+  margin-top: 2px;
+  font: 11px/1.4 var(--mono);
+  color: var(--muted);
 }

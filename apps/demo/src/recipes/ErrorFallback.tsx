@@ -13,8 +13,14 @@ export function ErrorFallback({ loader }: { loader: ImageLoader }) {
   const [failed, setFailed] = useState(false)
   return (
     <div className="row errors">
-      <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" label="Default: the layout holds" />
-      <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" wrapperClassName="fallback" label="Styled with CSS" />
+      <div>
+        <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" label="Default: the layout holds" />
+        <code className="variant-code">data-state="error"</code>
+      </div>
+      <div>
+        <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" wrapperClassName="fallback" label="Styled with CSS" />
+        <code className="variant-code">[data-le][data-state="error"] {"{ … }"}</code>
+      </div>
       <div className="own-fallback">
         <DemoImage
           {...MISSING}
@@ -23,6 +29,7 @@ export function ErrorFallback({ loader }: { loader: ImageLoader }) {
           onStateChange={(state) => setFailed(state === 'error')}
           label="Your own UI"
         />
+        <code className="variant-code">onStateChange={'{(state) => …}'}</code>
         {failed && (
           <div className="own-fallback-ui" role="status">
             <b>Photo unavailable</b>

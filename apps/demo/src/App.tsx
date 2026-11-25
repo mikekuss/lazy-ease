@@ -267,7 +267,7 @@ export function App() {
               id="errors"
               title="Error fallback"
               note="A source that fails: the box keeps its size, the placeholder goes. Click to try again."
-              props={'[data-le][data-state="error"] { … }   onStateChange={(state) => state === "error" && …}'}
+              props={'<Image src="/missing-photo.jpg" alt="…" width={320} height={213} />'}
             >
               {(replay) => <ErrorFallback loader={loaderOf('errors', replay)} />}
             </UseCase>
