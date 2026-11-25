@@ -26,6 +26,7 @@ export function UseCase({ id, title, note, controls, props, html, replayable = t
           <h3>{title}</h3>
           <p>{note}</p>
         </div>
+        <div className="head-tools">
         {html !== undefined && (
           <div className="flavors" role="group" aria-label="Code">
             <button type="button" data-flavor-pick="react">React</button>
@@ -37,6 +38,7 @@ export function UseCase({ id, title, note, controls, props, html, replayable = t
             ↻ Replay
           </button>
         )}
+        </div>
       </header>
       {controls && <div className="usecase-bar">{controls}</div>}
       <div className="usecase-stage" key={replay}>

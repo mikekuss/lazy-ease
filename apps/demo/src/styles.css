@@ -404,12 +404,13 @@ html {
   position: relative;
 }
 
+/* Exactly over the box: as wide as the box (240 px, less in a narrow column) and of its ratio. */
 .own-fallback-ui {
   position: absolute;
   top: 0;
   left: 0;
-  width: 240px;
-  height: 160px;
+  width: min(240px, 100%);
+  aspect-ratio: 3 / 2;
   display: grid;
   place-content: center;
   gap: 2px;
@@ -425,9 +426,13 @@ html {
   font-size: 15px;
 }
 
+/* One line under each variant, like the tile code lines; the full code is in the panel's block. */
 .variant-code {
   display: block;
   margin-top: 2px;
-  font: 11px/1.4 var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 12px/1.5 var(--mono);
   color: var(--muted);
 }

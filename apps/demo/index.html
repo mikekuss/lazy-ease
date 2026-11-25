@@ -87,8 +87,10 @@ export default function App() {
         <section class="usecase" id="kinds">
           <header>
             <div><h3>Kinds</h3><p>Something to look at from the first frame: a few hundred bytes in the HTML, no extra request.</p></div>
+            <div class="head-tools">
             <div class="flavors" role="group" aria-label="Code"><button type="button" data-flavor-pick="react">React</button><button type="button" data-flavor-pick="html">HTML</button></div>
             <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+            </div>
           </header>
           <div class="usecase-stage"><div class="tiles"><!--le:tiles:kinds--></div></div>
           <code class="usecase-props flavor-react">const decoder = thumbhashDecoder(thumbhash)               // SVG
@@ -110,7 +112,9 @@ export default function App() {
         <section class="usecase" id="ssr">
           <header>
             <div><h3>Server rendering</h3><p>What React writes into the HTML: the image right away, or its color first.</p></div>
+            <div class="head-tools">
             <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+            </div>
           </header>
           <div class="usecase-stage"><div class="tiles two"><!--le:tiles:ssr--></div></div>
           <code class="usecase-props">&lt;LazyEaseProvider thumbhash={decoder} thumbhashSsr="image"&gt;
@@ -120,8 +124,10 @@ export default function App() {
         <section class="usecase" id="reveal">
           <header>
             <div><h3>Reveal</h3><p>How the image takes over from the placeholder, at the speed in the top bar.</p></div>
+            <div class="head-tools">
             <div class="flavors" role="group" aria-label="Code"><button type="button" data-flavor-pick="react">React</button><button type="button" data-flavor-pick="html">HTML</button></div>
             <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+            </div>
           </header>
           <div class="usecase-stage"><div class="tiles"><!--le:tiles:reveals--></div></div>
           <code class="usecase-props flavor-react">import { focusReveal } from '@lazy-ease/core'
@@ -147,7 +153,9 @@ enhance(createLazyEase({ loader, fadeDuration: 800, reveal: focusReveal }), docu
         <section class="usecase" id="template">
           <header>
             <div><h3>Without React</h3><p>A server template and the vanilla script, a CSS background, SVG, GIF and an external photo.</p></div>
+            <div class="head-tools">
             <button type="button" data-replay-template title="Load again with new URLs">↻ Replay</button>
+            </div>
           </header>
           <form class="usecase-bar" id="template-settings">
             <label class="field"><span>Start script</span>

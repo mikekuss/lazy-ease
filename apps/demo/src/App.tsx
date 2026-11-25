@@ -174,7 +174,13 @@ export function App({ part }: { part: 'main' | 'more' }) {
     </>
   )
   const layoutProps = {
-    fixed: `<Image src="/misty-pines.jpg" alt="Pines" width={56} height={56} srcWidth={1600} srcHeight={2400} focalPoint={{ x: 40, y: 30 }}${density ? ` sizes="${sizesFor(AVATAR.size)}"` : ''} />`,
+    fixed: `<Image
+  src="/misty-pines.jpg"
+  alt="Pines"
+  width={56} height={56}
+  srcWidth={1600} srcHeight={2400}
+  focalPoint={{ x: 40, y: 30 }}${density ? `\n  sizes="${sizesFor(AVATAR.size)}"` : ''}
+/>`,
     ratio: `<Image src="/blue-ridge.jpg" alt="Ridge" aspectRatio={4 / 3} sizes="100vw" srcWidth={3000} srcHeight={2000}
   wrapperClassName="ridge"
   sources={[{ media: '(min-width:800px)', src: '/blue-ridge.jpg', srcWidth: 3000, srcHeight: 2000, aspectRatio: 2, sizes: '50vw' }]} />
@@ -183,7 +189,13 @@ export function App({ part }: { part: 'main' | 'more' }) {
     fill: `<div style={{ position: 'relative', aspectRatio: 1 }}>
   <Image src="/ember-canyon.jpg" alt="" fill srcWidth={1600} srcHeight={2400} />
 </div>`,
-    article: `<Image src="/northern-night.jpg" alt="Night sky" loading="native" sizes="${ARTICLE_SIZES}" srcWidth={3000} srcHeight={2000} />`,
+    article: `<Image
+  src="/northern-night.jpg"
+  alt="Night sky"
+  loading="native"
+  sizes="${ARTICLE_SIZES}"
+  srcWidth={3000} srcHeight={2000}
+/>`,
   }[layout]
   const layoutHtml = {
     fixed: '<span data-le style="display:block;width:56px;height:56px">\n  <img alt="Pines" width="56" height="56" src="data:image/gif;base64,…"\n    data-le-src="/misty-pines.jpg" data-le-srcw="1600" data-le-srch="2400"\n    data-le-ar="1" data-le-fx="40" data-le-fy="30">\n</span>',
@@ -214,7 +226,12 @@ export function App({ part }: { part: 'main' | 'more' }) {
             <input type="range" min={120} max={900} step={10} value={growWidth} onChange={(e) => setGrowWidth(Number(e.target.value))} />
           </label>
         }
-        props={'<Image src="/violet-peaks.jpg" alt="Peaks" aspectRatio={1} srcWidth={2400} srcHeight={2400} />'}
+        props={`<Image
+  src="/violet-peaks.jpg"
+  alt="Peaks"
+  aspectRatio={1}
+  srcWidth={2400} srcHeight={2400}
+/>`}
         html={RESIZE_HTML}
       >
         {(replay) => (
@@ -228,7 +245,17 @@ export function App({ part }: { part: 'main' | 'more' }) {
         id="errors"
         title="Error fallback"
         note="A source that fails: the box keeps its size, the placeholder goes. Click to try again."
-        props={'<Image src="/missing-photo.jpg" alt="A photo that is not there" width={240} height={160} srcWidth={1600} srcHeight={1067} />'}
+        props={`<Image
+  src="/missing-photo.jpg"
+  alt="A photo that is not there"
+  width={240} height={160}
+  srcWidth={1600} srcHeight={1067}
+  wrapperClassName="fallback"
+  onStateChange={(state) => setFailed(state === 'error')}
+/>
+
+/* CSS */
+.fallback[data-state="error"] { background: #f5f5f4 }`}
         html={ERRORS_HTML}
       >
         {(replay) => <ErrorFallback loader={loaderOf('errors', replay)} />}
@@ -244,7 +271,13 @@ export function App({ part }: { part: 'main' | 'more' }) {
             {loading === 'lazy' && <Choice label="Preload distance" value={preload} options={PRELOADS} onChange={setPreload} />}
           </>
         }
-        props={`<Image src={photo.src} alt="" aspectRatio={photo.ratio} srcWidth={photo.width} srcHeight={photo.height}${loading === 'lazy' ? ` rootMargin="${preload}px"` : ` loading="${loading}"`}${loading === 'native' ? ' sizes="(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw"' : ''} />`}
+        props={`<Image
+  src={photo.src}
+  alt=""
+  aspectRatio={photo.ratio}
+  srcWidth={photo.width} srcHeight={photo.height}
+  ${loading === 'lazy' ? `rootMargin="${preload}px"` : `loading="${loading}"`}${loading === 'native' ? '\n  sizes="(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw"' : ''}
+/>`}
         html={
           loading === 'lazy'
             ? `<script defer src="/assets/lazy-ease.min.js" data-base-url="/_img" data-root-margin="${preload}px"></script>\n\n<span data-le style="display:block;aspect-ratio:3/4">\n  <img alt="" src="data:image/gif;base64,…"\n    data-le-src="/photo.jpg" data-le-srcw="1600" data-le-srch="2400" data-le-ar="0.75">\n</span>`

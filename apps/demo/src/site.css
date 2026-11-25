@@ -224,14 +224,15 @@ html:not([data-flavor='html']) .flavors [data-flavor-pick='react'], html[data-fl
 .start pre { margin:0 0 10px; max-width:760px; padding:14px 16px; overflow-x:auto; font:12.5px/1.6 var(--mono); color:#e5e7eb; background:var(--text); border-radius:12px }
 .start pre.install { padding:10px 16px; background:#1f2937 }
 .start-note { margin:0 0 10px; max-width:760px; font-size:13px; color:var(--muted) }
-.usecase header .flavors { margin-left:auto; align-self:center }
+/* Panel header: title and line on the left, tabs and Replay together on the right. */
+.usecase > header > div:first-child { flex:1 1 auto; min-width:0 }
+.head-tools { display:flex; align-items:center; gap:8px; flex:none }
 
 /* A phone: the panel's text gets the full width, tabs and Replay go below it. */
 @media (max-width:640px) {
   .usecase > header { flex-wrap:wrap; gap:10px }
   .usecase > header > div:first-child { flex:1 1 100% }
-  .usecase header .flavors { margin-left:0 }
-  .usecase header button[data-replay-panel], .usecase header button[data-replay-template] { margin-left:auto }
+  .head-tools { flex:1 1 100%; justify-content:space-between }
 }
 /* Room for the copy button. */
 .copyable pre, .copyable .usecase-props { padding-right:84px }
