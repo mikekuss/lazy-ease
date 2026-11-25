@@ -3,68 +3,93 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lazy-ease demo</title>
+    <title>lazy-ease</title>
     <!--le:site-->
-    <style>
-      .home { max-width:1200px; margin:0 auto; padding:48px 24px 96px }
-      .intro { display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:16px }
-      h1 { margin:0; font-size:36px; letter-spacing:-.02em }
-      .home .lead { margin-top:6px; font-size:17px }
-      .install { padding:7px 14px; font:14px var(--mono); background:var(--text); color:#e5e7eb; border-radius:8px }
-      h2 { margin:48px 0 4px; font-size:20px }
-      h2 + p { margin:0; color:var(--muted); font-size:14px }
-      .kinds { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:32px 24px; margin-top:20px }
-      .kinds.extras { grid-template-columns:repeat(auto-fill, minmax(260px, 300px)) }
-      .kind { margin:0 }
-      .kind [data-le] { display:block; aspect-ratio:3 / 2; border-radius:14px; overflow:hidden; background:#e5e7eb }
-      .kind img { display:block; width:100%; height:100%; object-fit:cover }
-      .kind figcaption { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 10px; margin-top:12px }
-      .kind b { font-size:16px }
-      .kind code { flex-basis:100%; font-size:12.5px; color:var(--muted) }
-      .kind button { margin-left:auto; padding:0; border:0; background:none; color:var(--faint); font-size:13px }
-      .kind button:hover { color:var(--text) }
-      .pages { list-style:none; padding:0; margin:18px 0 0; display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:14px }
-      .pages a { display:block; height:100%; padding:16px 18px; text-decoration:none; background:var(--panel); border:1px solid var(--line); border-radius:12px }
-      .pages a:hover { border-color:var(--faint) }
-      .pages strong { font-size:15px }
-      .pages span { display:block; margin-top:4px; color:var(--muted); font-size:14px }
-      @media (max-width:900px) { .kinds { grid-template-columns:1fr 1fr } }
-      @media (max-width:640px) { .home { padding:32px 16px 64px } .kinds, .kinds.extras { grid-template-columns:1fr } }
-    </style>
+    <link rel="stylesheet" href="/src/tiles/tiles.css" />
+    <link rel="stylesheet" href="/src/fade/fade.css" />
   </head>
   <body>
     <!--le:nav-->
-    <main class="home">
-      <div class="intro">
-        <div>
-          <h1>lazy-ease</h1>
-          <p class="lead">Images at the size they are rendered at, with a placeholder and one fade.</p>
-        </div>
+    <section class="intro">
+      <!--le:backdrop-->
+      <div class="intro-inner">
+        <h1>Images that arrive calmly.</h1>
+        <p>lazy-ease loads each image at the size it is shown, keeps its placeholder in the first HTML and fades it in once, after decode.</p>
         <code class="install">npm i @lazy-ease/react</code>
       </div>
+    </section>
+    <div class="features">
+      <div><b>No layout shift</b><span>The box has its size before a byte arrives.</span></div>
+      <div><b>One fade, after decode</b><span>Never a half-painted image.</span></div>
+      <div><b>The right size per slot</b><span>The srcset fits the width it is shown at.</span></div>
+      <div><b>Placeholders in the HTML</b><span>ThumbHash, color or your own.</span></div>
+    </div>
 
-      <h2>Placeholders</h2>
-      <p>Shown until the image fades in. The server writes them with <code>computeMetadata()</code>.</p>
-      <div class="kinds">
-        <!--le:tiles-main-->
-      </div>
+    <div class="layout">
+      <nav class="side" aria-label="Use cases">
+        <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a></div>
+        <div><h2>Loading</h2><a href="#hero">Hero</a><a href="#template">Template HTML</a></div>
+        <div><h2>Layout</h2><a href="#fixed">Fixed size</a><a href="#ratio">Breakpoint ratio</a><a href="#resize">Resize</a><a href="#fill">Fill</a><a href="#article">Article</a></div>
+        <div><h2>Sources</h2><a href="#background">Background</a><a href="#originals">SVG, GIF, external</a><a href="#shadow">Shadow panel</a><a href="#errors">Error fallback</a></div>
+        <div><h2>Scrolling</h2><a href="#gallery">Scroll gallery</a></div>
+      </nav>
 
-      <h2>Extras</h2>
-      <p>Props on top of a placeholder.</p>
-      <div class="kinds extras">
-        <!--le:tiles-extra-->
-      </div>
+      <main>
+        <nav class="chips" aria-label="Use cases">
+          <a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a><a href="#hero">Hero</a><a href="#template">Template HTML</a><a href="#fixed">Fixed size</a><a href="#ratio">Breakpoint ratio</a><a href="#resize">Resize</a><a href="#fill">Fill</a><a href="#article">Article</a><a href="#background">Background</a><a href="#originals">SVG, GIF, external</a><a href="#shadow">Shadow panel</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a>
+        </nav>
 
-      <h2>Demos</h2>
-      <p>Every page below uses the same images.</p>
-      <ul class="pages">
-        <li><a href="recipes/"><strong>Recipes</strong><span>Every use case with the React Image.</span></a></li>
-        <li><a href="fade/"><strong>Fade hero</strong><span>Template HTML, one fade.</span></a></li>
-        <li><a href="lcp/"><strong>LCP hero</strong><span>Sources in the first HTML, no script.</span></a></li>
-        <li data-live><a href="placeholders/"><strong>Placeholders</strong><span>All variants side by side.</span></a></li>
-        <li data-live><a href="controller.html"><strong>Cases</strong><span>The controller, case by case.</span></a></li>
-      </ul>
-    </main>
-    <script type="module" src="/src/home/main.ts"></script>
+        <h2 class="group">Placeholders</h2>
+        <section class="usecase" id="kinds">
+          <header>
+            <div><h3>Kinds</h3><p>In the first HTML, from <code>computeMetadata()</code> on the server.</p></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+          </header>
+          <div class="usecase-stage"><div class="tiles"><!--le:tiles:kinds--></div></div>
+        </section>
+        <section class="usecase" id="ssr">
+          <header>
+            <div><h3>Server rendering</h3><p>What React writes into the HTML before hydration.</p></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+          </header>
+          <div class="usecase-stage"><div class="tiles"><!--le:tiles:ssr--></div></div>
+        </section>
+        <section class="usecase" id="reveal">
+          <header>
+            <div><h3>Reveal</h3><p>How the image takes over from the placeholder.</p></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+          </header>
+          <div class="usecase-stage"><div class="tiles"><!--le:tiles:reveals--></div></div>
+        </section>
+
+        <h2 class="group">Loading</h2>
+        <div id="hero-root"></div>
+        <section class="usecase" id="template">
+          <header>
+            <div><h3>Template HTML</h3><p>A PHP or any server template and the vanilla script. The native image is the browser's own.</p></div>
+          </header>
+          <form class="usecase-bar" id="template-settings">
+            <label class="field"><span>Start script</span>
+              <select name="late">
+                <option value="0">At once</option>
+                <option value="1000">After 1 s</option>
+                <option value="3000">After 3 s</option>
+              </select>
+            </label>
+          </form>
+          <div class="usecase-stage">
+            <section data-le-auto class="pair">
+              <!--le:pair-->
+            </section>
+          </div>
+          <code class="usecase-props">&lt;img data-le srcset&gt;  ·  data-le-url  ·  data-le-srcset</code>
+        </section>
+
+        <div id="root"></div>
+      </main>
+    </div>
+    <script type="module" src="/src/tiles/main.ts"></script>
+    <script type="module" src="/src/template/main.ts"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

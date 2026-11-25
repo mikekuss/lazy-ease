@@ -9,42 +9,49 @@
   </head>
   <body>
     <!--le:nav-->
-    <form class="bar" id="settings">
-      <strong>Fade hero</strong>
-      <label>Network
-        <select name="net">
-          <option value="off">Real speed</option>
-          <option value="fast-4g">Fast 4G</option>
-          <option value="slow-4g">Slow 4G</option>
-          <option value="3g">3G</option>
-        </select>
-      </label>
-      <label>Start script
-        <select name="late">
-          <option value="0">At once</option>
-          <option value="1000">After 1 s</option>
-          <option value="3000">After 3 s</option>
-        </select>
-      </label>
-      <button type="submit" class="primary">Reload</button>
-      <output id="status" class="stat" aria-live="polite">Script waiting</output>
-    </form>
-    <main class="page">
-      <p class="note warn" id="throttle-note" hidden>Throttle starts on the next reload.</p>
-      <section class="case">
-        <h2>Hero <small>Color placeholder, then one fade. Wide crop from 800 px.</small></h2>
-        <code class="props">&lt;img data-le-srcset data-le-sizes&gt;</code>
-        <section data-le-auto class="hero-area shot">
-          <!--le:hero-fade-->
-        </section>
+    <main class="single">
+      <h1>Fade hero</h1>
+      <p class="lead">Template HTML with the vanilla script. Click an image to load it again.</p>
+
+      <section class="usecase">
+        <header>
+          <div>
+            <h3>Hero</h3>
+            <p>Color placeholder in the HTML, one fade after decode. Wide crop from 800 px.</p>
+          </div>
+        </header>
+        <form class="usecase-bar" id="settings">
+          <label class="field"><span>Start script</span>
+            <select name="late">
+              <option value="0">At once</option>
+              <option value="1000">After 1 s</option>
+              <option value="3000">After 3 s</option>
+            </select>
+          </label>
+        </form>
+        <div class="usecase-stage">
+          <section data-le-auto class="hero-area shot" data-click-replay>
+            <!--le:hero-fade-->
+          </section>
+        </div>
+        <code class="usecase-props">&lt;span data-le&gt; &lt;img data-le-srcset data-le-sizes&gt;</code>
       </section>
-      <section class="case">
-        <h2>Native and JS <small>Same template, three modes. The native image shows before the script and stays.</small></h2>
-        <section data-le-auto class="pair">
-          <!--le:pair-->
-        </section>
+
+      <section class="usecase">
+        <header>
+          <div>
+            <h3>Native and JS</h3>
+            <p>One template, three modes. The native image is the browser's own, the others fade in.</p>
+          </div>
+        </header>
+        <div class="usecase-stage">
+          <section data-le-auto class="pair">
+            <!--le:pair-->
+          </section>
+        </div>
+        <code class="usecase-props">&lt;img data-le srcset&gt;  ·  data-le-url  ·  data-le-srcset</code>
       </section>
     </main>
-    <script type="module" src="/src/fade/main.ts"></script>
+    <script type="module" src="/src/template/main.ts"></script>
   </body>
 </html>

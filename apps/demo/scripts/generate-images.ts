@@ -159,6 +159,14 @@ async function scene(scene: Scene, seed: number, file: string): Promise<void> {
     .toFile(file)
 }
 
+/** A transparent PNG: a solid purple disc with crisp edges, for the transparent placeholder case. */
+async function disc(file: string): Promise<void> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000">
+    <circle cx="800" cy="500" r="360" fill="#7c3aed"/>
+  </svg>`
+  await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toFile(file)
+}
+
 /** A 64 px waving hand in six frames. */
 async function wave(file: string): Promise<void> {
   const angles = [-20, -5, 10, 20, 10, -5]
@@ -232,6 +240,7 @@ export async function ensureDemoImages(dir: string): Promise<string[]> {
     ...EXTRA_SCENES.map((scene, i): Job => ({ name: scene.file, scene, seed: SCENES.length + i + 1 })),
     { name: 'extra/logo.svg', make: (file) => writeFile(file, LOGO) },
     { name: 'extra/wave.gif', make: wave },
+    { name: 'extra/disc.png', make: disc },
   ]
   let changed = false
   await Promise.all(

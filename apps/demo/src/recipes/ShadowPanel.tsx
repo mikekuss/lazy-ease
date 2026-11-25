@@ -2,7 +2,7 @@ import { createLazyEase, createLoader, detectAvif, type ImageLoader, type LazyEa
 import { cssText } from '@lazy-ease/vanilla/css'
 import { useEffect, useRef, useState } from 'react'
 import { PRIVATE } from '../catalog'
-import { BASE, STATIC } from '../mode'
+import { BASE, STATIC, fadeDuration } from '../mode'
 import { SHADOW_WIDTHS } from '../plan'
 import { INERT } from '../prerender'
 import { pixels } from '../readout'
@@ -79,7 +79,7 @@ export function ShadowPanel({ loader }: { loader: ImageLoader }) {
     shadow.adoptedStyleSheets = [sheet]
     shadow.innerHTML = `<div class="panel"><p>Scroll this panel.</p><div class="spacer"></div><span data-le></span><small></small></div>`
     const panel = shadow.querySelector<HTMLElement>('.panel')!
-    setController({ le: createLazyEase({ loader, root: panel, detectFormat: detectAvif, onStateChange: (next) => show.current(next) }), panel })
+    setController({ le: createLazyEase({ loader, root: panel, detectFormat: detectAvif, fadeDuration: fadeDuration(), onStateChange: (next) => show.current(next) }), panel })
   }, [loader])
 
   useEffect(() => {

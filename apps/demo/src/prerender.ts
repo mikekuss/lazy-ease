@@ -116,7 +116,7 @@ export function pairMarkup(options: PrerenderOptions): string {
        style="display:block;width:100%;height:auto;background-color:${article.color}"
        loading="lazy" decoding="async"
        src="${attr(native.src)}" srcset="${attr(native.srcset ?? native.src)}" sizes="${ARTICLE_SIZES}">
-  <figcaption>Native<span class="mono">img srcset sizes loading=lazy</span></figcaption>
+  <figcaption>Native</figcaption>
 </figure>
 <figure class="pair-item" data-case="fade">
   <span data-le style="display:block;aspect-ratio:${card.width}/${card.height};background-color:${card.color}">
@@ -124,34 +124,80 @@ export function pairMarkup(options: PrerenderOptions): string {
          style="display:block;width:100%;height:100%;object-fit:cover"
          src="${INERT}" data-le-url="${attr(single.src)}">
   </span>
-  <figcaption>Fade, one URL<span class="mono">data-le-url</span></figcaption>
+  <figcaption>Fade, one URL</figcaption>
 </figure>
 <figure class="pair-item" data-case="avatar">
   <span data-le style="display:block;width:${AVATAR.size}px;height:${AVATAR.size}px;border-radius:50%;background-color:${options.meta(AVATAR.src).color}">
     <img alt="Pines" width="${AVATAR.size}" height="${AVATAR.size}" data-le-sizes="${AVATAR.size}px"
          src="${INERT}" data-le-srcset="${attr(avatar.srcset ?? avatar.src)}">
   </span>
-  <figcaption>Fade, 1× and 2×<span class="mono">data-le-srcset data-le-sizes</span></figcaption>
+  <figcaption>Fade, 1× and 2×</figcaption>
 </figure>`
 }
 
-/** The demo pages, in nav order. `live` ones need the demo server, so the static build leaves them out. */
-const PAGES = [
-  { path: 'fade/', label: 'Fade' },
-  { path: 'lcp/', label: 'LCP' },
-  { path: 'recipes/', label: 'Recipes' },
-  { path: 'placeholders/', label: 'Placeholders', live: true },
-  { path: 'controller.html', label: 'Cases', live: true },
+const NETWORKS = [
+  ['off', 'Real speed'],
+  ['fast-4g', 'Fast 4G'],
+  ['slow-4g', 'Slow 4G'],
+  ['3g', '3G'],
 ]
 
+/** Reveal speeds: the demo's 800 ms is longer than the library's 400 ms default, so the reveal is visible. */
+export const FADES = [
+  ['0', 'None'],
+  ['150', '150 ms'],
+  ['400', '400 ms (default)'],
+  ['800', '800 ms'],
+  ['1500', '1.5 s'],
+]
+export const DEMO_FADE = 800
+
 /**
- * The site header every page shares. `current` is the page's path below
- * `base` (`fade/`, or `''` for the start page). Plain links, so the LCP page
- * stays without script.
+ * The top bar's controls. Network is a cookie: the demo server throttles
+ * every image request by it. Reveal is the fade duration of the whole page
+ * (localStorage, read by the page scripts). Both reload the page; Replay
+ * reloads it with a new run id (sessionStorage) that the page scripts put
+ * into their image URLs. Plain script inline; the LCP route has no bar, so
+ * it stays without any script.
  */
-export function navMarkup(current: string, base: string, live: boolean): string {
-  const links = PAGES.filter((page) => live || !page.live)
-    .map((page) => `<a href="${base}${page.path}"${page.path === current ? ' aria-current="page"' : ''}>${page.label}</a>`)
-    .join('')
-  return `<header class="site"><a class="brand" href="${base}"${current === '' ? ' aria-current="page"' : ''}>lazy-ease</a><nav>${links}</nav></header>`
+const NAV_SCRIPT = `(() => {
+  const bar = document.querySelector('.site')
+  const net = bar.querySelector('[data-net]')
+  const fade = bar.querySelector('[data-fade]')
+  const replay = () => {
+    try { sessionStorage.setItem('le-run', String(Date.now())) } catch {}
+    location.reload()
+  }
+  bar.querySelector('[data-replay]').addEventListener('click', replay)
+  if (net) {
+    const chosen = /(?:^|;\s*)le-net=([\w-]+)/.exec(document.cookie)
+    if (chosen) net.value = chosen[1]
+    net.addEventListener('change', () => {
+      document.cookie = 'le-net=' + net.value + '; path=/; max-age=31536000; SameSite=Lax'
+      replay()
+    })
+  }
+  if (fade) {
+    try { const stored = localStorage.getItem('le-fade'); if (stored !== null) fade.value = stored } catch {}
+    fade.addEventListener('change', () => {
+      try { localStorage.setItem('le-fade', fade.value) } catch {}
+      replay()
+    })
+  }
+})()`
+
+const select = (label: string, attribute: string, options: string[][], selected: string) =>
+  `<label class="pick"><span>${label}</span><select ${attribute}>${options
+    .map(([value, text]) => `<option value="${value}"${value === selected ? ' selected' : ''}>${text}</option>`)
+    .join('')}</select></label>`
+
+/**
+ * The sticky top bar of the demo page. The static host has no server to
+ * throttle by the cookie (and no worker may control the site root, which
+ * would also control the LCP route), so its bar has no network select.
+ */
+export function navMarkup(base: string, live: boolean): string {
+  const net = live ? select('Network', 'data-net', NETWORKS, 'fast-4g') : ''
+  return `<header class="site"><a class="brand" href="${base}">lazy-ease</a><div class="tools">${net}${select('Reveal', 'data-fade', FADES, String(DEMO_FADE))}<button type="button" class="replay" data-replay title="Replay the page" aria-label="Replay the page">↻</button></div></header>
+<script>${NAV_SCRIPT}</script>`
 }

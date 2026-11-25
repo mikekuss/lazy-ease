@@ -1,5 +1,5 @@
 import { DEFAULT_WIDTHS, fullLadder, normalizeFocalPoint, snapRatio, type FocalPoint } from '@lazy-ease/core'
-import { AVATAR, BANNER, CARD, CELLS, GROW, HERO, PRIVATE, SPLIT, ARTICLE, TINY, type CatalogSource } from './catalog'
+import { AVATAR, BANNER, CARD, CELLS, GROW, HERO, PRIVATE, SPLIT, ARTICLE, TINY, TRANSPARENT, type CatalogSource } from './catalog'
 
 /**
  * Which source and crop each demo section uses. The pages render from these,
@@ -66,6 +66,8 @@ export function staticVariantSets(gallery: CatalogSource[]): StaticVariantSet[] 
     ...CELLS.map((cell): Use => [cell]),
     [CELLS[0]!, SINGLE.width / SINGLE.height],
     [BANNER, BANNER.aspectRatio],
+    // The start and placeholders pages' tiles: uncropped, as CELLS and CARD above.
+    [TRANSPARENT],
     // The shadow panel's square (public on the static host).
     [PRIVATE, 1, undefined, SHADOW_WIDTHS],
   ]

@@ -1,0 +1,35 @@
+import { type ImageLoader } from '@lazy-ease/react'
+import { useState } from 'react'
+import { DemoImage } from '../DemoImage'
+
+/**
+ * What a failed load looks like, three ways, all with what the library has
+ * today: the box keeps its size and the placeholder goes, the image gets
+ * `data-state="error"`. The source does not exist, so every load fails.
+ */
+const MISSING = { src: '/missing-photo.jpg', srcWidth: 1600, srcHeight: 1067, width: 320, height: 213, placeholder: '#a8a29e' }
+
+export function ErrorFallback({ loader }: { loader: ImageLoader }) {
+  const [failed, setFailed] = useState(false)
+  return (
+    <div className="row errors">
+      <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" label="Default: the layout holds" />
+      <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" wrapperClassName="fallback" label="Styled with CSS" />
+      <div className="own-fallback">
+        <DemoImage
+          {...MISSING}
+          loader={loader}
+          alt="A photo that is not there"
+          onStateChange={(state) => setFailed(state === 'error')}
+          label="Your own UI"
+        />
+        {failed && (
+          <div className="own-fallback-ui" role="status">
+            <b>Photo unavailable</b>
+            <span>Click to try again.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

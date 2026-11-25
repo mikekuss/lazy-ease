@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { PRESETS, type PresetName } from './throttle'
 
 /**
  * The GitHub Pages build (`vite build --mode static`): no demo server, images
@@ -22,17 +22,38 @@ export function registerThrottleWorker(scope: string): void {
   })
 }
 
-const subscribe = (listener: () => void) => {
-  if (!('serviceWorker' in navigator)) return () => {}
-  navigator.serviceWorker.addEventListener('controllerchange', listener)
-  return () => navigator.serviceWorker.removeEventListener('controllerchange', listener)
+/**
+ * The network speed the nav's select chose (a cookie the demo server reads
+ * for every image request). Fast 4G until the viewer picks another.
+ */
+export function network(): PresetName {
+  const value = /(?:^|;\s*)le-net=([\w-]+)/.exec(document.cookie)?.[1]
+  return value && value in PRESETS ? (value as PresetName) : 'fast-4g'
 }
 
-/** Whether the service worker controls this page, so the throttle applies. */
-export function useThrottleWorkerActive(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => !STATIC || Boolean(navigator.serviceWorker?.controller),
-    () => !STATIC,
-  )
+/**
+ * Throttle parameters for the static host's service worker, which has no
+ * cookie to read. The live server throttles by the cookie alone.
+ */
+export function staticThrottle(): Record<string, number> {
+  const profile = PRESETS[network()]
+  return STATIC && profile ? { latency: profile.latency, kbps: profile.kbps } : {}
+}
+
+/** Changes with the nav's Replay, so every URL a page builds is new and the browser cache is cold. */
+export function pageRun(): string {
+  try {
+    return sessionStorage.getItem('le-run') ?? '0'
+  } catch {
+    return '0'
+  }
+}
+
+/** The reveal speed the top bar chose, for the whole page: 800 ms until the viewer picks another. */
+export function fadeDuration(): number {
+  try {
+    const stored = localStorage.getItem('le-fade')
+    if (stored !== null && Number.isFinite(Number(stored))) return Number(stored)
+  } catch {}
+  return 800
 }

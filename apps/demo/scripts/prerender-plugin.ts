@@ -5,7 +5,7 @@ import { createLoader } from '@lazy-ease/core'
 import { computeMetadata } from '@lazy-ease/server'
 import type { Plugin } from 'vite'
 import { ARTICLE, AVATAR, CARD, HERO } from '../src/catalog.js'
-import { EXTRA_KINDS, MAIN_KINDS, TILE_SOURCES, tilesMarkup } from '../src/home/kinds.js'
+import { BACKDROP_SOURCE, backdropMarkup, TILE_SOURCES, tilesMarkup } from '../src/tiles/kinds.js'
 import { heroMarkup, navMarkup, pairMarkup, type PrerenderOptions, type SourceMeta } from '../src/prerender.js'
 import { createStaticLoader } from '../src/staticLoader.js'
 import { ensureDemoImages } from './generate-images.js'
@@ -14,7 +14,7 @@ const demoDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const root = path.join(demoDir, 'images')
 // Inlined into every page, so the shared look needs no extra request (the LCP page above all).
 const SITE_CSS = path.join(demoDir, 'src', 'site.css')
-const SOURCES = [...new Set([HERO.mobile.src, HERO.desktop.src, ARTICLE.src, CARD.src, AVATAR.src, ...TILE_SOURCES])]
+const SOURCES = [...new Set([HERO.mobile.src, HERO.desktop.src, ARTICLE.src, CARD.src, AVATAR.src, ...TILE_SOURCES, BACKDROP_SOURCE])]
 
 /** Metadata of the prerendered sources, read from the files (an upload or build step in a real site). */
 export async function prerenderMetadata(): Promise<Map<string, SourceMeta>> {
@@ -56,23 +56,22 @@ export function prerender(): Plugin {
     },
     transformIndexHtml: {
       order: 'pre',
-      async handler(html, { path: page }) {
+      async handler(html) {
         if (!html.includes('<!--le:')) return html
         // Read per page, so an edit shows on the next reload in development.
         const site = html.includes('<!--le:site-->') ? await readFile(SITE_CSS, 'utf8') : ''
-        const current = page.replace(/^\//, '').replace(/index\.html$/, '')
         html = html
           .replace('<!--le:site-->', () => `<style>
 ${site}</style>`)
-          .replace('<!--le:nav-->', () => navMarkup(current, base, staticBase === undefined))
-        if (!/<!--le:(hero|pair|tiles)/.test(html)) return html
+          .replace('<!--le:nav-->', () => navMarkup(base, staticBase === undefined))
+        if (!/<!--le:(hero|pair|tiles|backdrop)/.test(html)) return html
         const options = prerenderOptions(await (meta ??= prerenderMetadata()), staticBase)
         return html
           .replace('<!--le:hero-native-->', () => heroMarkup('native', options))
           .replace('<!--le:hero-fade-->', () => heroMarkup('fade', options))
           .replace('<!--le:pair-->', () => pairMarkup(options))
-          .replace('<!--le:tiles-main-->', () => tilesMarkup(MAIN_KINDS, options.meta))
-          .replace('<!--le:tiles-extra-->', () => tilesMarkup(EXTRA_KINDS, options.meta))
+          .replace('<!--le:backdrop-->', () => backdropMarkup(options.meta))
+          .replace(/<!--le:tiles:([\w-]+)-->/g, (_, name: string) => tilesMarkup(name, options.meta))
       },
     },
   }

@@ -12,7 +12,19 @@ export const HERO_MIN_WIDTH = 280
 export const HERO_MAX_WIDTH = 1440
 
 /** 390 px, or less on a phone, so the frame fits its container at first. */
-export const heroStartWidth = () => Math.max(HERO_MIN_WIDTH, Math.min(390, Math.floor((window.innerWidth - 72) / 10) * 10))
+export const heroStartWidth = () => {
+  // The panel's stage, measured where the panel will be (the static page is laid out before React runs).
+  const available = (document.getElementById('hero-root')?.clientWidth || window.innerWidth) - 60
+  return Math.max(HERO_MIN_WIDTH, Math.min(390, Math.floor(available / 10) * 10))
+}
+
+/** Shows the route's hero alone: no top bar, headings or other sections, no margins. */
+const FRAME_CSS = `html { overflow: hidden }
+.site, .case, .single > h1, .single > .lead, .usecase header, .usecase-bar, .usecase-props, .usecase + .usecase { display: none }
+.page, .single { max-width: none; margin: 0; padding: 0 }
+.usecase { margin: 0; border: 0; border-radius: 0; background: none }
+.usecase-stage { padding: 0 }
+.hero, .hero-area { margin: 0; border-radius: 0 }`
 
 /** `run` changes the frame's URL, so a replay loads the route again. */
 export function HeroFrame({ width, route, run, details }: { width: number; route: 'lcp' | 'fade'; run: number; details: boolean }) {
@@ -26,7 +38,7 @@ export function HeroFrame({ width, route, run, details }: { width: number; route
       const img = frame.current?.contentDocument?.querySelector<HTMLImageElement>('[data-hero] img')
       if (!img) return setInfo('')
       const hero = img.closest('[data-hero]')!.getBoundingClientRect()
-      setHeight(Math.ceil(hero.bottom + frame.current!.contentWindow!.scrollY) + 20)
+      setHeight(Math.ceil(hero.bottom + frame.current!.contentWindow!.scrollY))
       const { aspectRatio, focalPoint } = variantOf(img.currentSrc || 'about:blank')
       const crop = aspectRatio === undefined ? '' : `ar ${aspectRatio}${focalPoint ? ` · focus ${focalPoint.x}/${focalPoint.y}` : ''}`
       void pixels(img).then((size) => setInfo([route === 'fade' && stateOf(img), crop, size].filter(Boolean).join(' · ')))
@@ -46,7 +58,7 @@ export function HeroFrame({ width, route, run, details }: { width: number; route
       if (doc?.head && doc.location.pathname.endsWith(`/${route}/`) && !doc.getElementById('frame-chrome')) {
         const style = doc.createElement('style')
         style.id = 'frame-chrome'
-        style.textContent = 'html { overflow: hidden } .site, .bar, .case > h2, .props { display: none }'
+        style.textContent = FRAME_CSS
         doc.head.append(style)
       }
       request = requestAnimationFrame(hide)

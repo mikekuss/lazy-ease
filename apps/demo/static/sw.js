@@ -9,7 +9,7 @@ const TICKS_PER_SECOND = 20
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// Registered per route (fade/, recipes/), never for the site root, so the
+// Registered for the fade route only, never for the site root, so the
 // LCP route is outside every worker. Earlier deployments registered it for
 // the root; such a registration removes itself on its next update check.
 const ROOT = new URL('./', self.location).href
@@ -25,9 +25,19 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
   if (url.origin !== location.origin || !url.pathname.includes('/_img/')) return
   const kbps = Number(url.searchParams.get('kbps'))
-  if (!(kbps > 0)) return
-  const latency = Math.max(0, Number(url.searchParams.get('latency')) || 0)
-  event.respondWith(throttled(event.request, latency, kbps))
+  if (kbps > 0) {
+    const latency = Math.max(0, Number(url.searchParams.get('latency')) || 0)
+    return event.respondWith(throttled(event.request, latency, kbps))
+  }
+  // A native image from the HTML has no parameters: the page wrote the top
+  // bar's choice into Cache Storage ({ latency, kbps }, or {} for real speed).
+  event.respondWith(
+    caches
+      .open('le-demo')
+      .then((cache) => cache.match('net'))
+      .then((stored) => (stored ? stored.json() : {}))
+      .then(({ latency, kbps }) => (kbps > 0 ? throttled(event.request, Math.max(0, latency || 0), kbps) : fetch(event.request))),
+  )
 })
 
 async function throttled(request, latency, kbps) {

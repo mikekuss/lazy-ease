@@ -1,11 +1,9 @@
+.single { max-width:1100px; margin:0 auto; padding:40px 24px 96px }
+.single h1 { margin:0; font-size:32px; letter-spacing:-.02em }
+.single .lead { margin:6px 0 28px }
 .hero-area { position:relative; max-width:1600px }
-.warn { color:var(--warn) }
-.pair { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:16px; align-items:start; max-width:1100px }
+.pair { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:20px; align-items:start }
 .pair-item { margin:0 }
-.pair-item [data-le] { border-radius:var(--radius); overflow:hidden }
-.pair-item > img { border-radius:var(--radius) }
-.pair-item figcaption { margin-top:4px; font-size:12px; font-weight:600 }
-.readout { display:block; font:11px/1.4 var(--mono); color:var(--muted); min-height:1.4em }
-#native-check { margin-top:12px }
-#native-check[data-result="pass"] { color:var(--ok) }
-#native-check[data-result="fail"] { color:var(--error) }
+.pair-item [data-le], .pair-item > img { border-radius:var(--radius); overflow:hidden; cursor:pointer }
+.pair-item figcaption { margin-top:8px; font-size:14px; font-weight:600 }
+@media (max-width:640px) { .single { padding:24px 16px 64px } }

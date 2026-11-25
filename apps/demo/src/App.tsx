@@ -1,20 +1,18 @@
 import { createLoader, LazyEaseProvider, type ImageLoader } from '@lazy-ease/react'
-import { detectAvif, focusReveal } from '@lazy-ease/core'
+import { detectAvif } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as thumbhash from 'thumbhash'
 import { ARTICLE, ARTICLE_SIZES, AVATAR, CARD, CELLS, GROW, LOGO, SPLIT, TINY, WAVE, type CatalogSource } from './catalog'
-import { Controls } from './Controls'
 import { DemoImage } from './DemoImage'
-import { BASE, STATIC } from './mode'
+import { BASE, STATIC, fadeDuration, pageRun, staticThrottle } from './mode'
 import { CARD_SIZE, EXTERNAL_FILE, GALLERY_SIZE, galleryRatio, SINGLE } from './plan'
-import { Backend } from './recipes/Backend'
+import { ErrorFallback } from './recipes/ErrorFallback'
 import { Banner } from './recipes/Banner'
 import { HERO_MAX_WIDTH, HERO_MIN_WIDTH, HeroFrame, heroStartWidth } from './recipes/HeroFrame'
 import { shadowLoader, ShadowPanel } from './recipes/ShadowPanel'
 import { Choice, UseCase } from './recipes/UseCase'
-import { FORMATS, loadSettings, saveSettings, throttleParams, throttleProfile, type Settings } from './settings'
-import { createStaticLoader, type StaticFormat } from './staticLoader'
+import { createStaticLoader } from './staticLoader'
 
 const decoder = thumbhashDecoder(thumbhash)
 
@@ -34,23 +32,64 @@ const IMAGE_LIST = STATIC ? `${BASE}api/images.json` : '/api/images'
 const GALLERY = STATIC ? GALLERY_SIZE.static : GALLERY_SIZE.live
 const DENSITIES = [0, 1, 2, 3].map((value) => [value, value ? `${value}×` : 'Device'] as const)
 
-/** The use cases in page order, grouped as in the side list. */
-const GROUPS = [
-  ['Start', [['hero', 'Hero']]],
-  ['Layout', [['fixed', 'Fixed size'], ['ratio', 'Breakpoint ratio'], ['resize', 'Resize'], ['fill', 'Fill'], ['article', 'Article']]],
-  ['Sources', [['background', 'Background'], ['originals', 'SVG, GIF, external'], ['shadow', 'Shadow panel'], ['backend', 'Backend']]],
-  ['Scrolling', [['gallery', 'Scroll gallery']]],
-] as const
+const LOADINGS = [['lazy', 'Lazy'], ['native', 'Native'], ['eager', 'Eager']] as const
+type Loading = (typeof LOADINGS)[number][0]
+
+/**
+ * A loader for one replay of one use case. The live server throttles by the
+ * top bar's cookie; the static host's service worker reads the parameters.
+ * `run` makes every URL new, so a replay starts with a cold browser cache;
+ * the server strips it and the throttle parameters again.
+ */
+function demoLoader(key: string): ImageLoader {
+  const params = { ...staticThrottle(), run: `${pageRun()}-${key}` }
+  return STATIC ? createStaticLoader({ baseUrl: `${BASE}_img`, params }) : createLoader({ params })
+}
+
+/** The provider every React part of the demo page shares: the top bar's reveal speed, ThumbHash placeholders. */
+function Provider({ loader, children }: { loader: ImageLoader; children: ReactNode }) {
+  return (
+    <LazyEaseProvider loader={loader} thumbhash={decoder} detectFormat={detectAvif} fadeDuration={fadeDuration()}>
+      {children}
+    </LazyEaseProvider>
+  )
+}
+
+/** The hero use case: the fade or LCP route in a frame of adjustable width. */
+export function HeroPanel() {
+  const [heroWidth, setHeroWidth] = useState(heroStartWidth)
+  const [heroRoute, setHeroRoute] = useState<'lcp' | 'fade'>('fade')
+  return (
+    <UseCase
+      id="hero"
+      title="Hero"
+      note="Art direction: another crop and focus from 800 px. Never painted in steps."
+      // The LCP route's sources are in its HTML: loading it again only hits the cache.
+      replayable={heroRoute === 'fade'}
+      controls={
+        <>
+          <Choice label="Route" value={heroRoute} options={[['fade', 'Fade'], ['lcp', 'LCP']]} onChange={setHeroRoute} />
+          <label className="field range">
+            <span>
+              Viewport <output>{heroWidth} px</output>
+            </span>
+            <input type="range" min={HERO_MIN_WIDTH} max={HERO_MAX_WIDTH} step={10} value={heroWidth} onChange={(e) => setHeroWidth(Number(e.target.value))} />
+          </label>
+        </>
+      }
+      props={heroRoute === 'lcp' ? '<img srcset sizes fetchpriority="high">  in the first HTML' : '<span data-le> <img data-le-srcset data-le-sizes>'}
+    >
+      {(replay) => <HeroFrame width={heroWidth} route={heroRoute} run={replay} details={false} />}
+    </UseCase>
+  )
+}
 
 export function App() {
-  const [settings, setSettings] = useState<Settings>(loadSettings)
-  const [run, setRun] = useState(0)
   const [images, setImages] = useState<SourceImage[]>([])
   const [density, setDensity] = useState<number>(0)
   const [growWidth, setGrowWidth] = useState(240)
   const [showHidden, setShowHidden] = useState(false)
-  const [heroWidth, setHeroWidth] = useState(heroStartWidth)
-  const [heroRoute, setHeroRoute] = useState<'lcp' | 'fade'>('fade')
+  const [loading, setLoading] = useState<Loading>('lazy')
 
   useEffect(() => {
     // On the first start the server is still generating the images, so retry.
@@ -66,57 +105,29 @@ export function App() {
     return () => clearTimeout(timer)
   }, [])
 
-  useEffect(() => saveSettings(settings), [settings])
-
   // The cases render once the image list is in; only then can a #case link scroll to its panel.
   const ready = images.length > 0
   useEffect(() => {
     if (ready && location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView()
   }, [ready])
 
-  // `run` makes every URL new, so "Reload all" starts with a cold browser
-  // cache, and a use case's replay count does the same for that case. The
-  // demo server strips these and the throttle settings again; the static
-  // host ignores the query string, and its service worker reads it.
-  const throttle = STATIC ? throttleProfile(settings) : throttleParams(settings)
-  const makeLoader = (runParam: Record<string, string | number>): ImageLoader =>
-    STATIC
-      ? createStaticLoader({ baseUrl: `${BASE}_img`, formats: FORMATS[settings.formats] as readonly StaticFormat[], params: { ...throttle, ...runParam } })
-      : { ...createLoader({ params: { ...throttle, ...runParam } }), formats: FORMATS[settings.formats] }
-  const loader = useMemo(() => makeLoader(run > 0 ? { run } : {}), [settings, run])
+  const loader = useMemo(() => demoLoader('page'), [])
   // One loader per use case and replay, kept so a re-render passes the same object.
-  const loaders = useMemo(() => new Map<string, ImageLoader>(), [settings, run])
+  const loaders = useMemo(() => new Map<string, ImageLoader>(), [])
   const loaderOf = (id: string, replay: number): ImageLoader => {
     if (replay === 0) return loader
     const key = `${id}-${replay}`
     let own = loaders.get(key)
-    if (!own) loaders.set(key, (own = id === 'shadow' ? shadowLoader({ ...throttle, run: `${run}-${key}` }) : makeLoader({ run: `${run}-${key}` })))
+    if (!own) loaders.set(key, (own = id === 'shadow' ? shadowLoader({ ...staticThrottle(), run: `${pageRun()}-${key}` }) : demoLoader(key)))
     return own
   }
-  const panelLoader = useMemo(() => shadowLoader({ ...throttle, ...(run > 0 ? { run } : {}) }), [settings, run])
-  // Any change restarts the demo so you can watch it from a clean state.
-  const demoKey = `${run}-${JSON.stringify(settings)}`
-  const changeSettings = (next: Settings) => {
-    performance.clearResourceTimings()
-    setSettings(next)
-  }
-  const reload = () => {
-    performance.clearResourceTimings()
-    window.scrollTo({ top: 0 })
-    setRun((value) => value + 1)
-  }
+  const panelLoader = useMemo(() => shadowLoader({ ...staticThrottle(), run: `${pageRun()}-shadow` }), [])
+  const run = pageRun()
 
   /** Originals load as they are; a replay changes only their query, which the hosts ignore. */
-  const runQuery = (replay: number) => (replay > 0 || run > 0 ? `?run=${run}-${replay}` : '')
+  const runQuery = (replay: number) => `?run=${run}-${replay}`
   const byPath = useMemo(() => new Map(images.map((image) => [image.src, image])), [images])
-  const placeholderFor = (image: SourceImage | undefined) =>
-    !image
-      ? '#3b4a3f'
-      : settings.placeholder === 'thumbhash'
-        ? `thumbhash:${image.thumbhash}`
-        : settings.placeholder === 'color'
-          ? image.color
-          : 'none'
+  const placeholderFor = (image: SourceImage | undefined) => (image ? `thumbhash:${image.thumbhash}` : '#3b4a3f')
   /** Logical source with trusted dimensions and revision, as a CMS would pass them. */
   const source = ({ src, width, height }: CatalogSource) => ({
     src,
@@ -132,76 +143,13 @@ export function App() {
   const external = byPath.get(`/${EXTERNAL_FILE}`)
 
   return (
-    <LazyEaseProvider
-      loader={loader}
-      thumbhash={decoder}
-      detectFormat={detectAvif}
-      loading={settings.loading}
-      rootMargin={`${settings.rootMargin}px`}
-      dwellTime={settings.dwellTime}
-      fadeDuration={settings.reveal === 'none' ? 0 : settings.fadeDuration}
-      reveal={settings.reveal === 'focus' ? focusReveal : undefined}
-    >
-      <Controls settings={settings} onChange={changeSettings} onReload={reload} />
-      {STATIC && (
-        <p className="static-banner">
-          Static demo: pre-rendered variants. Run <code>pnpm dev</code> for the live server.
-        </p>
-      )}
-
+    <Provider loader={loader}>
       {gallery.length === 0 ? (
         <p className="empty">
           {STATIC ? 'Loading the image list …' : 'Loading the image list … is the demo server running on port 3001?'}
         </p>
       ) : (
-        <div className={settings.details ? 'recipes' : 'recipes plain'}>
-          <nav className="side" aria-label="Use cases">
-            {GROUPS.map(([group, cases]) => (
-              <div key={group}>
-                <h2>{group}</h2>
-                {cases.map(([id, title]) => (
-                  <a key={id} href={`#${id}`}>
-                    {title}
-                  </a>
-                ))}
-              </div>
-            ))}
-          </nav>
-
-          <main key={demoKey}>
-            {/* The side list's stand-in on narrow screens. */}
-            <nav className="chips" aria-label="Use cases">
-              {GROUPS.flatMap(([, cases]) =>
-                cases.map(([id, title]) => (
-                  <a key={id} href={`#${id}`}>
-                    {title}
-                  </a>
-                )),
-              )}
-            </nav>
-            <h2 className="group">Start</h2>
-            <UseCase
-              id="hero"
-              title="Hero"
-              note="Art direction from 800 px. The route runs with its own settings."
-              // The LCP route's sources are in its HTML: loading it again only hits the cache.
-              replayable={heroRoute === 'fade'}
-              controls={
-                <>
-                  <Choice label="Route" value={heroRoute} options={[['lcp', 'LCP'], ['fade', 'Fade']]} onChange={setHeroRoute} />
-                  <label className="field range">
-                    <span>
-                      Viewport <output>{heroWidth} px</output>
-                    </span>
-                    <input type="range" min={HERO_MIN_WIDTH} max={HERO_MAX_WIDTH} step={10} value={heroWidth} onChange={(e) => setHeroWidth(Number(e.target.value))} />
-                  </label>
-                </>
-              }
-              props={heroRoute === 'lcp' ? '<img srcset sizes fetchpriority="high">  in the first HTML' : '<span data-le> <img data-le-srcset data-le-sizes>'}
-            >
-              {(replay) => <HeroFrame width={heroWidth} route={heroRoute} run={replay} details={settings.details} />}
-            </UseCase>
-
+        <div className="plain">
             <h2 className="group">Layout</h2>
             <UseCase
               id="fixed"
@@ -281,7 +229,7 @@ export function App() {
             <UseCase id="article" title="Article" note="Native with intrinsic ratio. Without source size: one URL." props={`<Image loading="native" sizes="${ARTICLE_SIZES}" />`}>
               {(replay) => (
                 <div className="article">
-                  <DemoImage {...source(ARTICLE)} loader={loaderOf('article', replay)} alt="Night sky" loading="native" sizes={ARTICLE_SIZES} label="native" />
+                  <DemoImage {...source(ARTICLE)} loader={loaderOf('article', replay)} alt="Night sky" loading="native" sizes={ARTICLE_SIZES} label="native, no layout shift" />
                   <DemoImage src={SINGLE.src} loader={loaderOf('article', replay)} alt="Canyon" width={SINGLE.width} height={SINGLE.height} placeholder={placeholderFor(byPath.get(SINGLE.src))} label="one URL" />
                 </div>
               )}
@@ -315,13 +263,24 @@ export function App() {
               {(replay) => <ShadowPanel loader={replay ? loaderOf('shadow', replay) : panelLoader} />}
             </UseCase>
 
-            <UseCase id="backend" title="Backend" note={STATIC ? 'Live server only.' : 'Denied crop, cache hit, eviction.'} props="createImageApp({ root, storage, policy })" replayable={!STATIC}>
-              {() => (STATIC ? null : <Backend />)}
+            <UseCase
+              id="errors"
+              title="Error fallback"
+              note="A source that fails: the box keeps its size, the placeholder goes. Click to try again."
+              props={'[data-le][data-state="error"] { … }   onStateChange={(state) => state === "error" && …}'}
+            >
+              {(replay) => <ErrorFallback loader={loaderOf('errors', replay)} />}
             </UseCase>
             <h2 className="group">Scrolling</h2>
-            <UseCase id="gallery" title="Scroll gallery" note={settings.details ? 'Lazy as you scroll. Crossed out: what sizes="100vw" would load.' : 'Lazy as you scroll.'} props="<Image aspectRatio={ratio} />">
+            <UseCase
+              id="gallery"
+              title="Scroll gallery"
+              note="Each image loads as it comes near the viewport."
+              controls={<Choice label="Loading" value={loading} options={LOADINGS} onChange={setLoading} />}
+              props={`<Image aspectRatio={ratio} loading="${loading}"${loading === 'native' ? ' sizes="…"' : ''} />`}
+            >
               {(replay) => (
-                <div className="gallery">
+                <div className="gallery" key={loading}>
                   {Array.from({ length: GALLERY }, (_, i) => {
                     const [label, ratio] = galleryRatio(i, gallery.length)
                     return (
@@ -331,8 +290,8 @@ export function App() {
                         loader={loaderOf('gallery', replay)}
                         alt=""
                         aspectRatio={ratio}
-                        compare={settings.details}
-                        {...(settings.loading === 'native' ? { sizes: '(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw' } : {})}
+                        loading={loading}
+                        {...(loading === 'native' ? { sizes: '(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw' } : {})}
                         label={`#${i + 1} · ${label}`}
                       />
                     )
@@ -340,9 +299,8 @@ export function App() {
                 </div>
               )}
             </UseCase>
-          </main>
         </div>
       )}
-    </LazyEaseProvider>
+    </Provider>
   )
 }

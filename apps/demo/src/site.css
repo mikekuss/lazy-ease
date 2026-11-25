@@ -21,12 +21,15 @@ code { font-family:var(--mono); font-size:.9em }
 a { color:inherit }
 
 /* Site header: brand and page links. */
-.site { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; padding:8px 20px; background:var(--text); font-size:14px }
-.site a { color:#d1d5db; text-decoration:none; padding:2px 8px; border-radius:6px }
-.site a:hover { color:#fff }
-.site a[aria-current=page] { color:#fff; background:rgb(255 255 255 / .14) }
-.site .brand { color:#fff; font-weight:700; padding-left:0; margin-right:4px; background:none }
-.site nav { display:flex; flex-wrap:wrap; gap:2px }
+/* The sticky top bar: name, then network, reveal speed and Replay, all one height. */
+.site { position:sticky; top:0; z-index:20; display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; padding:10px 24px; background:var(--text); font-size:14px }
+.site .brand { color:#fff; font-weight:700; font-size:16px; letter-spacing:-.01em; text-decoration:none }
+.site .tools { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin-left:auto }
+.site .pick { display:flex; align-items:center; gap:6px; color:#9ca3af; font-size:13px }
+.site select, .site .replay { box-sizing:border-box; height:32px; border:1px solid #374151; border-radius:8px; background:#1f2937; color:#f9fafb; font-size:13px }
+.site select { padding:0 8px }
+.site .replay { width:32px; padding:0; font-size:16px; line-height:1 }
+.site .replay:hover, .site select:hover { border-color:#6b7280 }
 
 /* Control bar, sticky under the header. */
 .bar { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; padding:10px 20px; background:var(--panel); border-bottom:1px solid var(--line); font-size:14px }
@@ -56,7 +59,127 @@ input[type=range] { width:120px }
 .props { display:block; width:fit-content; max-width:100%; margin:0 0 12px; padding:4px 10px; overflow-x:auto; white-space:pre; font:12px/1.6 var(--mono); color:#374151; background:var(--panel); border:1px solid var(--line); border-radius:6px }
 
 @media (max-width:640px) {
-  .site, .bar, .page { padding-left:16px; padding-right:16px }
+  /* One row on a phone: the selects without their labels and narrower. */
+  .site { flex-wrap:nowrap; padding:8px 12px }
+  .site .tools { flex-wrap:nowrap; gap:6px }
+  .site select { max-width:104px }
+  .bar, .page { padding-left:16px; padding-right:16px }
+  .site .pick span { display:none }
   /* Not sticky on a phone: wrapped, it would cover a third of the screen. */
   .bar { position:relative; gap:8px 14px }
+}
+
+/* Click an image to replay it: a hint on hover. */
+[data-click-replay], .tile [data-le] { cursor:pointer }
+
+/* A use case: one panel with a title, a line, its own controls, the demo and the props it passes. */
+.usecase {
+  margin: 0 0 28px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  scroll-margin-top: 96px;
+}
+
+.usecase > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 28px 0;
+}
+
+.usecase h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+.usecase header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.usecase header button {
+  flex-shrink: 0;
+}
+
+.usecase-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 24px;
+  margin: 16px 28px 0;
+  font-size: 14px;
+}
+
+.usecase-stage {
+  padding: 24px 28px 28px;
+}
+
+.usecase-props {
+  display: block;
+  padding: 10px 28px;
+  overflow-x: auto;
+  white-space: pre;
+  font: 12px/1.6 var(--mono);
+  color: var(--muted);
+  background: #f9fafb;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 640px) {
+  .usecase > header {
+    padding: 18px 18px 0;
+  }
+
+  .usecase-bar {
+    margin: 14px 18px 0;
+  }
+
+  .usecase-stage {
+    padding: 18px;
+  }
+
+  .usecase-props {
+    padding: 10px 18px;
+  }
+}
+
+/* ---- The demo page: intro, then a side list and one panel per use case ---- */
+.intro { position:relative; overflow:hidden; color:#fff; background:#1c1917 }
+.intro .backdrop { position:absolute; inset:-40px; background-size:cover; background-position:50% }
+.intro::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg, rgb(12 10 9 / .78) 0%, rgb(12 10 9 / .4) 50%, rgb(12 10 9 / 0) 100%) }
+.intro-inner { position:relative; z-index:1; max-width:1360px; margin:0 auto; padding:88px 32px 80px }
+.intro h1 { margin:0; max-width:14ch; font-size:clamp(36px, 6vw, 60px); line-height:1.05; letter-spacing:-.03em }
+.intro p { max-width:46ch; margin:20px 0 0; font-size:18px; color:#e7e5e4 }
+.install { display:inline-block; margin-top:32px; padding:9px 16px; font:14px var(--mono); color:#fafaf9; background:rgb(255 255 255 / .12); border:1px solid rgb(255 255 255 / .25); border-radius:8px }
+.features { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:24px; max-width:1360px; margin:0 auto; padding:32px 32px 0 }
+.features b { display:block; font-size:16px }
+.features span { display:block; margin-top:4px; color:var(--muted); font-size:14px }
+
+.layout { display:grid; grid-template-columns:190px minmax(0, 1fr); gap:48px; max-width:1360px; margin:0 auto; padding:40px 32px 96px }
+.side { position:sticky; top:76px; align-self:start; display:grid; gap:22px; font-size:14px }
+.side h2, .group { margin:0 0 6px; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--faint) }
+.side a { display:block; padding:3px 0; color:var(--muted); text-decoration:none }
+.side a:hover { color:var(--text) }
+.group { margin:56px 0 16px }
+.layout main > .chips + .group { margin-top:0 }
+.chips { display:none }
+.usecase { scroll-margin-top:76px }
+.usecase header button { flex-shrink:0 }
+
+@media (max-width:900px) {
+  .features { grid-template-columns:1fr 1fr }
+  .layout { grid-template-columns:minmax(0, 1fr); gap:0; padding:24px 16px 64px }
+  .side { display:none }
+  .chips { display:flex; gap:8px; margin:0 0 8px; padding-bottom:6px; overflow-x:auto }
+  .chips a { flex:none; padding:4px 12px; font-size:13px; color:var(--muted); text-decoration:none; background:var(--panel); border:1px solid var(--line); border-radius:999px }
+}
+@media (max-width:640px) {
+  .intro-inner { padding:56px 16px 48px }
+  .intro p { font-size:16px }
+  .features { grid-template-columns:1fr; gap:16px; padding:24px 16px 0 }
 }
