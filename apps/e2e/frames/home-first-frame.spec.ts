@@ -15,7 +15,7 @@ test('every placeholder tile shows its placeholder in the first HTML', async ({ 
   // Load, so the render-blocking stylesheets apply as they do before the first paint.
   await page.goto('/', { waitUntil: 'load' })
   const boxes = page.locator('.tile [data-le]')
-  await expect(boxes).toHaveCount(9)
+  await expect(boxes).toHaveCount(8)
   const tiles = await boxes.evaluateAll((all) =>
     all.map((box) => {
       const style = getComputedStyle(box)

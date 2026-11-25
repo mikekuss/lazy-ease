@@ -75,9 +75,7 @@ export const TILES: Record<string, Tile[]> = {
     COLOR,
     URI,
     { title: 'Transparent', source: TRANSPARENT, style: svg, code: () => 'ThumbHash with alpha', transparent: true },
-  ],
-  ssr: [
-    { title: 'SSR image', source: NIGHT, style: svg, code: () => 'thumbhashSsr="image"' },
+    // Color in the server HTML, the ThumbHash image once the script runs.
     { title: 'SSR color', source: NIGHT, style: color, placeholder: (m) => `thumbhash:${m.thumbhash}`, code: () => 'thumbhashSsr="color"' },
   ],
   // Both at the page's reveal speed (the top bar), which their code lines show.

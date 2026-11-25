@@ -24,7 +24,7 @@ export const SINGLE = { src: CELLS[0]!.src, width: 320, height: 480 }
 /** Width of the banner slot, for its image-set(). */
 export const BANNER_WIDTH = 720
 
-export const GALLERY_SIZE = { live: 40, static: 20 }
+export const GALLERY_SIZE = { live: 12, static: 12 }
 
 export const galleryRatio = (i: number, imageCount: number) =>
   RATIOS[(i * 2 + Math.floor(i / imageCount)) % RATIOS.length]!

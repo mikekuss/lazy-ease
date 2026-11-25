@@ -27,32 +27,24 @@
 
     <div class="layout">
       <nav class="side" aria-label="Use cases">
-        <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a></div>
-        <div><h2>Loading</h2><a href="#hero">Hero</a><a href="#template">Template HTML</a></div>
-        <div><h2>Layout</h2><a href="#fixed">Fixed size</a><a href="#ratio">Breakpoint ratio</a><a href="#resize">Resize</a><a href="#fill">Fill</a><a href="#article">Article</a></div>
-        <div><h2>Sources</h2><a href="#background">Background</a><a href="#originals">SVG, GIF, external</a><a href="#shadow">Shadow panel</a><a href="#errors">Error fallback</a></div>
-        <div><h2>Scrolling</h2><a href="#gallery">Scroll gallery</a></div>
+        <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#reveal">Reveal</a></div>
+        <div><h2>Behaviour</h2><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a></div>
+        <div><h2>Layout</h2><a href="#hero">Hero</a><a href="#layout">Layout modes</a></div>
+        <div><h2>Integration</h2><a href="#template">Template HTML</a><a href="#sources">Other sources</a></div>
       </nav>
 
       <main>
         <nav class="chips" aria-label="Use cases">
-          <a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a><a href="#hero">Hero</a><a href="#template">Template HTML</a><a href="#fixed">Fixed size</a><a href="#ratio">Breakpoint ratio</a><a href="#resize">Resize</a><a href="#fill">Fill</a><a href="#article">Article</a><a href="#background">Background</a><a href="#originals">SVG, GIF, external</a><a href="#shadow">Shadow panel</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a>
+          <a href="#kinds">Kinds</a><a href="#reveal">Reveal</a><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a><a href="#hero">Hero</a><a href="#layout">Layout modes</a><a href="#template">Template HTML</a><a href="#sources">Other sources</a>
         </nav>
 
         <h2 class="group">Placeholders</h2>
         <section class="usecase" id="kinds">
           <header>
-            <div><h3>Kinds</h3><p>In the first HTML, from <code>computeMetadata()</code> on the server.</p></div>
+            <div><h3>Kinds</h3><p>In the first HTML, from <code>computeMetadata()</code> on the server. With React SSR, <code>thumbhashSsr</code> picks the image or its color.</p></div>
             <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
           </header>
           <div class="usecase-stage"><div class="tiles"><!--le:tiles:kinds--></div></div>
-        </section>
-        <section class="usecase" id="ssr">
-          <header>
-            <div><h3>Server rendering</h3><p>What React writes into the HTML before hydration.</p></div>
-            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
-          </header>
-          <div class="usecase-stage"><div class="tiles"><!--le:tiles:ssr--></div></div>
         </section>
         <section class="usecase" id="reveal">
           <header>
@@ -62,8 +54,9 @@
           <div class="usecase-stage"><div class="tiles"><!--le:tiles:reveals--></div></div>
         </section>
 
-        <h2 class="group">Loading</h2>
-        <div id="hero-root"></div>
+        <div id="cases-root"></div>
+
+        <h2 class="group">Integration</h2>
         <section class="usecase" id="template">
           <header>
             <div><h3>Template HTML</h3><p>A PHP or any server template and the vanilla script. The native image is the browser's own.</p></div>
@@ -85,7 +78,7 @@
           <code class="usecase-props">&lt;img data-le srcset&gt;  ·  data-le-url  ·  data-le-srcset</code>
         </section>
 
-        <div id="root"></div>
+        <div id="more-root"></div>
       </main>
     </div>
     <script type="module" src="/src/tiles/main.ts"></script>
