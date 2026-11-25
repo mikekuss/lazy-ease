@@ -34,6 +34,9 @@ const DENSITIES = [0, 1, 2, 3].map((value) => [value, value ? `${value}×` : 'De
 
 const LOADINGS = [['lazy', 'Lazy'], ['native', 'Native'], ['eager', 'Eager']] as const
 type Loading = (typeof LOADINGS)[number][0]
+/** Preload distances: 0 px in the demo, so each image visibly loads as it scrolls in; the library's 400 px is marked. */
+const PRELOADS = [['0', '0 px'], ['400', '400 px (default)']] as const
+type Preload = (typeof PRELOADS)[number][0]
 const LAYOUTS = [['fixed', 'Fixed size'], ['ratio', 'Breakpoint ratio'], ['fill', 'Fill'], ['article', 'Article']] as const
 type Layout = (typeof LAYOUTS)[number][0]
 const SOURCES = [['background', 'CSS background'], ['originals', 'SVG, GIF, external'], ['shadow', 'Shadow DOM']] as const
@@ -95,6 +98,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
   const [growWidth, setGrowWidth] = useState(240)
   const [showHidden, setShowHidden] = useState(false)
   const [loading, setLoading] = useState<Loading>('lazy')
+  const [preload, setPreload] = useState<Preload>('0')
   const [layout, setLayout] = useState<Layout>('fixed')
   const [kind, setKind] = useState<Source>('background')
 
@@ -221,11 +225,16 @@ export function App({ part }: { part: 'main' | 'more' }) {
         id="gallery"
         title="Scroll gallery"
         note="Each image loads as it comes near the viewport, at the size of its cell."
-        controls={<Choice label="Loading" value={loading} options={LOADINGS} onChange={setLoading} />}
-        props={`<Image aspectRatio={ratio} loading="${loading}"${loading === 'native' ? ' sizes="…"' : ''} />`}
+        controls={
+          <>
+            <Choice label="Loading" value={loading} options={LOADINGS} onChange={setLoading} />
+            {loading === 'lazy' && <Choice label="Preload distance" value={preload} options={PRELOADS} onChange={setPreload} />}
+          </>
+        }
+        props={`<Image aspectRatio={ratio} loading="${loading}"${loading === 'lazy' ? ` rootMargin="${preload}px"` : ''}${loading === 'native' ? ' sizes="…"' : ''} />`}
       >
         {(replay) => (
-          <div className="gallery" key={loading}>
+          <div className="gallery" key={`${loading}-${preload}`}>
             {Array.from({ length: GALLERY }, (_, i) => {
               const [label, ratio] = galleryRatio(i, gallery.length)
               return (
@@ -236,6 +245,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
                   alt=""
                   aspectRatio={ratio}
                   loading={loading}
+                  rootMargin={`${preload}px`}
                   {...(loading === 'native' ? { sizes: '(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw' } : {})}
                   label={label}
                 />

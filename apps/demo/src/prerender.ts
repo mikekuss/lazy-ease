@@ -162,6 +162,8 @@ export const DEMO_FADE = 800
  */
 const NAV_SCRIPT = `(() => {
   const bar = document.querySelector('.site')
+  // A reload or Replay starts at the top, so the images further down load as they scroll in, not all at once.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
   const net = bar.querySelector('[data-net]')
   const fade = bar.querySelector('[data-fade]')
   const replay = () => {
