@@ -75,7 +75,7 @@ export function HeroPanel() {
           <input type="range" min={HERO_MIN_WIDTH} max={HERO_MAX_WIDTH} step={10} value={heroWidth} onChange={(e) => setHeroWidth(Number(e.target.value))} />
         </label>
       }
-      props="<picture> <source media srcset> <img srcset sizes>  with the placeholder in the HTML"
+      props={'<span data-le style="background-color:#286898">\n  <picture>\n    <source media="(min-width:800px)" data-le-srcset="/_img/desert-dusk.jpg?ar=2&fx=65&fy=40&… 750w, …" data-le-sizes="100vw">\n    <img alt="Mountains at dawn" data-le-srcset="/_img/alpine-dawn.jpg?ar=1&fx=30&fy=45&… 750w, …" data-le-sizes="100vw">\n  </picture>\n</span>'}
     >
       {(replay) => <HeroFrame width={heroWidth} route="fade" run={replay} details={false} />}
     </UseCase>
@@ -161,10 +161,15 @@ export function App({ part }: { part: 'main' | 'more' }) {
     </>
   )
   const layoutProps = {
-    fixed: `<Image width={56} height={56} focalPoint={{ x: 40, y: 30 }}${density ? ` sizes="${sizesFor(AVATAR.size)}"` : ''} />`,
-    ratio: '<Image aspectRatio={4 / 3} sources={[{ media, aspectRatio: 2 }]} />   @media (min-width:800px) { [data-le] { --le-ar: 2 } }',
-    fill: "<div style={{ position: 'relative' }}><Image fill /></div>",
-    article: `<Image loading="native" sizes="${ARTICLE_SIZES}" />`,
+    fixed: `<Image src="/misty-pines.jpg" alt="Pines" width={56} height={56} srcWidth={1600} srcHeight={2400} focalPoint={{ x: 40, y: 30 }}${density ? ` sizes="${sizesFor(AVATAR.size)}"` : ''} />`,
+    ratio: `<Image src="/blue-ridge.jpg" alt="Ridge" aspectRatio={4 / 3} sizes="100vw" srcWidth={3000} srcHeight={2000}
+  sources={[{ media: '(min-width:800px)', src: '/blue-ridge.jpg', srcWidth: 3000, srcHeight: 2000, aspectRatio: 2, sizes: '50vw' }]} />
+/* CSS: the box's ratio from 800 px */
+@media (min-width:800px) { [data-le] { --le-ar: 2 } }`,
+    fill: `<div style={{ position: 'relative', aspectRatio: 1 }}>
+  <Image src="/ember-canyon.jpg" alt="" fill srcWidth={1600} srcHeight={2400} />
+</div>`,
+    article: `<Image src="/northern-night.jpg" alt="Night sky" loading="native" sizes="${ARTICLE_SIZES}" srcWidth={3000} srcHeight={2000} />`,
   }[layout]
   const layoutNote = {
     fixed: '1× and 2× candidates for a fixed box. A 40 px original gets one URL.',
@@ -188,7 +193,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
             <input type="range" min={120} max={900} step={10} value={growWidth} onChange={(e) => setGrowWidth(Number(e.target.value))} />
           </label>
         }
-        props="<Image aspectRatio={1} />"
+        props={'<Image src="/violet-peaks.jpg" alt="Peaks" aspectRatio={1} srcWidth={2400} srcHeight={2400} />'}
       >
         {(replay) => (
           <div style={{ width: growWidth, maxWidth: '100%' }}>
@@ -201,7 +206,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
         id="errors"
         title="Error fallback"
         note="A source that fails: the box keeps its size, the placeholder goes. Click to try again."
-        props={'<Image src="/missing-photo.jpg" alt="…" width={240} height={160} />'}
+        props={'<Image src="/missing-photo.jpg" alt="A photo that is not there" width={240} height={160} srcWidth={1600} srcHeight={1067} />'}
       >
         {(replay) => <ErrorFallback loader={loaderOf('errors', replay)} />}
       </UseCase>
@@ -216,7 +221,7 @@ export function App({ part }: { part: 'main' | 'more' }) {
             {loading === 'lazy' && <Choice label="Preload distance" value={preload} options={PRELOADS} onChange={setPreload} />}
           </>
         }
-        props={`<Image aspectRatio={ratio} loading="${loading}"${loading === 'lazy' ? ` rootMargin="${preload}px"` : ''}${loading === 'native' ? ' sizes="…"' : ''} />`}
+        props={`<Image src={photo.src} alt="" aspectRatio={photo.ratio} srcWidth={photo.width} srcHeight={photo.height}${loading === 'lazy' ? ` rootMargin="${preload}px"` : ` loading="${loading}"`}${loading === 'native' ? ' sizes="(min-width: 1000px) 33vw, (min-width: 680px) 50vw, 100vw"' : ''} />`}
       >
         {(replay) => (
           <div className="gallery" key={`${loading}-${preload}`}>

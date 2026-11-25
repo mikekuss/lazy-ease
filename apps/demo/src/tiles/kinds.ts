@@ -2,6 +2,7 @@ import { parsePlaceholder, type StyleRecord } from '@lazy-ease/core'
 import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
 import * as thumbhash from 'thumbhash'
 import { CARD, CELLS, TRANSPARENT, type CatalogSource } from '../catalog'
+import { DEMO_FADE } from '../prerender'
 
 /**
  * The demo tiles of the start and placeholders pages. The prerender plugin
@@ -61,11 +62,11 @@ function gradient(hash: string): string {
 
 const [CANYON, MEADOW, NIGHT] = CELLS as [CatalogSource, CatalogSource, CatalogSource, CatalogSource]
 
-const SVG: Tile = { title: 'SVG', source: CARD, style: svg, code: () => 'thumbhashDecoder(thumbhash)' }
-const PNG: Tile = { title: 'Inlined PNG', source: CARD, style: (m) => decoded(raw, m.thumbhash), code: () => 'thumbhashDecoder(thumbhash, { blur: 0 })' }
-const COLOR: Tile = { title: 'Color', source: CARD, style: color, code: (m) => `placeholder="${m.color}"` }
-const URI: Tile = { title: 'Own data URI', source: MEADOW, style: (m) => parsePlaceholder(gradient(m.thumbhash))?.style, code: () => 'placeholder="data:image/svg+xml,…"' }
-const FOCUS: Tile = { title: 'Focus reveal', source: NIGHT, style: svg, code: () => 'reveal={focusReveal}', reveal: 'focus' }
+const SVG: Tile = { title: 'SVG', source: CARD, style: svg, code: () => '<LazyEaseProvider thumbhash={thumbhashDecoder(thumbhash)}>' }
+const PNG: Tile = { title: 'Inlined PNG', source: CARD, style: (m) => decoded(raw, m.thumbhash), code: () => '<LazyEaseProvider thumbhash={thumbhashDecoder(thumbhash, { blur: 0 })}>' }
+const COLOR: Tile = { title: 'Color', source: CARD, style: color, code: (m) => `<Image placeholder="${m.color}" />` }
+const URI: Tile = { title: 'Own data URI', source: MEADOW, style: (m) => parsePlaceholder(gradient(m.thumbhash))?.style, code: () => '<Image placeholder={`data:image/svg+xml,${encodeURIComponent(svg)}`} />' }
+const FOCUS: Tile = { title: 'Focus reveal', source: NIGHT, style: svg, code: () => '<LazyEaseProvider reveal={focusReveal}>', reveal: 'focus' }
 
 /** Every group a page can place with `<!--le:tiles:name-->`. */
 export const TILES: Record<string, Tile[]> = {
@@ -76,22 +77,22 @@ export const TILES: Record<string, Tile[]> = {
     PNG,
     COLOR,
     URI,
-    { title: 'Transparent, alpha kept', source: TRANSPARENT, style: svg, code: () => 'placeholder="thumbhash:…"', transparent: true },
+    { title: 'Transparent, alpha kept', source: TRANSPARENT, style: svg, code: (m) => `<Image placeholder="thumbhash:${m.thumbhash}" />`, transparent: true },
     // No placeholder: the fade alone.
-    { title: 'None', source: NIGHT, style: () => ({}), code: () => 'placeholder="none"' },
+    { title: 'None', source: NIGHT, style: () => ({}), code: () => '<Image placeholder="none" />' },
   ],
   // What React writes into the server HTML before hydration.
   ssr: [
-    { title: 'SSR image', source: NIGHT, style: svg, code: () => 'thumbhashSsr="image"' },
+    { title: 'SSR image', source: NIGHT, style: svg, code: () => '<LazyEaseProvider thumbhashSsr="image">' },
     // Color in the server HTML, the ThumbHash image once the script runs.
-    { title: 'SSR color', source: NIGHT, style: color, placeholder: (m) => `thumbhash:${m.thumbhash}`, code: () => 'thumbhashSsr="color"' },
+    { title: 'SSR color', source: NIGHT, style: color, placeholder: (m) => `thumbhash:${m.thumbhash}`, code: () => '<LazyEaseProvider thumbhashSsr="color">' },
   ],
   // Both at the page's reveal speed (the top bar), which their code lines show.
   reveals: [
-    { title: 'Crossfade', source: CANYON, style: svg, code: () => 'fadeDuration={…}' },
-    { ...FOCUS, source: CANYON, code: () => 'reveal={focusReveal} fadeDuration={…}' },
+    { title: 'Crossfade', source: CANYON, style: svg, code: () => `<LazyEaseProvider fadeDuration={${DEMO_FADE}}>` },
+    { ...FOCUS, source: CANYON, code: () => `<LazyEaseProvider reveal={focusReveal} fadeDuration={${DEMO_FADE}}>` },
     // For the image that is the LCP: the browser's own loading, no fade.
-    { title: 'Priority', source: CANYON, style: svg, code: () => 'priority', priority: true },
+    { title: 'Priority', source: CANYON, style: svg, code: () => '<Image priority />', priority: true },
   ],
 }
 

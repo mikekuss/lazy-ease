@@ -28,7 +28,7 @@ const loaderFor = (key: string): ImageLoader => {
 let run = 0
 
 // The reveal tiles' code lines name the page's speed.
-for (const code of document.querySelectorAll('.tile code')) code.textContent = code.textContent!.replace('fadeDuration={…}', `fadeDuration={${fadeDuration()}}`)
+for (const code of document.querySelectorAll('.tile code')) code.textContent = code.textContent!.replace(/fadeDuration=\{\d+\}/, `fadeDuration={${fadeDuration()}}`)
 const plays = new Map<HTMLElement, () => void>()
 
 for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le], .intro .backdrop [data-le]')) {

@@ -19,7 +19,7 @@ export function ErrorFallback({ loader }: { loader: ImageLoader }) {
       </div>
       <div>
         <DemoImage {...MISSING} loader={loader} alt="A photo that is not there" wrapperClassName="fallback" label="Styled with CSS" />
-        <code className="variant-code">[data-le][data-state="error"] {"{ … }"}</code>
+        <code className="variant-code">{'[data-le][data-state="error"] { background: #f5f5f4 }'}</code>
       </div>
       <div className="own-fallback">
         <DemoImage
@@ -29,7 +29,7 @@ export function ErrorFallback({ loader }: { loader: ImageLoader }) {
           onStateChange={(state) => setFailed(state === 'error')}
           label="Your own UI"
         />
-        <code className="variant-code">onStateChange={'{(state) => …}'}</code>
+        <code className="variant-code">{"onStateChange={(state) => setFailed(state === 'error')}"}</code>
         {failed && (
           <div className="own-fallback-ui" role="status">
             <b>Photo unavailable</b>

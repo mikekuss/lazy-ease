@@ -28,24 +28,40 @@
     <section class="start" aria-label="Quick start">
       <div>
         <h2>React</h2>
-        <pre><code>npm i @lazy-ease/react
+        <pre><code>npm i @lazy-ease/react @lazy-ease/core thumbhash
 
-&lt;LazyEaseProvider&gt;
-  &lt;Image src="/photos/lake.jpg" alt="Lake at dawn"
-    width={320} height={240} srcWidth={2400} srcHeight={1800}
-    placeholder="thumbhash:…" /&gt;
-&lt;/LazyEaseProvider&gt;</code></pre>
+import * as thumbhash from 'thumbhash'
+import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
+import { Image, LazyEaseProvider } from '@lazy-ease/react'
+
+const decoder = thumbhashDecoder(thumbhash)
+
+export function App() {
+  return (
+    &lt;LazyEaseProvider thumbhash={decoder}&gt;
+      &lt;Image src="/photos/lake.jpg" alt="Lake at dawn"
+        width={320} height={240} srcWidth={2400} srcHeight={1800}
+        placeholder="thumbhash:IqYJLYhclndfmHd7d4iIdY8wygik" /&gt;
+    &lt;/LazyEaseProvider&gt;
+  )
+}</code></pre>
       </div>
       <div>
         <h2>HTML and a script</h2>
-        <pre><code>npm i @lazy-ease/vanilla @lazy-ease/core
+        <pre><code>npm i @lazy-ease/vanilla
+&lt;!-- copy lazy-ease.css and lazy-ease.min.js from its dist/ to /assets --&gt;
 
+&lt;link rel="stylesheet" href="/assets/lazy-ease.css"&gt;
 &lt;script defer src="/assets/lazy-ease.min.js"&gt;&lt;/script&gt;
+
 &lt;section data-le-auto&gt;
-  &lt;span data-le style="aspect-ratio:4/3;background:#5b6c8f"&gt;
-    &lt;img alt="Lake at dawn" src="data:…" data-le-url="/_img/lake.jpg?w=640"&gt;
+  &lt;span data-le style="aspect-ratio:4/3;background-color:#5b6c8f"&gt;
+    &lt;img alt="Lake at dawn" width="400" height="300"
+      src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+      data-le-url="/_img/photos/lake.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=640"&gt;
   &lt;/span&gt;
 &lt;/section&gt;</code></pre>
+        <p class="start-note">Both read <code>/photos/lake.jpg</code> from the image server at <code>/_img</code> (<code>@lazy-ease/server</code>).</p>
       </div>
     </section>
 
@@ -108,7 +124,9 @@
             </section>
             <div id="more-root"></div>
           </div>
-          <code class="usecase-props">&lt;img data-le srcset&gt;  ·  data-le-url  ·  data-le-srcset  ·  imageSet()</code>
+          <code class="usecase-props">&lt;img data-le alt="Night sky over hills" srcset="/_img/northern-night.jpg?fmt=webp&amp;q=75&amp;w=640 640w, …" sizes="(min-width:720px) 720px, 100vw" loading="lazy"&gt;
+&lt;span data-le style="background-color:#084898"&gt;&lt;img alt="Glacier at noon" src="data:image/gif;base64,…" data-le-url="/_img/glacier-noon.jpg?fmt=webp&amp;q=75&amp;w=1080"&gt;&lt;/span&gt;
+banner.style.setProperty('--banner', imageSet({ src: '/starfield.jpg', width: 720, aspectRatio: 2, srcWidth: 3360, loader }))</code>
         </section>
       </main>
     </div>

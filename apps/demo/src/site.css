@@ -193,6 +193,7 @@ input[type=range] { width:120px }
 /* Quick start under the feature row. */
 .start { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:24px; max-width:1360px; margin:0 auto; padding:32px 32px 0 }
 .start h2 { margin:0 0 8px; font-size:14px; color:var(--muted) }
+.start-note { margin:8px 0 0; font-size:13px; color:var(--muted) }
 .start pre { margin:0; padding:16px 18px; overflow-x:auto; font:12.5px/1.6 var(--mono); color:#e5e7eb; background:var(--text); border-radius:12px }
 
 .foot { display:flex; flex-wrap:wrap; gap:8px 20px; max-width:1360px; margin:0 auto; padding:24px 32px 48px; color:var(--faint); font-size:13px; border-top:1px solid var(--line) }
