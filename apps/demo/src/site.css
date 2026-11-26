@@ -1,0 +1,243 @@
+/* The look every demo page shares, after the placeholders page: light, one
+   compact bar, images first, small mono readouts. The prerender plugin
+   inlines this file at <!--le:site-->; page stylesheets come after it. */
+:root {
+  color-scheme: light;
+  --bg: #f3f4f6;
+  --panel: #fff;
+  --line: #e5e7eb;
+  --text: #111827;
+  --muted: #4b5563;
+  --faint: #6b7280;
+  --ok: #047857;
+  --warn: #b45309;
+  --error: #b91c1c;
+  --radius: 10px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+*, ::before, ::after { box-sizing:border-box }
+body { margin:0; font:15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; color:var(--text); background:var(--bg) }
+code { font-family:var(--mono); font-size:.9em }
+a { color:inherit }
+
+/* Site header: brand and page links. */
+/* The sticky top bar: name, then network, reveal speed and Replay, all one height. */
+.site { position:sticky; top:0; z-index:20; display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; padding:10px 24px; background:var(--text); font-size:14px }
+.site .brand { color:#fff; font-weight:700; font-size:16px; letter-spacing:-.01em; text-decoration:none }
+.site .links { display:flex; gap:16px; margin-left:12px }
+.site .links a { color:#d1d5db; text-decoration:none }
+.site .links a:hover { color:#fff }
+.site .tools { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin-left:auto }
+.site .pick { display:flex; align-items:center; gap:6px; color:#9ca3af; font-size:13px }
+.site select, .site .replay { box-sizing:border-box; height:32px; border:1px solid #374151; border-radius:8px; background:#1f2937; color:#f9fafb; font-size:13px }
+.site select { padding:0 8px }
+.site .replay { width:32px; padding:0; font-size:16px; line-height:1 }
+.site .replay:hover, .site select:hover { border-color:#6b7280 }
+
+/* Control bar, sticky under the header. */
+.bar { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; padding:10px 20px; background:var(--panel); border-bottom:1px solid var(--line); font-size:14px }
+.bar label { display:flex; gap:6px; align-items:center }
+.bar output, .bar .stat { font:12px var(--mono); color:var(--muted); font-variant-numeric:tabular-nums }
+select, button, input { font:inherit }
+select { font-size:13px; padding:2px 4px; border:1px solid #d1d5db; border-radius:6px; background:#fff; color:var(--text) }
+button { font-size:13px; padding:3px 12px; border:1px solid #d1d5db; border-radius:6px; background:#fff; color:var(--text); cursor:pointer }
+button:hover { border-color:var(--faint) }
+button.primary { background:var(--text); border-color:var(--text); color:#fff }
+input[type=range] { width:120px }
+
+/* Content. */
+.page { padding:0 20px 64px }
+.lead { margin:16px 0 0; color:var(--muted); font-size:14px; max-width:70ch }
+.note { margin:0 0 10px; color:var(--muted); font-size:13px }
+.case { margin:28px 0 36px; scroll-margin-top:100px }
+.case > h2 { margin:0 0 8px; font-size:16px }
+.case > h2 small { font-weight:400; font-size:14px; color:var(--faint); margin-left:6px }
+
+/* Images: rounded, no card around them; a small caption with a mono readout. */
+.shot { border-radius:var(--radius); overflow:hidden }
+.cap { margin-top:4px; font-size:12px; font-weight:600 }
+.cap .mono, .mono { display:block; font:11px/1.4 var(--mono); font-weight:400; color:var(--muted) }
+
+/* Props of a case, as the JSX or HTML writes them. */
+.props { display:block; width:fit-content; max-width:100%; margin:0 0 12px; padding:4px 10px; overflow-x:auto; white-space:pre; font:12px/1.6 var(--mono); color:#374151; background:var(--panel); border:1px solid var(--line); border-radius:6px }
+
+@media (max-width:640px) {
+  /* One row on a phone: the selects without their labels and narrower. */
+  .site { flex-wrap:nowrap; padding:8px 12px }
+  .site .tools { flex-wrap:nowrap; gap:6px }
+  .site select { max-width:92px }
+  .bar, .page { padding-left:16px; padding-right:16px }
+  .site .pick span { display:none }
+  .site .live-only { display:none }
+  /* Not sticky on a phone: wrapped, it would cover a third of the screen. */
+  .bar { position:relative; gap:8px 14px }
+}
+
+/* Click an image to replay it: a hint on hover. */
+[data-click-replay], .tile [data-le] { cursor:pointer }
+
+/* A use case: one panel with a title, a line, its own controls, the demo and the props it passes. */
+.usecase {
+  margin: 0 0 28px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  scroll-margin-top: 96px;
+}
+
+.usecase > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 28px 0;
+}
+
+.usecase h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+.usecase header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.usecase header button {
+  flex-shrink: 0;
+}
+
+.usecase-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 24px;
+  margin: 16px 28px 0;
+  font-size: 14px;
+}
+
+.usecase-stage {
+  padding: 24px 28px 28px;
+}
+
+.usecase-props {
+  position: relative;
+  display: block;
+  padding: 10px 84px 10px 28px;
+  overflow-x: auto;
+  white-space: pre;
+  font: 12px/1.6 var(--mono);
+  color: var(--muted);
+  background: #f9fafb;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 640px) {
+  .usecase > header {
+    padding: 18px 18px 0;
+  }
+
+  .usecase-bar {
+    margin: 14px 18px 0;
+  }
+
+  .usecase-stage {
+    padding: 18px;
+  }
+
+  .usecase-props {
+    padding: 10px 18px;
+  }
+}
+
+/* ---- The demo page: intro, then a side list and one panel per use case ---- */
+.intro { position:relative; overflow:hidden; color:#fff; background:#1c1917 }
+.intro .backdrop { position:absolute; inset:0 }
+.intro .backdrop [data-le] { position:absolute; inset:0; display:block; background-size:cover; background-position:50% }
+.intro .backdrop img { display:block; width:100%; height:100%; object-fit:cover }
+.intro::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg, rgb(12 10 9 / .78) 0%, rgb(12 10 9 / .4) 50%, rgb(12 10 9 / 0) 100%) }
+.intro-inner { position:relative; z-index:1; max-width:1360px; margin:0 auto; padding:88px 32px 80px }
+.intro h1 { margin:0; max-width:14ch; font-size:clamp(36px, 6vw, 60px); line-height:1.05; letter-spacing:-.03em }
+.intro p { max-width:46ch; margin:20px 0 0; font-size:18px; color:#e7e5e4 }
+.install { display:inline-block; margin-top:32px; padding:9px 16px; font:14px var(--mono); color:#fafaf9; background:rgb(255 255 255 / .12); border:1px solid rgb(255 255 255 / .25); border-radius:8px }
+.features { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:24px; max-width:1360px; margin:0 auto; padding:32px 32px 0 }
+.features b { display:block; font-size:16px }
+.features span { display:block; margin-top:4px; color:var(--muted); font-size:14px }
+
+.layout { display:grid; grid-template-columns:190px minmax(0, 1fr); gap:48px; max-width:1360px; margin:0 auto; padding:40px 32px 96px }
+.side { position:sticky; top:76px; align-self:start; display:grid; gap:22px; font-size:14px }
+.side h2, .group { margin:0 0 6px; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--faint) }
+.side a { display:block; padding:3px 0; color:var(--muted); text-decoration:none }
+.side a:hover { color:var(--text) }
+.group { margin:56px 0 16px }
+.layout main > .chips + .group { margin-top:0 }
+.chips { display:none }
+.usecase { scroll-margin-top:76px }
+.usecase header button { flex-shrink:0 }
+
+@media (max-width:900px) {
+  .features { grid-template-columns:1fr 1fr }
+  .layout { grid-template-columns:minmax(0, 1fr); gap:0; padding:24px 16px 64px }
+  .side { display:none }
+  .chips { display:flex; gap:8px; margin:0 0 8px; padding-bottom:6px; overflow-x:auto }
+  .chips a { flex:none; padding:4px 12px; font-size:13px; color:var(--muted); text-decoration:none; background:var(--panel); border:1px solid var(--line); border-radius:999px }
+}
+@media (max-width:640px) {
+  .intro-inner { padding:56px 16px 48px }
+  .intro p { font-size:16px }
+  .features { grid-template-columns:1fr; gap:16px; padding:24px 16px 0 }
+}
+
+.install-line { margin:0 0 8px; font-size:13px; color:var(--muted) }
+.start-note { margin:8px 0 0; font-size:13px; color:var(--muted) }
+.start pre { margin:0; padding:16px 18px; overflow-x:auto; font:12.5px/1.6 var(--mono); color:#e5e7eb; background:var(--text); border-radius:12px }
+
+.foot { display:flex; flex-wrap:wrap; gap:8px 20px; max-width:1360px; margin:0 auto; padding:24px 32px 48px; color:var(--faint); font-size:13px; border-top:1px solid var(--line) }
+.foot a { color:var(--muted); text-decoration:none }
+.foot a:hover { color:var(--text) }
+
+@media (max-width:900px) {
+  .start { padding:20px 16px 0 }
+  .foot { padding:24px 16px 40px }
+  .site .links { display:none }
+}
+
+/* Copy buttons on the code blocks. */
+.copyable { position:relative }
+.copy { position:absolute; top:8px; right:8px; padding:2px 10px; font-size:12px; color:#e5e7eb; background:#374151; border:1px solid rgb(255 255 255 / .2); border-radius:6px; cursor:pointer }
+.usecase-props + .copy, .copyable .copy.light { color:var(--muted); background:var(--panel); border-color:var(--line) }
+.site a.live-only { color:#9ca3af; text-decoration:underline dotted; text-underline-offset:3px }
+
+/* One flavor of every code example at a time: React (default) or HTML. */
+html[data-flavor='html'] .flavor-react, html:not([data-flavor='html']) .flavor-html { display:none !important }
+.flavors { display:inline-flex; padding:2px; gap:2px; background:#e7e5e4; border-radius:8px }
+.flavors button { padding:2px 12px; font-size:12px; border:0; border-radius:6px; background:none; color:var(--muted) }
+html:not([data-flavor='html']) .flavors [data-flavor-pick='react'], html[data-flavor='html'] .flavors [data-flavor-pick='html'] { background:var(--panel); color:var(--text); box-shadow:0 1px 2px rgb(0 0 0 / .08) }
+
+/* Quick start under the feature row: tabs, the install line, the code. */
+.start { max-width:1360px; margin:0 auto; padding:28px 32px 0 }
+.start-head { display:flex; align-items:center; gap:16px; margin-bottom:10px }
+.start-head h2 { margin:0; font-size:18px }
+.start pre { margin:0 0 10px; max-width:760px; padding:14px 16px; overflow-x:auto; font:12.5px/1.6 var(--mono); color:#e5e7eb; background:var(--text); border-radius:12px }
+.start pre.install { padding:10px 16px; background:#1f2937 }
+.start-note { margin:0 0 10px; max-width:760px; font-size:13px; color:var(--muted) }
+/* Panel header: title and line on the left, tabs and Replay together on the right. */
+.usecase > header > div:first-child { flex:1 1 auto; min-width:0 }
+.head-tools { display:flex; align-items:center; gap:8px; flex:none }
+
+/* A phone: the panel's text gets the full width, tabs and Replay go below it. */
+@media (max-width:640px) {
+  .usecase > header { flex-wrap:wrap; gap:10px }
+  .usecase > header > div:first-child { flex:1 1 100% }
+  .head-tools { flex:1 1 100%; justify-content:space-between }
+}
+/* Room for the copy button. */
+.copyable pre, .copyable .usecase-props { padding-right:84px }
+@media (max-width:900px) {
+  .start { padding:20px 16px 0 }
+}
+.start .copyable { max-width:760px }
+.start .copyable pre { width:100%; max-width:none }

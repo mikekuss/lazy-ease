@@ -3,27 +3,199 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lazy-ease demo</title>
-    <style>
-      body { margin:0; font:16px/1.5 system-ui, sans-serif; color:#111827; background:#f9fafb }
-      main { max-width:640px; margin:0 auto; padding:48px 20px }
-      h1 { margin:0 0 8px; font-size:28px }
-      ul { list-style:none; padding:0; margin:24px 0 0; display:grid; gap:12px }
-      a { display:block; padding:14px 16px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:inherit; text-decoration:none }
-      a:hover { border-color:#2563eb }
-      a strong { display:block; color:#2563eb }
-      p { margin:0; color:#4b5563 }
-    </style>
+    <title>lazy-ease</title>
+    <!--le:site-->
+    <link rel="stylesheet" href="/src/tiles/tiles.css" />
+    <link rel="stylesheet" href="/src/fade/fade.css" />
   </head>
   <body>
-    <main>
-      <h1>lazy-ease</h1>
-      <p>Images at the size they are rendered at.</p>
-      <ul>
-        <li><a href="fade/"><strong>Fade hero</strong>Placeholder, then one fade. Throttle and late start.</a></li>
-        <li><a href="lcp/"><strong>LCP hero</strong>Sources in the first HTML. No script.</a></li>
-        <li><a href="recipes/"><strong>Recipes</strong>Every case from the image recipes.</a></li>
-      </ul>
-    </main>
+    <!--le:nav-->
+    <section class="intro">
+      <!--le:backdrop-->
+      <div class="intro-inner">
+        <h1>Images that arrive calmly.</h1>
+        <p>lazy-ease loads each image at the size it is shown, keeps its placeholder in the first HTML and fades it in once, after decode.</p>
+        <code class="install">npm i @lazy-ease/react</code>
+      </div>
+    </section>
+    <div class="features">
+      <div><b>No layout shift</b><span>The box has its size before a byte arrives.</span></div>
+      <div><b>One fade, after decode</b><span>Never a half-painted image.</span></div>
+      <div><b>The right size per slot</b><span>The srcset fits the width it is shown at.</span></div>
+      <div><b>Placeholders in the HTML</b><span>ThumbHash, color or your own.</span></div>
+    </div>
+
+
+    <section class="start" id="start" aria-label="Quick start">
+      <div class="start-head"><h2>Quick start</h2><div class="flavors" role="group" aria-label="Code"><button type="button" data-flavor-pick="react">React</button><button type="button" data-flavor-pick="html">HTML</button></div></div>
+      <div class="flavor-react">
+        <pre class="install"><code>npm i @lazy-ease/react @lazy-ease/core thumbhash</code></pre>
+        <pre><code>import * as thumbhash from 'thumbhash'
+import { detectAvif } from '@lazy-ease/core'
+import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
+import { Image, LazyEaseProvider } from '@lazy-ease/react'
+
+const decoder = thumbhashDecoder(thumbhash)
+
+export default function App() {
+  return (
+    &lt;LazyEaseProvider thumbhash={decoder} detectFormat={detectAvif}&gt;
+      &lt;Image
+        src="/photos/lake.jpg" alt="Lake at dawn"
+        width={320} height={240}
+        srcWidth={2400} srcHeight={1800}
+        placeholder="thumbhash:IqYJLYhclndfmHd7d4iIdY8wygik"
+      /&gt;
+    &lt;/LazyEaseProvider&gt;
+  )
+}</code></pre>
+      </div>
+      <div class="flavor-html">
+        <pre class="install"><code>npm i @lazy-ease/vanilla</code></pre>
+        <p class="start-note">Copy <code>lazy-ease.css</code> and <code>lazy-ease.min.js</code> from its <code>dist/</code> to <code>/assets</code>.</p>
+        <pre><code>&lt;link rel="stylesheet" href="/assets/lazy-ease.css"&gt;
+&lt;script defer src="/assets/lazy-ease.min.js"
+  data-base-url="/_img"&gt;&lt;/script&gt;
+
+&lt;section data-le-auto&gt;
+  &lt;span data-le style="display:block;max-width:640px;
+    aspect-ratio:4/3;background-color:#5b6c8f"&gt;
+    &lt;img alt="Lake at dawn" width="640" height="480"
+      src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+      data-le-src="/photos/lake.jpg"
+      data-le-srcw="2400" data-le-srch="1800"&gt;
+  &lt;/span&gt;
+&lt;/section&gt;</code></pre>
+      </div>
+      <p class="start-note">Both read <code>/photos/lake.jpg</code> from the image server at <code>/_img</code> (<code>@lazy-ease/server</code>).</p>
+    </section>
+
+    <div class="layout">
+      <nav class="side" aria-label="Use cases">
+        <div><h2>Placeholders</h2><a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a></div>
+        <div><h2>Behaviour</h2><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a></div>
+        <div><h2>Layout</h2><a href="#hero">Hero</a><a href="#layout">Layout modes</a></div>
+        <div><h2>Integration</h2><a href="#template">Without React</a></div>
+      </nav>
+
+      <main>
+        <nav class="chips" aria-label="Use cases">
+          <a href="#kinds">Kinds</a><a href="#ssr">Server rendering</a><a href="#reveal">Reveal</a><a href="#resize">Resize</a><a href="#errors">Error fallback</a><a href="#gallery">Scroll gallery</a><a href="#hero">Hero</a><a href="#layout">Layout modes</a><a href="#template">Without React</a>
+        </nav>
+
+        <h2 class="group">Placeholders</h2>
+        <section class="usecase" id="kinds">
+          <header>
+            <div><h3>Kinds</h3><p>Something to look at from the first frame: a few hundred bytes in the HTML, no extra request.</p></div>
+            <div class="head-tools">
+            <div class="flavors" role="group" aria-label="Code"><button type="button" data-flavor-pick="react">React</button><button type="button" data-flavor-pick="html">HTML</button></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+            </div>
+          </header>
+          <div class="usecase-stage"><div class="tiles"><!--le:tiles:kinds--></div></div>
+          <code class="usecase-props flavor-react">const decoder = thumbhashDecoder(thumbhash)               // SVG
+// const decoder = thumbhashDecoder(thumbhash, { blur: 0 }) // inlined PNG
+
+&lt;LazyEaseProvider thumbhash={decoder}&gt;
+  &lt;Image src="/glacier-noon.jpg" alt="Glacier at noon"
+    srcWidth={3000} srcHeight={2000} aspectRatio={3 / 2}
+    placeholder="thumbhash:IqYJLYhclndfmHd7d4iIdY8wygik" /&gt;
+&lt;/LazyEaseProvider&gt;
+// or placeholder="#084898", placeholder="data:image/…", placeholder="none"</code>
+          <code class="usecase-props flavor-html">&lt;!-- The server writes the decoded ThumbHash (thumbhashDecoder) or the color --&gt;
+&lt;span data-le style="display:block;aspect-ratio:3/2;background-color:#084898;
+  background-image:url(&amp;quot;data:image/svg+xml,…&amp;quot;);background-size:cover"&gt;
+  &lt;img alt="Glacier at noon" src="data:image/gif;base64,…"
+    data-le-src="/glacier-noon.jpg" data-le-srcw="3000" data-le-srch="2000"&gt;
+&lt;/span&gt;</code>
+        </section>
+        <section class="usecase" id="ssr">
+          <header>
+            <div><h3>Server rendering</h3><p>What React writes into the HTML: the image right away, or its color first.</p></div>
+            <div class="head-tools">
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+            </div>
+          </header>
+          <div class="usecase-stage"><div class="tiles two"><!--le:tiles:ssr--></div></div>
+          <code class="usecase-props">&lt;LazyEaseProvider thumbhash={decoder} thumbhashSsr="image"&gt;
+// thumbhashSsr="color" (the default): only the color in the server HTML,
+// the decoded image once the script runs</code>
+        </section>
+        <section class="usecase" id="reveal">
+          <header>
+            <div><h3>Reveal</h3><p>How the image takes over from the placeholder, at the speed in the top bar.</p></div>
+            <div class="head-tools">
+            <div class="flavors" role="group" aria-label="Code"><button type="button" data-flavor-pick="react">React</button><button type="button" data-flavor-pick="html">HTML</button></div>
+            <button type="button" data-replay-panel title="Load again with new URLs">↻ Replay</button>
+            </div>
+          </header>
+          <div class="usecase-stage"><div class="tiles"><!--le:tiles:reveals--></div></div>
+          <code class="usecase-props flavor-react">import { focusReveal } from '@lazy-ease/core'
+
+&lt;LazyEaseProvider fadeDuration={800} reveal={focusReveal}&gt;
+
+// The LCP image: real sources in the HTML, high priority, no fade
+&lt;Image src="/ember-canyon.jpg" alt="Canyon" priority
+  srcWidth={1600} srcHeight={2400} aspectRatio={3 / 2} sizes="33vw" /&gt;</code>
+          <code class="usecase-props flavor-html">import { createLazyEase, createLoader, focusReveal } from '@lazy-ease/core'
+import { enhance } from '@lazy-ease/vanilla'
+
+const loader = createLoader({ baseUrl: '/_img' })
+enhance(createLazyEase({ loader, fadeDuration: 800, reveal: focusReveal }), document.body)
+
+&lt;!-- The LCP image: native, high priority, no fade --&gt;
+&lt;img alt="Canyon" fetchpriority="high" srcset="/_img/ember-canyon.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=640 640w, …" sizes="33vw"&gt;</code>
+        </section>
+
+        <div id="cases-root"></div>
+
+        <h2 class="group">Integration</h2>
+        <section class="usecase" id="template">
+          <header>
+            <div><h3>Without React</h3><p>A server template and the vanilla script, a CSS background, SVG, GIF and an external photo.</p></div>
+            <div class="head-tools">
+            <button type="button" data-replay-template title="Load again with new URLs">↻ Replay</button>
+            </div>
+          </header>
+          <form class="usecase-bar" id="template-settings">
+            <label class="field"><span>Start script</span>
+              <select name="late">
+                <option value="0">At once</option>
+                <option value="1000">After 1 s</option>
+                <option value="3000">After 3 s</option>
+              </select>
+            </label>
+          </form>
+          <div class="usecase-stage">
+            <section data-le-auto class="pair">
+              <!--le:pair-->
+            </section>
+            <div id="more-root"></div>
+          </div>
+          <code class="usecase-props">&lt;img data-le alt="Night sky over hills" loading="lazy"
+  srcset="/_img/northern-night.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=640 640w, …"
+  sizes="(min-width:720px) 720px, 100vw"&gt;
+
+&lt;span data-le style="display:block;aspect-ratio:3/2;background-color:#084898"&gt;
+  &lt;img alt="Glacier at noon" src="data:image/gif;base64,…"
+    data-le-url="/_img/glacier-noon.jpg?fmt=webp&amp;amp;q=75&amp;amp;w=1080"&gt;
+&lt;/span&gt;
+
+import { createLoader, imageSet, whenVisible } from '@lazy-ease/core'
+
+const loader = createLoader({ baseUrl: '/_img' })
+banner.style.setProperty('--banner', imageSet({ src: '/starfield.jpg', width: 720, aspectRatio: 2, srcWidth: 3360, loader }))
+whenVisible(banner, {}, () =&gt; banner.setAttribute('data-le-visible', ''))
+/* CSS */ [data-le-visible] { background-image: var(--banner) }</code>
+        </section>
+      </main>
+    </div>
+    <footer class="foot">
+      <span>lazy-ease · MIT</span>
+      <!--le:links-->
+    </footer>
+    <script type="module" src="/src/tiles/main.ts"></script>
+    <script type="module" src="/src/template/main.ts"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

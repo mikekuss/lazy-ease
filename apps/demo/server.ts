@@ -19,7 +19,7 @@ import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { ensureDemoImages } from './scripts/generate-images.js'
 import { EXTRA_CROPS, isPrivate, PRIVATE } from './src/catalog.js'
-import { DEMO_PARAMS, profileFromQuery } from './src/throttle.js'
+import { DEMO_PARAMS, PRESETS, profileFromQuery, type NetworkProfile, type PresetName } from './src/throttle.js'
 
 const PORT = Number(process.env.SERVER_PORT) || 3001
 const demoDir = path.dirname(fileURLToPath(import.meta.url))
@@ -86,17 +86,35 @@ const keys = { [KID]: randomBytes(32) }
 
 // --- Storage: the server's own diskStorage()/memoryStorage() --------------
 
+// A server on another port gets its own cache directory: two servers of one
+// checkout may run at once (a preview and a test run), and a directory takes one.
+const CACHE_SUFFIX = PORT === 3001 ? '' : `-${PORT}`
+
 const STORAGE_PRESETS = {
   /** The default: 1 GB on disk in .cache/lazy-ease. */
-  disk: () => diskStorage(),
+  disk: () => diskStorage(CACHE_SUFFIX ? { dir: path.join(demoDir, '.cache', `lazy-ease${CACHE_SUFFIX}`) } : {}),
   /** A small disk cache, so eviction is easy to see. */
-  small: () => diskStorage({ dir: path.join(demoDir, '.cache', 'lazy-ease-small'), maxBytes: 2 * 1024 ** 2, maxSourceBytes: 400 * 1024 }),
+  small: () => diskStorage({ dir: path.join(demoDir, '.cache', `lazy-ease-small${CACHE_SUFFIX}`), maxBytes: 2 * 1024 ** 2, maxSourceBytes: 400 * 1024 }),
   /** In the process only, empty after a restart. */
   memory: () => memoryStorage(),
   /** Nothing kept: every request renders. */
   off: () => memoryStorage({ maxBytes: 0 }),
 } satisfies Record<string, () => VariantStorage>
 type StoragePreset = keyof typeof STORAGE_PRESETS
+
+/** Marks the canonical request the throttle middleware makes itself. */
+const INNER = 'x-demo-inner'
+
+/**
+ * The network speed the demo nav chose (the `le-net` cookie), Fast 4G when
+ * there is none. The controller cases set their own throttle per request,
+ * so their page is left alone.
+ */
+function networkCookie(request: Request): NetworkProfile | null {
+  if (/\/controller\.html(?:$|\?)/.test(request.headers.get('referer') ?? '')) return null
+  const value = /(?:^|;\s*)le-net=([\w-]+)/.exec(request.headers.get('cookie') ?? '')?.[1] ?? 'fast-4g'
+  return value in PRESETS ? PRESETS[value as PresetName] : null
+}
 
 /** Records whether a request's lookup hit, for the X-Demo-Cache header. */
 const lookups = new AsyncLocalStorage<{ result?: 'hit' | 'miss' }>()
@@ -137,10 +155,22 @@ const app = new Hono()
 // image route below exactly as a canonical request would.
 app.use('/_img/*', async (c, next) => {
   const canonical = withoutDemoParams(c.req.raw)
-  if (!canonical) return next()
-  const response = await app.fetch(canonical)
-  const profile = profileFromQuery(c.req.query())
-  return profile ? throttled(response, profile) : response
+  if (canonical) {
+    // The inner request is canonical; it must not be throttled a second time by the cookie.
+    canonical.headers.set(INNER, '1')
+    const response = await app.fetch(canonical)
+    const profile = profileFromQuery(c.req.query())
+    return profile ? throttled(response, profile) : response
+  }
+  const profile = c.req.header(INNER) ? null : networkCookie(c.req.raw)
+  await next()
+  // Throttled by the nav's choice: not cached, so a reload or replay goes through the network again.
+  if (profile) {
+    const response = await throttled(c.res, profile)
+    response.headers.set('Cache-Control', 'no-store')
+    c.res = undefined
+    c.res = response
+  }
 })
 // Canonical requests only (the one above returns early): did the storage have it?
 app.all('/_img/*', async (c) => {

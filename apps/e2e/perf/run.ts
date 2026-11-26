@@ -224,10 +224,10 @@ async function lcpRun(browser: Browser, profile: Profile) {
   return { ...metrics, start: undefined, requests, pixels }
 }
 
-/** Keyboard steps on the /recipes/ hero frame slider, then the breakpoint jump. */
+/** Keyboard steps on the demo page hero frame slider, then the breakpoint jump. */
 async function interactionRun(browser: Browser, profile: Profile) {
   const { context, page, session } = await newPage(browser, profile)
-  await page.goto(`${BASE}/recipes/`, { waitUntil: 'networkidle' })
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' })
   await throttle(session, profile)
   const images = await trackImages(session)
   const slider = page.locator('label', { hasText: 'Viewport' }).locator('input[type=range]')
@@ -419,7 +419,7 @@ async function main() {
   lines.push(
     `- Cold /lcp/: ${RUNS} runs per profile, each in a new context (empty HTTP cache), traced from navigation to load + 3 s. One warm-up run per profile comes first and is not counted.`,
     '- TBT: main-thread tasks over 50 ms, summed from FCP to the end of the recording.',
-    '- Interactions: 10 ArrowRight presses and one End press on the /recipes/ viewport slider; the latency of an interaction is its longest Event Timing duration.',
+    '- Interactions: 10 ArrowRight presses and one End press on the demo page viewport slider; the latency of an interaction is its longest Event Timing duration.',
     '',
   )
   lines.push('## Cold /lcp/ (Chromium trace)', '')
@@ -435,7 +435,7 @@ async function main() {
       `| ${profile.name} | ${runs.length} | ${format(stats(runs.map((run) => run.fcp ?? NaN)).median)} | ${format(l.median)} (${format(l.min)}–${format(l.max)}) | ${[...new Set(runs.map((run) => run.lcpType))].join(', ')} | ${format(Math.max(...runs.map((run) => run.cls)), 4)} | ${format(stats(runs.map((run) => run.tbt)).median)} (max ${format(Math.max(...runs.map((run) => run.tbt)))}) | ${format(Math.max(...runs.map((run) => run.longestTask)))} | ${[...requests].join(', ')} | ${format(bytes.median)} | ${px.join(', ')} |`,
     )
   }
-  lines.push('', '## Interactions on /recipes/ (Event Timing in the trace)', '')
+  lines.push('', '## Interactions on the demo page (Event Timing in the trace)', '')
   lines.push('| Profile | Runs | Interactions per run | Latency median ms | Max ms | /_img requests per run |')
   lines.push('| --- | --- | --- | --- | --- | --- |')
   for (const profile of [MOBILE, DESKTOP]) {

@@ -1,10 +1,13 @@
-import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 
-// Procedural landscapes so the demo works without shipping photos. The noise
-// layer keeps the JPEGs at realistic file sizes; flat gradients compress to
-// almost nothing and would load too fast to see anything.
+// The demo's originals: photos from picsum.photos (Unsplash license),
+// downloaded at the size each case expects, so the repository ships none.
+// Without network, a procedural landscape stands in and the next start tries
+// the photo again. The noise layer keeps those JPEGs at realistic file sizes;
+// flat gradients compress to almost nothing and would load too fast to see
+// anything.
 interface Scene {
   name: string
   width: number
@@ -99,6 +102,22 @@ function detail({ width, height }: Scene, seed: number): Promise<Buffer> {
     .toBuffer()
 }
 
+/** The picsum.photos id of each scene, chosen to match its name and the alt texts in src/catalog.ts. */
+const PHOTOS: Record<string, number> = {
+  'alpine-dawn': 29,
+  'blue-ridge': 1018,
+  'desert-dusk': 184,
+  'northern-night': 1022,
+  'misty-pines': 1043,
+  'violet-peaks': 1036,
+  'glacier-noon': 1015,
+  'ember-canyon': 1016,
+  starfield: 1019,
+  'meadow-haze': 110,
+  tiny: 152,
+  fern: 28,
+}
+
 /** Sources the recipe cases use, kept out of the gallery's list in subdirectories. */
 const EXTRA_SCENES: (Scene & { file: string })[] = [
   // A 40 px original: every width request encodes 40 px, so it gets one URL.
@@ -114,12 +133,38 @@ const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" vi
 </svg>
 `
 
+/** The photo for a scene at its size, re-encoded like a drawn one; false without network. */
+async function photo({ name, width, height }: Scene, file: string): Promise<boolean> {
+  const id = PHOTOS[name]
+  if (id === undefined) return false
+  try {
+    const response = await fetch(`https://picsum.photos/id/${id}/${width}/${height}.jpg`, { signal: AbortSignal.timeout(15_000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    await sharp(Buffer.from(await response.arrayBuffer()))
+      .resize(width, height, { fit: 'cover' })
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toFile(file)
+    return true
+  } catch (error) {
+    console.warn(`No photo for ${name}: ${String(error)}`)
+    return false
+  }
+}
+
 async function scene(scene: Scene, seed: number, file: string): Promise<void> {
   const base = await sharp(Buffer.from(svg(scene, seed))).png().toBuffer()
   await sharp(base)
     .composite([{ input: await detail(scene, seed), blend: 'overlay' }])
     .jpeg({ quality: 90, mozjpeg: true })
     .toFile(file)
+}
+
+/** A transparent PNG: a solid purple disc with crisp edges, for the transparent placeholder case. */
+async function disc(file: string): Promise<void> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000">
+    <circle cx="800" cy="500" r="360" fill="#7c3aed"/>
+  </svg>`
+  await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toFile(file)
 }
 
 /** A 64 px waving hand in six frames. */
@@ -146,27 +191,81 @@ const exists = (file: string) => access(file).then(
   () => false,
 )
 
-/** Renders every demo image that is missing from `dir`. */
-export async function ensureDemoImages(dir: string): Promise<void> {
-  const jobs: [string, (file: string) => Promise<void>][] = [
-    ...SCENES.map((s, i): [string, (file: string) => Promise<void>] => [`${s.name}.jpg`, (file) => scene(s, i + 1, file)]),
-    ...EXTRA_SCENES.map((s, i): [string, (file: string) => Promise<void>] => [s.file, (file) => scene(s, SCENES.length + i + 1, file)]),
-    ['extra/logo.svg', (file) => writeFile(file, LOGO)],
-    ['extra/wave.gif', wave],
-  ]
-  for (const [name, make] of jobs) {
-    const file = path.join(dir, name)
-    if (await exists(file)) continue
-    await mkdir(path.dirname(file), { recursive: true })
-    console.log(`Generating ${name} in ${dir} …`)
-    // The demo server and the Vite prerender plugin may both generate at
-    // once: each writes its own file (same extension, sharp picks the
-    // format by it) and renames it into place, so neither reads a partial one.
-    const temp = path.join(path.dirname(file), `.tmp-${process.pid}-${path.basename(file)}`)
-    await make(temp)
-    await rename(temp, file).catch(async (error: unknown) => {
+/** What each file in the image directory is: `photo:<id>` or `drawn`. */
+const SOURCES_FILE = '.sources.json'
+
+interface Job {
+  name: string
+  /** A scene: its photo, or a drawn stand-in. */
+  scene?: Scene
+  seed?: number
+  /** Anything else, made once. */
+  make?: (file: string) => Promise<void>
+}
+
+/**
+ * The demo's image files are made in a temp file and renamed into place: the
+ * demo server and the Vite prerender plugin may both generate at once, and
+ * neither may read a partial file. True when the file was moved in.
+ */
+async function writeInto(file: string, make: (temp: string) => Promise<boolean>): Promise<boolean> {
+  await mkdir(path.dirname(file), { recursive: true })
+  // Same extension, so sharp picks the format by it.
+  const temp = path.join(path.dirname(file), `.tmp-${process.pid}-${Math.random().toString(36).slice(2)}-${path.basename(file)}`)
+  if (!(await make(temp))) {
+    await rm(temp, { force: true })
+    return false
+  }
+  return rename(temp, file).then(
+    () => true,
+    async (error: unknown) => {
       await rm(temp, { force: true })
       if (!(await exists(file))) throw error
-    })
-  }
+      return false
+    },
+  )
+}
+
+/**
+ * Makes every demo image missing from `dir`, all at once: a scene's photo,
+ * or, without network, a drawn landscape. A drawn scene that is already
+ * there is only retried as a photo and kept when that fails, so an offline
+ * start draws nothing twice. Returns the scenes that are drawn.
+ */
+export async function ensureDemoImages(dir: string): Promise<string[]> {
+  const record = path.join(dir, SOURCES_FILE)
+  const sources = JSON.parse(await readFile(record, 'utf8').catch(() => '{}')) as Record<string, string>
+  const jobs: Job[] = [
+    ...SCENES.map((scene, i): Job => ({ name: `${scene.name}.jpg`, scene, seed: i + 1 })),
+    ...EXTRA_SCENES.map((scene, i): Job => ({ name: scene.file, scene, seed: SCENES.length + i + 1 })),
+    { name: 'extra/logo.svg', make: (file) => writeFile(file, LOGO) },
+    { name: 'extra/wave.gif', make: wave },
+    { name: 'extra/disc.png', make: disc },
+  ]
+  let changed = false
+  await Promise.all(
+    jobs.map(async ({ name, scene: s, seed, make }) => {
+      const file = path.join(dir, name)
+      const there = await exists(file)
+      if (make) {
+        if (!there && (await writeInto(file, (temp) => make(temp).then(() => true)))) console.log(`Generated ${name}`)
+        return
+      }
+      const want = `photo:${PHOTOS[s!.name]}`
+      if (there && sources[name] === want) return
+      if (await writeInto(file, (temp) => photo(s!, temp))) {
+        console.log(`Downloaded ${name}`)
+        sources[name] = want
+        changed = true
+      } else if (!there && (await writeInto(file, (temp) => scene(s!, seed!, temp).then(() => true)))) {
+        console.log(`Drew ${name}`)
+        sources[name] = 'drawn'
+        changed = true
+      }
+    }),
+  )
+  if (changed) await writeFile(record, JSON.stringify(sources, null, 2))
+  const drawn = [...SCENES.map((s) => `${s.name}.jpg`), ...EXTRA_SCENES.map((s) => s.file)].filter((name) => sources[name] !== `photo:${PHOTOS[path.basename(name, '.jpg')]}`)
+  if (drawn.length > 0) console.warn(`Drawn instead of photos (no network?): ${drawn.join(', ')}. The next start tries again.`)
+  return drawn
 }

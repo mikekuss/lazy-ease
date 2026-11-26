@@ -1,5 +1,5 @@
-import { createLoader, fullLadder, Image, useLazyEaseConfig, type ImageFormat, type ImageProps } from '@lazy-ease/react'
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { createLoader, fullLadder, Image, useLazyEaseConfig, type ImageFormat, type ImageLoader, type ImageLoaderFunction, type ImageProps } from '@lazy-ease/react'
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BASE, STATIC } from './mode'
 import { createStaticLoader } from './staticLoader'
 import { decodedSize, variantOf } from './readout'
@@ -92,6 +92,19 @@ const STATES = ['idle', 'loading', 'loaded', 'error'] as const
 
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
 
+/** The URL with a replay's own `run` parameter, which the hosts ignore and the demo server strips. */
+const withRun = (url: string, replay: number) => `${url}${url.includes('?') ? '&' : '?'}run=click-${replay}`
+
+/** A loader whose URLs carry the replay, so a replay loads with a cold browser cache. */
+function replayLoader(loader: ImageLoader | ImageLoaderFunction, replay: number): ImageLoader | ImageLoaderFunction {
+  return typeof loader === 'function'
+    ? (request) => withRun(loader(request), replay)
+    : { ...loader, url: (request) => withRun(loader.url(request), replay) }
+}
+
+/** A source the loader leaves as it is: an original under /_img/ or another origin. */
+const isOriginal = (src: string) => /^(https?:)?\/\//.test(src) || src.startsWith(`${BASE}_img/`)
+
 /**
  * `<Image>` with a caption showing its state, the measured box, what was
  * delivered and what a plain `sizes="100vw"` srcset would have downloaded.
@@ -101,7 +114,14 @@ export function DemoImage({ label, frame, compare = false, ...props }: DemoImage
   const { loader } = useLazyEaseConfig()
   const figureRef = useRef<HTMLElement>(null)
   const [view, setView] = useState<View>({ state: 'idle' })
-  const { src, srcWidth } = props
+  // A click on the image loads it again: a new Image with new URLs, from its placeholder.
+  const [replay, setReplay] = useState(0)
+  const own = useMemo(
+    () => (replay === 0 ? props.loader : replayLoader(props.loader ?? loader, replay)),
+    [replay, props.loader, loader],
+  )
+  const src = replay > 0 && isOriginal(props.src) ? withRun(props.src, replay) : props.src
+  const { srcWidth } = props
 
   useEffect(() => {
     // The marked box, or the img itself when it needs none, carries
@@ -166,13 +186,20 @@ export function DemoImage({ label, frame, compare = false, ...props }: DemoImage
       img.removeEventListener('load', read)
       removeRecord(id)
     }
-  }, [id, loader, src, srcWidth, compare])
+  }, [id, loader, src, srcWidth, compare, replay])
 
   const { state, boxWidth, delivered, naive } = view
-  const image = <Image {...props} />
+  const image = <Image key={replay} {...props} src={src} {...(own ? { loader: own } : {})} />
 
   return (
-    <figure className="demo-image" ref={figureRef}>
+    <figure
+      className="demo-image"
+      ref={figureRef}
+      title="Click to load again"
+      onClick={(event) => {
+        if (!(event.target as Element).closest('figcaption')) setReplay((value) => value + 1)
+      }}
+    >
       {frame ? (
         <div className="frame" style={frame}>
           {image}

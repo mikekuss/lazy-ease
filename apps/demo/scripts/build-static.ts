@@ -27,7 +27,12 @@ const BASE = '/lazy-ease/'
 if (!(await stat(path.join(out, 'index.html')).catch(() => undefined))) {
   throw new Error('dist/index.html is missing; run `vite build --mode static` first')
 }
-await ensureDemoImages(root)
+const drawn = await ensureDemoImages(root)
+// A deploy should show the photos; say so loudly when some are drawn stand-ins.
+if (drawn.length > 0) {
+  const message = `Static demo built with drawn stand-ins instead of photos: ${drawn.join(', ')}`
+  console.warn(process.env.GITHUB_ACTIONS ? `::warning::${message}` : message)
+}
 
 // The same list /api/images serves: root images and extra/, private/ left out.
 const files = [...(await readdir(root)), ...(await readdir(path.join(root, 'extra'))).map((file) => `extra/${file}`)]

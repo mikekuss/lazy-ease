@@ -1,0 +1,98 @@
+import { createLazyEase, createLoader, detectAvif, focusReveal, type Attachment, type ImageLoader } from '@lazy-ease/core'
+import { thumbhashDecoder } from '@lazy-ease/core/thumbhash'
+import { cssText } from '@lazy-ease/vanilla/css'
+import * as thumbhash from 'thumbhash'
+import { BASE, STATIC, fadeDuration, pageRun } from '../mode'
+import { INERT } from '../prerender'
+import { createStaticLoader } from '../staticLoader'
+
+// The tiles of the start and placeholders pages. The prerender plugin wrote
+// each with its placeholder inline (src/tiles/kinds.ts), as a server
+// template does, so it shows from the first frame. This script only attaches
+// the images: they wait a moment (dwellTime), so the placeholder is seen,
+// then reveal once. A click on a tile paints its placeholder again and loads
+// the image with new URLs.
+
+const sheet = document.createElement('style')
+sheet.textContent = cssText
+document.head.append(sheet)
+
+// The decoder is only for the SSR color tile, whose ThumbHash image the controller paints on activation.
+const le = createLazyEase({ detectFormat: detectAvif, fadeDuration: fadeDuration(), dwellTime: 900, thumbhash: thumbhashDecoder(thumbhash) })
+
+const loaderFor = (key: string): ImageLoader => {
+  const params = { run: `${pageRun()}-${key}` }
+  return STATIC ? createStaticLoader({ baseUrl: `${BASE}_img`, params }) : createLoader({ params })
+}
+
+let run = 0
+
+// The reveal tiles' code lines name the page's speed.
+for (const code of document.querySelectorAll('.tile code, #reveal .usecase-props')) code.textContent = code.textContent!.replace(/(fadeDuration[=:] ?\{?)\d+/g, `$1${fadeDuration()}`)
+const plays = new Map<HTMLElement, () => void>()
+
+for (const box of document.querySelectorAll<HTMLElement>('.tile [data-le], .intro .backdrop [data-le]')) {
+  // The box as the HTML wrote it, placeholder included; the reveal removes the placeholder.
+  const initial = box.getAttribute('style') ?? ''
+  // A priority tile's native img from the HTML; a replay writes it again with new URLs.
+  const native = box.innerHTML
+  const { src, width, height, placeholder, reveal } = box.dataset
+  let attachment: Attachment | undefined
+  let played = false
+  const play = () => {
+    attachment?.destroy()
+    box.setAttribute('style', initial)
+    if (box.hasAttribute('data-priority')) {
+      // The first play adopts the HTML as it is; a replay gives every URL a new run.
+      const key = `${pageRun()}-tile-${run++}`
+      box.innerHTML = played ? native.replace(/\/_img\/[^"\s,]+/g, (url) => `${url}${url.includes('?') ? '&amp;' : '?'}run=${key}`) : native
+      played = true
+      attachment = le.attach(box.querySelector('img')!, { priority: true, fill: true })
+      return
+    }
+    box.innerHTML = `<img alt="" src="${INERT}">`
+    attachment = le.attach(box.querySelector('img')!, {
+      loader: loaderFor(`tile-${run++}`),
+      src: src!,
+      srcWidth: Number(width),
+      srcHeight: Number(height),
+      // The box fills its well (3:2) or the intro; the browser crops the uncropped image.
+      fill: true,
+      // The intro's photo comes at once; the tiles wait a moment, so their placeholder is seen.
+      ...(box.closest('.intro') ? { dwellTime: 0 } : {}),
+      ...(placeholder ? { placeholder } : {}),
+      ...(reveal === 'focus' ? { reveal: focusReveal } : {}),
+      ...(box.hasAttribute('data-transparent') ? { transparent: true } : {}),
+    })
+  }
+  if (!box.closest('.intro')) box.addEventListener('click', play)
+  plays.set(box, play)
+  play()
+}
+
+// Copy buttons on the static code blocks (the React panels render their own).
+for (const code of document.querySelectorAll<HTMLElement>('.start pre, section.usecase > .usecase-props')) {
+  const wrap = document.createElement('div')
+  wrap.className = 'copyable'
+  for (const flavor of ['flavor-react', 'flavor-html']) if (code.classList.contains(flavor)) wrap.classList.add(flavor)
+  code.replaceWith(wrap)
+  wrap.append(code)
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = code.matches('pre') ? 'copy' : 'copy light'
+  button.textContent = 'Copy'
+  button.addEventListener('click', () => {
+    void navigator.clipboard?.writeText(code.textContent ?? '').then(() => {
+      button.textContent = 'Copied'
+      setTimeout(() => (button.textContent = 'Copy'), 1500)
+    })
+  })
+  wrap.append(button)
+}
+
+// A panel's Replay plays all its tiles again.
+for (const button of document.querySelectorAll<HTMLElement>('[data-replay-panel]')) {
+  button.addEventListener('click', () => {
+    for (const [box, play] of plays) if (button.closest('.usecase')!.contains(box)) play()
+  })
+}

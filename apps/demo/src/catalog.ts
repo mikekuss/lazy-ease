@@ -51,6 +51,8 @@ export const ARTICLE = source('/northern-night.jpg', 3000, 2000)
 export const ARTICLE_SIZES = '(min-width:720px) 720px, 100vw'
 /** Decorative banner, `image-set()` gated on visibility. */
 export const BANNER = { ...source('/starfield.jpg', 3360, 1440), aspectRatio: 2 }
+/** A PNG with alpha, for the transparent placeholder. */
+export const TRANSPARENT = source('/extra/disc.png', 1600, 1000)
 export const LOGO = '/extra/logo.svg'
 export const WAVE = '/extra/wave.gif'
 /** Signed-in viewers only (live). 128 px square, admitted by crop token. */

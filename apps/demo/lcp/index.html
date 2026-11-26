@@ -4,22 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LCP hero · lazy-ease</title>
+    <!--le:site-->
     <style>
-      body { margin:0; font:16px/1.5 system-ui, sans-serif; color:#111827; background:#f9fafb }
-      nav { display:flex; gap:16px; padding:12px 20px; font-size:14px }
-      nav a { color:#2563eb; text-decoration:none }
-      nav strong { margin-right:auto }
-      main { max-width:720px; margin:0 auto; padding:24px 20px 48px }
-      h1 { margin:0 0 8px; font-size:24px }
-      p { margin:0; color:#4b5563 }
+      .hero { max-width:1600px; margin-top:20px }
     </style>
   </head>
   <body>
-    <nav><strong>lazy-ease</strong><a href="../fade/">Fade</a><a href="../recipes/">Recipes</a></nav>
-    <!--le:hero-native-->
-    <main>
-      <h1>LCP hero</h1>
-      <p>Native picture in the first HTML, high priority, no script and no metrics.</p>
+    <main class="page">
+      <div class="hero shot">
+        <!--le:hero-native-->
+      </div>
+      <section class="case">
+        <h2>LCP hero <small>Native picture in the first HTML, high priority, no script.</small></h2>
+        <code class="props">&lt;img srcset sizes fetchpriority="high"&gt;</code>
+      </section>
     </main>
   </body>
 </html>
