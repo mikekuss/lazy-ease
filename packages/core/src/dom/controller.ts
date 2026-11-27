@@ -1,7 +1,7 @@
 import { normalizeFocalPoint, percentPosition, type FocalPoint } from '../focal.js'
 import type { ImageLoader, ImageLoaderFunction } from '../loader.js'
 import { isDirect } from '../source.js'
-import { parsePlaceholder, type StyleRecord, type ThumbHashDecoder } from '../styles.js'
+import { cssUrl, parsePlaceholder, type StyleRecord, type ThumbHashDecoder } from '../styles.js'
 import { fades } from './fades.js'
 import type { FormatDetector } from './format.js'
 import { guard } from './guard.js'
@@ -94,6 +94,15 @@ export interface AttachOptions extends Pick<LazyEaseConfig, 'loader' | 'quality'
    * was observed; adoption never fabricates one.
    */
   onDisplay?: (img: HTMLImageElement, event?: Event) => void
+  /**
+   * A new logical source keeps the image that is displayed, with its focal
+   * styles, until its own target has loaded and decoded, then crossfades to
+   * it, with no placeholder in between. Also for an attach to an element that
+   * displays the target of another source. Needs the box for the crossfade;
+   * a bare img swaps directly. A failed new source shows the error state.
+   * Default false: the new source shows its own placeholder.
+   */
+  keepImage?: boolean
 }
 
 export interface Attachment {
@@ -120,7 +129,8 @@ export interface LazyEase {
 }
 
 const INERT = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
-const PLACEHOLDER = ['backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition']
+// The repeat only for a kept image, which the self-starting scripts never paint.
+const PLACEHOLDER = ['backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', ...(fades ? ['backgroundRepeat'] : [])]
 const FADE = ['opacity', 'transition']
 const ATTRIBUTES = ['sizes', 'srcset', 'src']
 
@@ -252,6 +262,12 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           else if (element.getAttribute(name) !== value) element.setAttribute(name, value)
         })
       let state: LoadState | undefined
+      // Removes the focal styles a measured generation set, once. They stay with an image kept for the
+      // next generation until that one activates.
+      let unfocus = () => {}
+      // The <source> elements a generation activated, with their attributes from before the first one did:
+      // an image kept for the next generation hands them on.
+      const activated = new Map<Element, (string | null)[]>()
       // Ends the generation, or keeps it under options that differ only in their functions and returns them.
       let stop: ((next?: Options) => unknown) | undefined
 
@@ -288,18 +304,37 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           let own = img.hasAttribute('srcset') || (native ? (src ?? INERT) !== INERT : src != null && (src === recorded?.[1] || !src.startsWith('data:')))
           const target = native ? undefined : identity(o, deferred)
           // The element still has the target of an earlier attachment for another source:
-          // back to the placeholder, so the old image is neither adopted nor shown.
+          // back to the placeholder, so the old image is neither adopted nor shown. With
+          // `keepImage`, a displayed one stays, with its attributes, until install() replaces
+          // them, and the box paints it in place of a placeholder, under the img the install hides.
+          // `fades &&` at every use, so the self-starting scripts drop the whole path.
+          const kept = fades && own && target && recorded && recorded[0] !== target && o.keepImage && img.complete && img.naturalWidth > 0
           if (own && target && recorded && recorded[0] !== target) {
-            restore([null, null, inert])
-            for (const source of deferred) {
-              source.removeAttribute('srcset')
-              if (source.hasAttribute('data-le-sizes')) source.removeAttribute('sizes')
-            }
+            if (fades && kept) {
+              const { objectFit: fit, objectPosition } = getComputedStyle(img)
+              // On a bare img, the background is under its own image, which the browser keeps until the new one is there.
+              clearStyle(owner, PLACEHOLDER)
+              Object.assign(owner.style, {
+                backgroundImage: cssUrl(img.currentSrc),
+                backgroundSize: fit == 'fill' ? '100% 100%' : fit == 'none' ? 'auto' : fit == 'cover' ? fit : 'contain',
+                backgroundPosition: objectPosition,
+                backgroundRepeat: 'no-repeat',
+              })
+            } else restore([null, null, inert])
+            for (const source of deferred)
+              if (fades && kept)
+                // What the source has without a target, restored if this generation ends before its install.
+                activated.has(source) || activated.set(source, [source.hasAttribute('data-le-sizes') ? null : source.getAttribute('sizes'), null, null])
+              else {
+                source.removeAttribute('srcset')
+                if (source.hasAttribute('data-le-sizes')) source.removeAttribute('sizes')
+              }
             own = false
           }
-          // An adopted target is this source's; a native one is nobody's.
+          // An adopted target is this source's; a native one is nobody's; a kept one stays the old source's,
+          // so that a destroy before the install leaves nothing a later attach of the new source would adopt.
           // A data: src next to an adopted srcset is the placeholder, unless the target set it.
-          targets[targetKey] = own && target ? [target, src?.startsWith('data:') && src !== recorded?.[1] ? undefined : src, inert] : undefined
+          targets[targetKey] = fades && kept ? recorded : own && target ? [target, src?.startsWith('data:') && src !== recorded?.[1] ? undefined : src, inert] : undefined
           // A native source is the element's own, whenever it is set.
           let assigned = native || own
           let shown = false
@@ -309,9 +344,6 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           let fadeOut: Animation | undefined
           // The reveal's animation, once it runs.
           let revealed: Animation | undefined
-          // The <source> elements this generation activated, with their attributes from before.
-          const activated = new Map<Element, (string | null)[]>()
-          let unfocus = () => {}
           const timers = new Set<Timer>()
           const cleanups: (() => void)[] = []
           const later = (callback: () => void, ms: number) => {
@@ -334,7 +366,7 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
           // Until `end` is the cleanup: a decoder that updates or destroys the image ends this generation too.
           stop = () => (live = false)
           // resolve() refused an empty or invalid placeholder.
-          const placeholder = o.placeholder ? parsePlaceholder(o.placeholder, o.thumbhash) : undefined
+          const placeholder = o.placeholder && !(fades && kept) ? parsePlaceholder(o.placeholder, o.thumbhash) : undefined
           if (!live) return
           const mode: Mode = o.fill ? 'fill' : o.height !== undefined ? 'fixed' : o.aspectRatio !== undefined ? 'ratio' : 'intrinsic'
           const focus = mode === 'intrinsic' ? undefined : normalizeFocalPoint(o.focalPoint)
@@ -384,7 +416,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
               // Only what is painted inline fades: release() clears that, so it does not come back, while a
               // background from the author's CSS stays. Browsers that don't interpolate background images
               // (Firefox) drop the image half way through.
-              if (fades && (placeholder ?? o).transparent) {
+              // A kept image fades out the same way.
+              if (fades && (kept || (placeholder ?? o).transparent)) {
                 const [from, to] = revealed ? [0.25, 0.6] : [0.4, 0.8]
                 const { backgroundImage, backgroundColor } = surface.style
                 fadeOut = surface.animate?.(
@@ -464,6 +497,8 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
               if (!live) return
               if (style) paint(style)
             }
+            // A kept image's focal styles go, in the task that installs the new target or starts measuring it.
+            if (fades) unfocus()
             if (o.src === undefined) install(o.srcset, o.sizes, o.url)
             else if (isDirect(o.src, o.domains)) install(undefined, undefined, o.src)
             else unfocus = measure!(o.src, o, mode, focus, img, box, surface, () => live, later, cancel, cleanups, install)
@@ -479,14 +514,19 @@ export function createController(config: LazyEaseConfig, measure?: Measure, noSr
             if (shown) release()
             // A target still loading shows when it arrives, over the placeholder.
             else if (hidden) clearStyle(img, FADE)
+            // A kept image the new target never replaced is no longer painted twice.
+            else if (fades && kept) clearStyle(owner, PLACEHOLDER)
             if (!next) return
-            unfocus()
-            // Back to the placeholder: the old target must not show under the new source.
-            // A native source is what the element has when the update runs.
-            if (!isNative(next)) {
-              restore([null, null, inert])
-              targets[targetKey] = undefined
-              activated.forEach((values, source) => restore(values, source))
+            // A displayed target kept for a new source: the next generation takes it over as it is.
+            if (!(fades && next.keepImage && shown && target)) {
+              unfocus()
+              // Back to the placeholder: the old target must not show under the new source.
+              // A native source is what the element has when the update runs.
+              if (!isNative(next)) {
+                restore([null, null, inert])
+                targets[targetKey] = undefined
+                activated.forEach((values, source) => restore(values, source))
+              }
             }
           }
 

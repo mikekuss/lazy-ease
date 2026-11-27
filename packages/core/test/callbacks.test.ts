@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // The callback contract, as a table: every callback of the page × what it does × where the image is.
 //
+// With `hold`, the generation under test keeps the displayed image of the one before (`keepImage`).
+//
 // A callback may update() the image, destroy() it, destroy it and attach it again, throw, or do one of
 // the first three and then throw. The oracle is the same action taken by the page right after the step,
 // outside any callback: the element and the successor's callbacks must end the same. After destroy()
@@ -39,9 +41,11 @@ type Hook = (typeof hooks)[number]
 type Action = (typeof actions)[number] | 'none'
 type Kind = (typeof kinds)[number]
 
-/** The callbacks a kind of image calls at all. */
-const applies = (kind: Kind, hook: Hook) =>
-  kind === 'native' ? ['loaded', 'error', 'onDisplay'].includes(hook) : kind === 'measured' || (hook !== 'loader' && hook !== 'detectFormat')
+/** The callbacks a kind of image calls at all. A held image has no placeholder of its own to decode. */
+const applies = (kind: Kind, hook: Hook, hold: boolean) =>
+  kind === 'native'
+    ? ['loaded', 'error', 'onDisplay'].includes(hook)
+    : (kind === 'measured' || (hook !== 'loader' && hook !== 'detectFormat')) && !(hold && (hook === 'decoder' || hook === 'lazy'))
 
 interface Scenario {
   kind: Kind
@@ -49,6 +53,8 @@ interface Scenario {
   markup: (typeof markups)[number]
   hook: Hook
   path: (typeof paths)[number]
+  /** The image before is on display, and the generation under test keeps it. */
+  hold: boolean
 }
 
 interface Result {
@@ -69,7 +75,7 @@ interface Result {
  * Runs one scenario. The generation under test starts by update(), so its callbacks have the handle.
  * With `external`, the callback only notes that it fired and the test acts once the step is over.
  */
-async function run({ kind, loading, markup, hook, path }: Scenario, action: Action, external = false): Promise<Result> {
+async function run({ kind, loading, markup, hook, path, hold }: Scenario, action: Action, external = false): Promise<Result> {
   const picture = markup === 'picture'
   const inner = `<img alt="x" src="${INERT}">`
   document.body.innerHTML = `<span data-le style="${BOX}">${picture ? `<picture><source media="(min-width:800px)" data-le-srcset="/wide.webp 1440w" data-le-sizes="50vw">${inner}</picture>` : inner}</span>`
@@ -82,6 +88,8 @@ async function run({ kind, loading, markup, hook, path }: Scenario, action: Acti
   const out: Result = { reached: false, errors: [], final: '', successor: [], successorDisplays: 0, late: [], leaks: '' }
   let handle!: Attachment
   let acted = false
+  // The image before displays (and reveals) before the generation under test starts.
+  let started = false
   let ended = false
   let pending = false
   let decodes = 0
@@ -101,7 +109,7 @@ async function run({ kind, loading, markup, hook, path }: Scenario, action: Acti
     }
   }
   const fire = (site: Hook) => {
-    if (site !== hook || acted) return
+    if (site !== hook || acted || !started) return
     acted = true
     out.reached = true
     if (external) return void (pending = true)
@@ -136,6 +144,7 @@ async function run({ kind, loading, markup, hook, path }: Scenario, action: Acti
           ...(kind === 'measured' ? { src: '/a.jpg', aspectRatio: 1.5 } : { url: '/a.webp', srcset: '/a.webp 100w', sizes: '100px' }),
           loading: loading === 'eager' ? 'eager' : undefined,
           placeholder: 'thumbhash:AAAA',
+          keepImage: hold,
           ...callbacks,
         }
   const snapshot = () =>
@@ -178,12 +187,17 @@ async function run({ kind, loading, markup, hook, path }: Scenario, action: Acti
   }
 
   handle = le.attach(img, { url: '/z.webp', srcset: '/z.webp 100w', sizes: '100px', loading: 'eager', onStateChange: () => {} })
+  if (hold) {
+    load(img)
+    await vi.advanceTimersByTimeAsync(400)
+  }
   if (kind === 'native') {
     // What the element has when the native generation starts: an image that loaded, or one that failed.
     img.setAttribute('src', '/a.webp')
     img.removeAttribute('srcset')
     Object.assign(img, { complete: true, naturalWidth: path === 'error' ? 0 : 100, currentSrc: '/a.webp' })
   }
+  started = true
   await step(() => handle.update(generation))
   await settle()
   // The successor, if any, gets its own events.
@@ -223,16 +237,18 @@ async function check(scenario: Scenario, action: (typeof actions)[number]): Prom
   if (action === 'throw' && scenario.hook === 'decoder') {
     // A decoder that throws as the generation starts is a validation error of update(): it throws,
     // and the element is released as it was before any attachment.
+    // A held image stays as it is, kept for no source.
     expectEqual('errors', got.errors, [error])
-    expectEqual('element', got.final, JSON.stringify([INERT, null, null, '', BOX, null, scenario.markup === 'picture' ? [null, null] : null]))
+    const sources = scenario.markup === 'picture' ? (scenario.hold ? ['/wide.webp 1440w', '50vw'] : [null, null]) : null
+    expectEqual('element', got.final, JSON.stringify([...(scenario.hold ? ['/z.webp', '/z.webp 100w', '100px'] : [INERT, null, null]), '', BOX, null, sources]))
     return problems
   }
   if (action === 'throw' && scenario.hook === 'loader') {
     // A loader that throws has no URL: its observer subscription reports the error from a timer, and the
-    // image stays on its placeholder.
+    // image stays on its placeholder, or a held one on display.
     expectEqual('errors', got.errors, [error])
     expectEqual('state', JSON.parse(got.final)[5], 'idle')
-    expectEqual('src', JSON.parse(got.final)[0], INERT)
+    expectEqual('src', JSON.parse(got.final)[0], scenario.hold ? '/z.webp' : INERT)
     return problems
   }
 
@@ -257,16 +273,17 @@ async function check(scenario: Scenario, action: (typeof actions)[number]): Prom
 for (const kind of kinds)
   for (const loading of kind === 'native' ? (['eager'] as const) : loadings)
     for (const markup of markups)
-      describe(`${kind}, ${loading}, ${markup}`, () => {
+      for (const hold of kind === 'native' ? [false] : [false, true])
+      describe(`${kind}, ${loading}, ${markup}${hold ? ', keepImage' : ''}`, () => {
         for (const hook of hooks) {
-          if (!applies(kind, hook)) continue
+          if (!applies(kind, hook, hold)) continue
           it(`${hook}: update, destroy, attach again or throw`, async () => {
             const failed: string[] = []
             let reached = 0
             for (const action of actions)
               for (const path of paths) {
                 if (kind === 'native' && path === 'decode-reject') continue
-                const problems = await check({ kind, loading, markup, hook, path }, action)
+                const problems = await check({ kind, loading, markup, hook, path, hold }, action)
                 if (!problems) continue
                 reached++
                 failed.push(...problems.map((problem) => `${action}, ${path}: ${problem}`))

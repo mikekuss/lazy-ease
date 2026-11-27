@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `@lazy-ease/core`, `@lazy-ease/react`: a `keepImage` option, off by default. When `update()` (or a React re-render) gives a displayed image a new logical source, the old image stays on display until the new one has loaded and decoded, then crossfades to it, with no placeholder in between. The box paints the old image (with its `object-fit` and `object-position`) under the img while the new target loads; until the new source activates, the img keeps its old attributes and focal styles. A new source that fails shows the error state, without the old image. An image that is still loading or failed goes back to the placeholder as before. It also works for `attach()` after `destroy()` with another source, and in React for a new `src` without a remount. The self-starting scripts don't carry it.
+
 ## [0.4.0] - 2026-11-24
 
 ### Added

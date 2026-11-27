@@ -854,6 +854,74 @@ describe('lifecycle', () => {
   })
 })
 
+describe('keepImage', () => {
+  /** A displayed `/a.jpg` image whose src then changes to `/b.jpg`. */
+  async function swapped(props: Partial<ImageProps>) {
+    const onLoad = vi.fn()
+    const states: LoadState[] = []
+    const view = mount({ keepImage: true, placeholder: '#123456', onLoad, onStateChange: (state) => states.push(state), ...props })
+    intersect(view.owner())
+    resize(view.owner(), 320, 240)
+    load(view.img())
+    await advance(400)
+    const before = view.img()
+    const old = before.currentSrc
+    view.rerender({ src: '/b.jpg', placeholder: '#654321' })
+    return { ...view, onLoad, states, before, old }
+  }
+
+  for (const [kind, props] of [
+    ['measured', { width: 320, height: 240 }],
+    ['prepared', { width: 320, height: 240, sizes: '320px' }],
+  ] as const)
+    it(`keeps a ${kind} image on display under a new src, without the new placeholder, and calls onLoad once for it`, async () => {
+      const { img, owner, onLoad, states, before, old } = await swapped(props)
+      expect(img()).toBe(before)
+      expect(owner().style.backgroundColor).toBe('')
+      expect(owner().style.backgroundImage).toBe(`url("${old}")`)
+      // Until the new source activates, the img still shows the old one.
+      expect(img().currentSrc).toBe(old)
+      intersect(owner())
+      resize(owner(), 320, 240)
+      expect(JSON.stringify([img().getAttribute('src'), img().getAttribute('srcset')])).toContain('/_img/b.jpg?')
+      expect(img().style.opacity).toBe('0')
+      expect(owner().style.backgroundColor).toBe('')
+      expect(onLoad).toHaveBeenCalledTimes(1)
+      load(img())
+      await advance(0)
+      expect(onLoad).toHaveBeenCalledTimes(2)
+      await advance(400)
+      expect(owner().style.backgroundImage).toBe('')
+      expect(states).toEqual(['idle', 'loading', 'loaded', 'idle', 'loading', 'loaded'])
+    })
+
+  it('shows the error state when the new source fails, without the old image', async () => {
+    const { img, owner, onLoad } = await swapped({ width: 320, height: 240 })
+    intersect(owner())
+    resize(owner(), 320, 240)
+    fail(img())
+    expect(owner().dataset.state).toBe('error')
+    expect(owner().style.backgroundImage).toBe('')
+    expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it('paints the new placeholder when the image before it failed', async () => {
+    const { img, owner, rerender } = mount({ width: 320, height: 240, keepImage: true, placeholder: '#123456' })
+    intersect(owner())
+    resize(owner(), 320, 240)
+    fail(img())
+    rerender({ src: '/b.jpg', placeholder: '#654321' })
+    expect(img().getAttribute('src')).toBe(INERT)
+    expect(owner().style.backgroundColor).toBe('rgb(101, 67, 33)')
+  })
+
+  it('starts over with the placeholder for a new src without keepImage', async () => {
+    const { img, owner, before } = await swapped({ width: 320, height: 240, keepImage: false })
+    expect(img()).not.toBe(before)
+    expect(owner().style.backgroundColor).toBe('rgb(101, 67, 33)')
+  })
+})
+
 describe('a callback that changes src synchronously', () => {
   // A callback of the image for /a.jpg renders /b.jpg at once, with flushSync. B starts from its placeholder,
   // and nothing of A's attachment writes to the box afterwards.

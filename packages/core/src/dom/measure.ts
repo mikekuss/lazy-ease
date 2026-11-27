@@ -111,7 +111,11 @@ const measure: Measure = (src, o, mode, focus, img, box, surface, live, later, c
     } catch (error) {
       fallback(error)
     }
-  return () => unfocus()
+  // Once: the controller calls it when the generation ends or, for a kept image, when the next one activates.
+  return () => {
+    unfocus()
+    unfocus = () => {}
+  }
 }
 
 /**
